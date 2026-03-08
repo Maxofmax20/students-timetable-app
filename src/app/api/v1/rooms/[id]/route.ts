@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { WorkspaceRole } from "@prisma/client";
+import { Prisma, WorkspaceRole } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { ApiError, requireSession, requireWorkspaceRole } from "@/lib/workspace-v1";
@@ -39,14 +39,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     });
 
     return NextResponse.json({ ok: true, data: updated });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ ok: false, message: error.issues[0]?.message }, { status: 400 });
     }
     if (error instanceof ApiError) {
       return NextResponse.json({ ok: false, message: error.message }, { status: error.status });
     }
-    if (error?.code === "P2002") {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return NextResponse.json({ ok: false, message: "ROOM_CODE_EXISTS" }, { status: 409 });
     }
     return NextResponse.json({ ok: false, message: "ROOM_UPDATE_FAILED" }, { status: 500 });

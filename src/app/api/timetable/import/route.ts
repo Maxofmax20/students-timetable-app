@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { getRequestSession } from '@/lib/session';
+import { requireSession } from '@/lib/workspace-v1';
 import { DAY_CODES } from '@/lib/constants';
 
 const eventSchema = z.object({
@@ -29,10 +29,7 @@ const schema = z
   });
 
 export async function POST(request: NextRequest) {
-  const session = await getRequestSession(request);
-  if (!session) {
-    return NextResponse.json({ ok: false, message: 'AUTH_REQUIRED' }, { status: 401 });
-  }
+  const session = await requireSession(request);
 
   try {
     const payload = schema.parse(await request.json());

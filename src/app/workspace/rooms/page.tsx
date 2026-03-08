@@ -73,8 +73,8 @@ export default function RoomsPage() {
       toast(`Room ${isEdit ? 'updated' : 'added'} successfully`);
       setIsModalOpen(false);
       fetchRooms();
-    } catch (err: any) {
-      toast(err.message, 'error');
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Request failed', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -91,8 +91,8 @@ export default function RoomsPage() {
       toast('Room removed successfully');
       setIsDeleteOpen(false);
       fetchRooms();
-    } catch (err: any) {
-      toast(err.message, 'error');
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Request failed', 'error');
     } finally {
       setActionLoading(false);
     }

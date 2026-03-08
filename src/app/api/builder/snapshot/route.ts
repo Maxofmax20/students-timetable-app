@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { getRequestSession } from '@/lib/session';
+import { requireSession } from '@/lib/workspace-v1';
 import { DAY_CODES } from '@/lib/constants';
 
 const timeLabelSchema = z.string().regex(/^\d{2}:\d{2}$/);
@@ -228,10 +228,7 @@ async function getOrCreateUserTimetable(userId: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await getRequestSession(request);
-  if (!session) {
-    return NextResponse.json({ ok: false, message: 'AUTH_REQUIRED' }, { status: 401 });
-  }
+  const session = await requireSession(request);
 
   const timetable = await getOrCreateUserTimetable(session.userId);
 
@@ -258,10 +255,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getRequestSession(request);
-  if (!session) {
-    return NextResponse.json({ ok: false, message: 'AUTH_REQUIRED' }, { status: 401 });
-  }
+  const session = await requireSession(request);
 
   try {
     const snapshot = snapshotSchema.parse(await request.json());

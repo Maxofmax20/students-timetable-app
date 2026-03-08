@@ -18,7 +18,7 @@ export function Tabs({ value, onValueChange, children, className, variant = "bui
           active: child.props.value === value,
           onClick: () => onValueChange(child.props.value),
           variant
-        } as any);
+        });
       })}
     </div>
   );

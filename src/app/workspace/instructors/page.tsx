@@ -67,8 +67,8 @@ export default function InstructorsPage() {
       toast(`Instructor ${isEdit ? 'updated' : 'added'} successfully`);
       setIsModalOpen(false);
       fetchInstructors();
-    } catch (err: any) {
-      toast(err.message, 'error');
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Request failed', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -85,8 +85,8 @@ export default function InstructorsPage() {
       toast('Instructor removed successfully');
       setIsDeleteOpen(false);
       fetchInstructors();
-    } catch (err: any) {
-      toast(err.message, 'error');
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Request failed', 'error');
     } finally {
       setActionLoading(false);
     }

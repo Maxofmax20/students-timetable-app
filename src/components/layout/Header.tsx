@@ -122,6 +122,6 @@ export function Header({ title, subtitle, onMenuClick, actions }: HeaderProps) {
   );
 }
 
-function cn(...classes: any[]) {
+function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(' ');
 }

@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { WorkspaceRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getRequestSession } from "@/lib/session";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 
@@ -14,8 +13,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function requireSession(request: NextRequest) {
-  // 1. Try NextAuth session first (OAuth users)
+export async function getAppSession(_request: NextRequest) {
   const nextAuthSession = await getServerSession(authOptions);
   if (nextAuthSession?.user?.id) {
     return {
@@ -25,10 +23,12 @@ export async function requireSession(request: NextRequest) {
     };
   }
 
-  // 2. Fall back to legacy JWT cookie (existing credential users)
-  const legacySession = await getRequestSession(request);
-  if (legacySession) return legacySession;
+  return null;
+}
 
+export async function requireSession(request: NextRequest) {
+  const session = await getAppSession(request);
+  if (session) return session;
   throw new ApiError(401, "AUTH_REQUIRED");
 }
 

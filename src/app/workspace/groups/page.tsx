@@ -66,8 +66,8 @@ export default function GroupsPage() {
       toast(`Group ${isEdit ? 'updated' : 'created'} successfully`);
       setIsModalOpen(false);
       fetchGroups();
-    } catch (err: any) {
-      toast(err.message, 'error');
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Request failed', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -84,8 +84,8 @@ export default function GroupsPage() {
       toast('Group deleted successfully');
       setIsDeleteOpen(false);
       fetchGroups();
-    } catch (err: any) {
-      toast(err.message, 'error');
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Request failed', 'error');
     } finally {
       setActionLoading(false);
     }

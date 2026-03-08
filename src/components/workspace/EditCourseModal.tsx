@@ -163,7 +163,7 @@ export function EditCourseModal({ open, onClose, mode, initialData, groups, inst
                </div>
                <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-tight ml-1">Status</label>
-                  <select value={formData.status || 'Active'} onChange={e => setFormData({ ...formData, status: e.target.value as any })} className="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded-xl px-4 py-2 text-sm text-white focus:border-[var(--gold)] outline-none transition-colors">
+                  <select value={formData.status || 'Active'} onChange={e => setFormData({ ...formData, status: e.target.value as Row["status"] })} className="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded-xl px-4 py-2 text-sm text-white focus:border-[var(--gold)] outline-none transition-colors">
                     <option value="Active" className="bg-[var(--surface)]">Active</option>
                     <option value="Draft" className="bg-[var(--surface)]">Draft</option>
                     <option value="Conflict" className="bg-[var(--surface)]">Conflict</option>

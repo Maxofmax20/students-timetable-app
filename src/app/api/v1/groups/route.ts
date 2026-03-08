@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { WorkspaceRole } from "@prisma/client";
+import { Prisma, WorkspaceRole } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import {
@@ -73,14 +73,14 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ ok: true, data: created }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ ok: false, message: error.issues[0]?.message }, { status: 400 });
     }
     if (error instanceof ApiError) {
       return NextResponse.json({ ok: false, message: error.message }, { status: error.status });
     }
-    if (error?.code === "P2002") {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       return NextResponse.json({ ok: false, message: "GROUP_CODE_EXISTS" }, { status: 409 });
     }
     return NextResponse.json({ ok: false, message: "GROUP_CREATE_FAILED" }, { status: 500 });

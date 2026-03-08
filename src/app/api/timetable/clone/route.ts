@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { getRequestSession } from '@/lib/session';
+import { requireSession } from '@/lib/workspace-v1';
 
 export async function POST(request: NextRequest) {
-  const session = await getRequestSession(request);
-  if (!session) {
-    return NextResponse.json({ ok: false, message: 'AUTH_REQUIRED' }, { status: 401 });
-  }
+  const session = await requireSession(request);
 
   const source = await prisma.timetable.findFirst({
     where: { ownerId: session.userId },

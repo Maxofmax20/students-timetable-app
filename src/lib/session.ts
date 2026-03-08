@@ -73,6 +73,29 @@ export function clearSessionCookie(response: NextResponse) {
   });
 }
 
+export function clearAuthCookies(response: NextResponse) {
+  clearSessionCookie(response);
+
+  const cookieNames = [
+    'next-auth.session-token',
+    '__Secure-next-auth.session-token',
+    'next-auth.csrf-token',
+    '__Host-next-auth.csrf-token',
+    'next-auth.callback-url',
+    '__Secure-next-auth.callback-url'
+  ];
+
+  for (const name of cookieNames) {
+    response.cookies.set(name, '', {
+      httpOnly: name.includes('token'),
+      sameSite: 'lax',
+      secure: true,
+      path: '/',
+      maxAge: 0
+    });
+  }
+}
+
 export async function createOtpPendingToken(payload: OtpPendingPayload): Promise<string> {
   return await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { getRequestSession } from '@/lib/session';
+import { requireSession } from '@/lib/workspace-v1';
 import { DAY_CODES, DEFAULT_TIMETABLE } from '@/lib/constants';
 
 const settingsSchema = z
@@ -46,20 +46,14 @@ async function getOrCreateUserTimetable(userId: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await getRequestSession(request);
-  if (!session) {
-    return NextResponse.json({ ok: false, message: 'AUTH_REQUIRED' }, { status: 401 });
-  }
+  const session = await requireSession(request);
 
   const timetable = await getOrCreateUserTimetable(session.userId);
   return NextResponse.json({ ok: true, timetable });
 }
 
 export async function PUT(request: NextRequest) {
-  const session = await getRequestSession(request);
-  if (!session) {
-    return NextResponse.json({ ok: false, message: 'AUTH_REQUIRED' }, { status: 401 });
-  }
+  const session = await requireSession(request);
 
   try {
     const data = settingsSchema.parse(await request.json());

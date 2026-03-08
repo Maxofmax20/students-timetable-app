@@ -61,7 +61,7 @@ export function ActionCenter({
       <div className="max-h-[60vh] overflow-y-auto p-2">
         {filteredActions.length === 0 ? (
           <div className="py-12 text-center text-[var(--muted)] text-sm">
-            No commands found for "{query}"
+            No commands found for &quot;{query}&quot;
           </div>
         ) : (
           filteredActions.map((action) => (

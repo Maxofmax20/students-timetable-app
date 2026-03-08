@@ -120,7 +120,7 @@ export default function LandingPage() {
           </h1>
           
           <p className="text-lg md:text-2xl text-[var(--text-secondary)] max-w-3xl mb-12 leading-relaxed font-medium">
-            The world's most intuitive platform for higher education scheduling. Manage complex courses, resolve conflicts instantly, and publish in seconds.
+            The world&apos;s most intuitive platform for higher education scheduling. Manage complex courses, resolve conflicts instantly, and publish in seconds.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-6 w-full sm:w-auto">
@@ -252,7 +252,7 @@ export default function LandingPage() {
          <div className="max-w-7xl mx-auto px-4 lg:px-8">
             <div className="text-center mb-20">
                <h3 className="text-[10px] font-black tracking-[0.3em] text-[var(--gold)] uppercase mb-4">Trusted by Institutions</h3>
-               <p className="text-3xl font-bold text-white">Powering the world's leading departments.</p>
+               <p className="text-3xl font-bold text-white">Powering the world&apos;s leading departments.</p>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -360,7 +360,7 @@ function TestimonialCard({ text, author, role }: { text: string, author: string,
        <div className="absolute top-0 right-0 p-6 text-[var(--gold)]/5">
           <span className="material-symbols-outlined text-8xl">format_quote</span>
        </div>
-       <p className="text-xl text-white font-medium mb-8 relative z-10 leading-relaxed italic">"{text}"</p>
+       <p className="text-xl text-white font-medium mb-8 relative z-10 leading-relaxed italic">&quot;{text}&quot;</p>
        <div className="flex items-center gap-4 relative z-10">
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[var(--surface-3)] to-[var(--bg-raised)] border border-[var(--border)] flex items-center justify-center font-bold text-[var(--gold)]">
              {author.charAt(0)}{author.split(' ')[1]?.charAt(0)}

@@ -1,27 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getRequestSession } from "@/lib/session";
-import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
 
-export async function GET(request: NextRequest) {
-  const session = await getRequestSession(request);
-  if (!session) {
-    return NextResponse.json({ ok: false, message: "AUTH_REQUIRED" }, { status: 401 });
-  }
-
-  const user = await prisma.user.findUnique({
-    where: { id: session.userId },
-    select: {
-      id: true,
-      email: true,
-      displayName: true,
-      emailVerifiedAt: true,
-      createdAt: true
-    }
-  });
-
-  if (!user) {
-    return NextResponse.json({ ok: false, message: "USER_NOT_FOUND" }, { status: 404 });
-  }
-
-  return NextResponse.json({ ok: true, user });
+export async function GET() {
+  return NextResponse.json(
+    {
+      ok: false,
+      message: "LEGACY_V1_AUTH_DISABLED",
+      detail: "Use the canonical NextAuth session endpoint instead of the retired v1 auth API."
+    },
+    { status: 410 }
+  );
 }

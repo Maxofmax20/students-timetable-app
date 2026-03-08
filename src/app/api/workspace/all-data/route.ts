@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getRequestSession } from "@/lib/session";
+import { requireSession } from "@/lib/workspace-v1";
 
 async function getOrCreateWorkspaceTimetable(userId: string) {
   const existing = await prisma.timetable.findFirst({
@@ -37,10 +37,7 @@ async function getOrCreateWorkspaceTimetable(userId: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await getRequestSession(request);
-  if (!session) {
-    return NextResponse.json({ ok: false, message: "AUTH_REQUIRED" }, { status: 401 });
-  }
+  const session = await requireSession(request);
 
   const timetable = await getOrCreateWorkspaceTimetable(session.userId);
 
