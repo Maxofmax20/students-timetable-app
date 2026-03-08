@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
@@ -9,15 +9,24 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 
 type Mode = 'login' | 'register';
+type ProviderMap = Record<string, { id: string; name: string }>;
 
 export default function AuthPage() {
   const [mode, setMode] = useState<Mode>('login');
+  const [providers, setProviders] = useState<ProviderMap>({});
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    fetch('/api/auth/providers')
+      .then((response) => response.json())
+      .then((data) => setProviders(data ?? {}))
+      .catch(() => setProviders({}));
+  }, []);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -93,20 +102,20 @@ export default function AuthPage() {
               </h1>
               
               <div className="grid gap-8">
-                 <VisualFeature icon="analytics" title="Advanced Conflict Resolution" desc="Catch overlaps before they become problems with real-time AI cross-checking." />
-                 <VisualFeature icon="cloud_sync" title="Seamless Cloud Database" desc="Your data is always synced, backed up, and ready for collaboration." />
-                 <VisualFeature icon="auto_awesome" title="Algorithmic Auto-Fill" desc="Let our engine suggest optimal time slots for your complex curriculum." />
+                 <VisualFeature icon="analytics" title="Conflict Visibility" desc="Track courses, instructors, and rooms in one shared workspace." />
+                 <VisualFeature icon="calendar_month" title="Calendar Exports" desc="Download timetable data as JSON, CSV, or ICS when you need to share it elsewhere." />
+                 <VisualFeature icon="devices" title="Responsive Workspace" desc="Use the same scheduling workspace across desktop and mobile browsers." />
               </div>
            </div>
 
            {/* Testimonial Snippet */}
            <div className="mt-20 p-6 rounded-3xl bg-[var(--surface)]/40 border border-[var(--border)] backdrop-blur-xl">
               <p className="text-[var(--text-secondary)] italic font-medium leading-relaxed mb-4">
-                "The most intentional scheduling tool I've ever used. It actually understands university constraints."
+                Built for managing academic scheduling data clearly, with less spreadsheet chaos and fewer hidden admin steps.
               </p>
               <div className="flex items-center gap-3">
                  <div className="w-8 h-8 rounded-full bg-[var(--surface-3)]"></div>
-                 <div className="text-xs font-bold text-white uppercase tracking-wider">Dean of Architecture, UK</div>
+                 <div className="text-xs font-bold text-white uppercase tracking-wider">Students Timetable Workspace</div>
               </div>
            </div>
         </div>
@@ -185,31 +194,39 @@ export default function AuthPage() {
               </Button>
            </form>
 
-           <div className="relative">
-              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[var(--border-soft)]"></div></div>
-              <div className="relative flex justify-center text-xs uppercase tracking-[0.2em] font-bold text-[var(--text-muted)]">
-                 <span className="bg-[var(--bg)] px-4">Or continue with</span>
-              </div>
-           </div>
+           {Object.keys(providers).filter((id) => id !== 'credentials').length > 0 && (
+             <>
+               <div className="relative">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[var(--border-soft)]"></div></div>
+                  <div className="relative flex justify-center text-xs uppercase tracking-[0.2em] font-bold text-[var(--text-muted)]">
+                     <span className="bg-[var(--bg)] px-4">Or continue with</span>
+                  </div>
+               </div>
 
-           <div className="grid grid-cols-2 gap-4">
-              <Button 
-                type="button"
-                variant="secondary" 
-                className="h-12 bg-[var(--surface)] hover:bg-[var(--surface-2)]" 
-                onClick={() => signIn('google', { callbackUrl: '/workspace' })}
-              >
-                 <GoogleIcon /> <span className="ml-2 font-bold">Google</span>
-              </Button>
-              <Button 
-                type="button"
-                variant="secondary" 
-                className="h-12 bg-[var(--surface)] hover:bg-[var(--surface-2)]" 
-                onClick={() => signIn('github', { callbackUrl: '/workspace' })}
-              >
-                 <GithubIcon /> <span className="ml-2 font-bold">GitHub</span>
-              </Button>
-           </div>
+               <div className="grid grid-cols-1 gap-4">
+                  {providers.google && (
+                    <Button 
+                      type="button"
+                      variant="secondary" 
+                      className="h-12 bg-[var(--surface)] hover:bg-[var(--surface-2)]" 
+                      onClick={() => signIn('google', { callbackUrl: '/workspace' })}
+                    >
+                       <GoogleIcon /> <span className="ml-2 font-bold">Google</span>
+                    </Button>
+                  )}
+                  {providers.github && (
+                    <Button 
+                      type="button"
+                      variant="secondary" 
+                      className="h-12 bg-[var(--surface)] hover:bg-[var(--surface-2)]" 
+                      onClick={() => signIn('github', { callbackUrl: '/workspace' })}
+                    >
+                       <GithubIcon /> <span className="ml-2 font-bold">GitHub</span>
+                    </Button>
+                  )}
+               </div>
+             </>
+           )}
 
            <div className="text-center">
               <span className="text-sm text-[var(--text-secondary)] font-medium">
