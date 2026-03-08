@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
-import { signSession, setSessionCookie } from '@/lib/session';
 import { DEFAULT_TIMETABLE } from '@/lib/constants';
 import { consumeRateLimit, getClientIp, withRateLimitHeaders } from '@/lib/rate-limit';
 
@@ -62,12 +61,6 @@ export async function POST(request: NextRequest) {
       return { user };
     });
 
-    const token = await signSession({
-      userId: result.user.id,
-      email: result.user.email,
-      name: result.user.displayName
-    });
-
     const response = NextResponse.json({
       ok: true,
       user: {
@@ -77,7 +70,6 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    setSessionCookie(response, token);
     return withRateLimitHeaders(response, limit);
   } catch (error) {
     if (error instanceof z.ZodError) {

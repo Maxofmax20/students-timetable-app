@@ -30,13 +30,21 @@ export function AppShell({ children, title, subtitle, actions }: AppShellProps) 
     });
   }, []);
 
+  React.useEffect(() => {
+    document.body.style.overflow = sidebarOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [sidebarOpen]);
+
   return (
     <ToastProvider>
       <div className="flex h-screen w-full bg-[var(--bg)] overflow-hidden">
         {/* Mobile Sidebar Overlay */}
         {sidebarOpen && (
-          <div 
-            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden animate-fade-in"
+          <button
+            aria-label="Close navigation"
+            className="fixed inset-0 z-40 bg-black/45 lg:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         )}

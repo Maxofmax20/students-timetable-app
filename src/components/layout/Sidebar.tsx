@@ -54,10 +54,9 @@ export function Sidebar({ isOpen, isCollapsed, onToggleCollapse, onClose }: Side
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-[var(--border)] bg-[var(--bg-raised)] transition-all duration-300 ease-in-out lg:static lg:translate-x-0 hidden lg:flex",
-        isCollapsed ? "w-[68px]" : "w-[240px]",
-        isOpen && "flex translate-x-0 !w-[240px]",
-        !isOpen && "max-lg:-translate-x-full"
+        "fixed inset-y-0 left-0 z-[60] flex h-dvh flex-col border-r border-[var(--border)] bg-[var(--bg-raised)] shadow-2xl transition-transform duration-200 ease-out lg:static lg:h-auto lg:translate-x-0 lg:shadow-none",
+        isCollapsed ? "lg:w-[68px]" : "lg:w-[240px]",
+        isOpen ? "w-[280px] translate-x-0" : "w-[280px] -translate-x-full lg:translate-x-0"
       )}
     >
       {/* Brand Header */}

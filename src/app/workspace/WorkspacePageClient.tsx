@@ -108,7 +108,6 @@ const actions: Array<{ icon: string; label: ActionLabel }> = [
   { icon: "save", label: "Save" },
   { icon: "undo", label: "Undo" },
   { icon: "redo", label: "Redo" },
-  { icon: "share", label: "Share" },
   { icon: "download", label: "Export" },
   { icon: "visibility", label: "Preview" },
   { icon: "warning", label: "Conflicts" }
@@ -565,16 +564,7 @@ export default function WorkspacePage() {
     try {
       const query = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : "";
       const url = `/api/v1/courses${query}`;
-      let response = await fetch(url, { credentials: "include" });
-
-      if (response.status === 401 && status === "authenticated") {
-        await fetch("/api/auth/sync-session", {
-          method: "POST",
-          credentials: "include"
-        }).catch(() => null);
-
-        response = await fetch(url, { credentials: "include" });
-      }
+      const response = await fetch(url, { credentials: "include" });
 
       if (response.status === 401) {
         setAuthState("guest");
@@ -685,6 +675,33 @@ export default function WorkspacePage() {
 
     setWorkspaceId(payload.data.id);
     showToast(`Workspace "${payload.data.title}" created`);
+    await fetchCourses();
+    return true;
+  };
+
+  const deleteWorkspace = async (): Promise<boolean> => {
+    if (!workspaceId) {
+      showToast("No active workspace selected");
+      return false;
+    }
+
+    const response = await fetch(`/api/v1/workspaces/${workspaceId}`, {
+      method: "DELETE",
+      credentials: "include"
+    });
+
+    const payload = await parseJson<{ ok?: boolean; message?: string }>(response);
+    if (!response.ok || !payload?.ok) {
+      showToast(payload?.message || "Workspace delete failed");
+      return false;
+    }
+
+    setWorkspaceId(null);
+    setRows([]);
+    setGroups([]);
+    setInstructors([]);
+    setRooms([]);
+    showToast("Workspace deleted");
     await fetchCourses();
     return true;
   };
@@ -1423,8 +1440,11 @@ export default function WorkspacePage() {
   };
 
   const handleSignOut = async () => {
-    // NextAuth handles the session clearing and redirecting
-    // We explicitly import signOut from next-auth/react above
+    await fetch('/api/v1/auth/logout', {
+      method: 'POST',
+      credentials: 'include'
+    }).catch(() => null);
+
     await nextAuthSignOut({ callbackUrl: "/auth" });
   };
 
@@ -1596,7 +1616,7 @@ export default function WorkspacePage() {
                        true,
                        async () => {
                          setConfirmModal(prev => ({...prev, open: false}));
-                         showToast("Workspace deletion is not yet implemented");
+                         await deleteWorkspace();
                        }
                      );
                    }}

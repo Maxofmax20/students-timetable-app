@@ -137,8 +137,7 @@ export function DashboardView({
              {[
                { id: 'New', label: 'New Course', desc: 'Create a new schedule entry', icon: 'add_box', color: 'var(--gold)' },
                { id: 'Conflicts', label: 'Scan Integrity', desc: 'Verify scheduling logic', icon: 'rule', color: 'var(--danger)' },
-               { id: 'Export', label: 'Export Data', desc: 'Download as PDF or ICS', icon: 'cloud_download', color: 'var(--info)' },
-               { id: 'Share', label: 'Share Link', desc: 'Public workspace access', icon: 'ios_share', color: 'var(--success)' },
+               { id: 'Export', label: 'Export Calendar', desc: 'Download an ICS calendar file', icon: 'cloud_download', color: 'var(--info)' },
              ].map((action) => (
                <button 
                  key={action.id}

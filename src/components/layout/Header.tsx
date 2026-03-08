@@ -18,6 +18,15 @@ interface HeaderProps {
 
 export function Header({ title, subtitle, onMenuClick, actions }: HeaderProps) {
   const { data: session } = useSession();
+
+  const handleSignOut = async () => {
+    await fetch('/api/v1/auth/logout', {
+      method: 'POST',
+      credentials: 'include'
+    }).catch(() => null);
+
+    await signOut({ callbackUrl: '/auth' });
+  };
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentTab = searchParams?.get("tab");
@@ -104,7 +113,7 @@ export function Header({ title, subtitle, onMenuClick, actions }: HeaderProps) {
                  <DropdownItem icon="settings_suggest" onClick={() => {}}>Preferences</DropdownItem>
                </Link>
                <div className="h-px bg-[var(--border-soft)] my-1 mx-1"></div>
-               <DropdownItem icon="logout" danger onClick={() => signOut({ callbackUrl: '/auth' })}>Sign out</DropdownItem>
+               <DropdownItem icon="logout" danger onClick={() => { void handleSignOut(); }}>Sign out</DropdownItem>
              </div>
            </DropdownMenu>
         )}

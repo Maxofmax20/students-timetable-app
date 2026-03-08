@@ -8,7 +8,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "secondary", size = "md", isLoading, children, disabled, ...props }, ref) => {
+  ({ className, variant = "secondary", size = "md", isLoading, children, disabled, type, ...props }, ref) => {
     const variants = {
       primary: "bg-gradient-to-br from-[var(--gold)] to-[var(--gold-hover)] text-[var(--gold-fg)] border-none shadow-[var(--shadow-glow)] hover:brightness-110",
       secondary: "bg-[var(--surface-2)] text-[var(--text)] border-[var(--border)] hover:bg-[var(--surface-3)] hover:border-[var(--text-muted)]",
@@ -29,6 +29,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         ref={ref}
+        type={type ?? "button"}
         disabled={disabled || isLoading}
         className={cn(
           "inline-flex items-center font-semibold rounded-[var(--radius-md)] border transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none disabled:active:scale-100",

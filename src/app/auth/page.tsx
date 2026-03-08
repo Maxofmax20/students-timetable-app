@@ -194,6 +194,7 @@ export default function AuthPage() {
 
            <div className="grid grid-cols-2 gap-4">
               <Button 
+                type="button"
                 variant="secondary" 
                 className="h-12 bg-[var(--surface)] hover:bg-[var(--surface-2)]" 
                 onClick={() => signIn('google', { callbackUrl: '/workspace' })}
@@ -201,6 +202,7 @@ export default function AuthPage() {
                  <GoogleIcon /> <span className="ml-2 font-bold">Google</span>
               </Button>
               <Button 
+                type="button"
                 variant="secondary" 
                 className="h-12 bg-[var(--surface)] hover:bg-[var(--surface-2)]" 
                 onClick={() => signIn('github', { callbackUrl: '/workspace' })}

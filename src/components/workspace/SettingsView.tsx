@@ -157,7 +157,7 @@ export function SettingsView(props: SettingsViewProps) {
                  </div>
                  <div className="flex flex-wrap gap-3 pt-2">
                     <Button variant="secondary" size="sm" className="bg-[var(--surface-3)]" onClick={props.onExportJson}>Export JSON</Button>
-                    <Button variant="secondary" size="sm" className="bg-[var(--surface-3)]" onClick={props.onCreateSnapshot}>Create Snapshot</Button>
+                    <Button variant="secondary" size="sm" className="bg-[var(--surface-3)]" onClick={props.onCreateSnapshot}>Save Local Checkpoint</Button>
                     <Button variant="danger" size="sm" onClick={props.onDeleteWorkspace}>Delete Workspace</Button>
                  </div>
               </div>
