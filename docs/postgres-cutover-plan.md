@@ -131,5 +131,5 @@ Rollback is low risk because SQLite source data remains untouched until PostgreS
 
 ## Deferred Notes
 
-- Realtime decision should be finalized after Postgres cutover, because the current realtime server already assumes PostgreSQL.
+- Realtime has been explicitly deferred/removed from the live product path; see `docs/realtime-decision.md`.
 - Legacy timetable tables can be removed later only after confirming they are no longer needed for compatibility/data retention.

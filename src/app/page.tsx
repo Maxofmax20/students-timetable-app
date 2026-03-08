@@ -226,7 +226,7 @@ export default function LandingPage() {
               <FeatureCard 
                 icon="groups" 
                 title="Departmental Sync" 
-                desc="Work together in real-time. Changes sync across all coordinators instantly with no page reloads." 
+                desc="Coordinate timetable updates in one shared workspace with clean review and export flows." 
               />
               <FeatureCard 
                 icon="share_windows" 

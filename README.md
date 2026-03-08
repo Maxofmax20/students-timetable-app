@@ -14,7 +14,7 @@ Timetable Workspace V2.0 is a complete reimagining of the legacy student timetab
 
 ## ✨ Key Features
 
-- **Advanced Timetable Grid:** Visually visualize and edit courses on a real-time calendar grid.
+- **Advanced Timetable Grid:** Visually manage and edit courses on a calendar-style timetable grid.
 - **Smart Conflict Detection:** Instantly highlights overlapping instructors, rooms, and cohorts.
 - **Dedicated Management Pages:** Full CRUD control for Groups, Instructors, and Rooms.
 - **Command Palette:** Lightning-fast navigation and actions via the ActionCenter.

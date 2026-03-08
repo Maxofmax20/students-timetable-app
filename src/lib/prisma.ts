@@ -1,9 +1,26 @@
+import path from 'path';
+import { Pool } from 'pg';
 import { PrismaClient } from '@prisma/client';
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
-import path from 'path';
+import { PrismaPg } from '@prisma/adapter-pg';
 
-const dbPath = path.join(process.cwd(), 'dev.db');
-const adapter = new PrismaBetterSqlite3({ url: dbPath });
+const databaseUrl = process.env.DATABASE_URL ?? `file:${path.join(process.cwd(), 'dev.db')}`;
+
+function buildAdapter() {
+  if (databaseUrl.startsWith('file:')) {
+    const dbPath = databaseUrl.replace(/^file:/, '') || path.join(process.cwd(), 'dev.db');
+    return new PrismaBetterSqlite3({ url: dbPath });
+  }
+
+  if (databaseUrl.startsWith('postgresql:') || databaseUrl.startsWith('postgres:')) {
+    const pool = new Pool({ connectionString: databaseUrl });
+    return new PrismaPg(pool);
+  }
+
+  throw new Error(`Unsupported DATABASE_URL protocol for Prisma adapter: ${databaseUrl}`);
+}
+
+const adapter = buildAdapter();
 
 declare global {
   var prisma: PrismaClient | undefined;
