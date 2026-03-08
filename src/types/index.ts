@@ -15,16 +15,23 @@ export type Row = {
   code?: string;
   source: "real" | "mock";
   course: string;
+  courseName?: string; // Standardize name
   group: string;
   instructor: string;
   room: string;
   day: string;
+  startTime?: string;
+  endTime?: string;
   time: string;
   status: "Active" | "Draft" | "Conflict";
   groupId?: string | null;
   instructorId?: string | null;
   roomId?: string | null;
 };
+
+export type RowData = Row;
+
+export type RowUpdatePayload = Partial<Omit<Row, 'id' | 'source'>>;
 
 export type CourseApiItem = {
   id: string;
@@ -43,6 +50,8 @@ export type GroupApiItem = {
   id: string;
   code: string;
   name: string;
+  yearLabel?: string | null;
+  color?: string | null;
 };
 
 export type InstructorApiItem = {
@@ -56,6 +65,8 @@ export type RoomApiItem = {
   id: string;
   code: string;
   name: string;
+  capacity?: number | null;
+  building?: string | null;
 };
 
 export type ListPayload<T> = {

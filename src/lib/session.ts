@@ -121,7 +121,7 @@ export function clearOtpPendingCookie(response: NextResponse) {
   });
 }
 
-export async function getServerSession() {
+export async function getLegacyServerSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   return verifySession(token);

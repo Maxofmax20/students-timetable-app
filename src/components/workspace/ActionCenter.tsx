@@ -1,115 +1,92 @@
 import * as React from "react";
+import { useState, useMemo } from "react";
 import type { ActionLabel, RowAction, Row } from "@/types";
 import { Modal } from "@/components/ui/Modal";
 import { Tabs, Tab } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 
-const actions: Array<{ icon: string; label: ActionLabel }> = [
-  { icon: "add", label: "New" },
-  { icon: "save", label: "Save" },
-  { icon: "undo", label: "Undo" },
-  { icon: "redo", label: "Redo" },
-  { icon: "share", label: "Share" },
-  { icon: "download", label: "Export" },
-  { icon: "visibility", label: "Preview" },
-  { icon: "warning", label: "Conflicts" }
+const commandPaletteActions = [
+  { category: "New", label: "New Workspace", icon: "create_new_folder" },
+  { category: "New", label: "New Group", icon: "group_add" },
+  { category: "New", label: "New Course", icon: "add_box" },
+  { category: "New", label: "New Instructor", icon: "person_add" },
+  { category: "Save", label: "Save now", icon: "save" },
+  { category: "Save", label: "Save as template", icon: "save_as" },
+  { category: "Save", label: "Create checkpoint", icon: "flag" },
+  { category: "Share", label: "Create public link", icon: "link" },
+  { category: "Share", label: "Invite teacher", icon: "person_add" },
+  { category: "Share", label: "Manage permissions", icon: "admin_panel_settings" },
+  { category: "Export", label: "Export JSON", icon: "data_object" },
+  { category: "Export", label: "Export CSV", icon: "table_chart" },
+  { category: "Export", label: "Export ICS", icon: "calendar_month" },
+  { category: "Export", label: "Export PDF", icon: "picture_as_pdf" },
+  { category: "Undo", label: "Undo last change", icon: "undo" },
+  { category: "Redo", label: "Redo last change", icon: "redo" },
+  { category: "Conflicts", label: "Scan conflicts", icon: "warning" },
+  { category: "Conflicts", label: "Clear conflict highlights", icon: "cleaning_services" }
 ];
 
 export function ActionCenter({
   open,
-  active,
   onClose,
-  onPick,
   onRun
 }: {
   open: boolean;
-  active: ActionLabel;
+  active?: ActionLabel;
   onClose: () => void;
-  onPick: (action: ActionLabel) => void;
+  onPick?: (action: ActionLabel) => void;
   onRun: (name: string) => void;
 }) {
+  const [query, setQuery] = useState("");
+
+  const filteredActions = useMemo(() => {
+    if (!query) return commandPaletteActions;
+    const lowerQuery = query.toLowerCase();
+    return commandPaletteActions.filter(
+      (a) => a.label.toLowerCase().includes(lowerQuery) || a.category.toLowerCase().includes(lowerQuery)
+    );
+  }, [query]);
+
   return (
-    <Modal open={open} onClose={onClose} title="Action Center" className="w-[500px]">
-      <Tabs value={active} onValueChange={(val) => onPick(val as ActionLabel)} variant="action">
-        {actions.map((item) => (
-          <Tab key={item.label} value={item.label}>
-            <span className="material-symbols-outlined">{item.icon}</span>
-            <span>{item.label}</span>
-          </Tab>
-        ))}
-      </Tabs>
-
-      <div className="mt-4">
-        {active === "New" && (
-          <div className="w-action-grid">
-            <Button variant="primary" onClick={() => onRun("New Workspace")}>New Workspace</Button>
-            <Button variant="default" onClick={() => onRun("New Group")}>New Group</Button>
-            <Button variant="default" onClick={() => onRun("New Course")}>New Course</Button>
-            <Button variant="default" onClick={() => onRun("New Instructor")}>New Instructor</Button>
-          </div>
-        )}
-
-        {active === "Save" && (
-          <div className="w-action-grid">
-            <Button variant="primary" onClick={() => onRun("Save now")}>Save now</Button>
-            <Button variant="default" onClick={() => onRun("Save as template")}>Save as template</Button>
-            <Button variant="default" onClick={() => onRun("Create checkpoint")}>Create checkpoint</Button>
-            <Button variant="default" onClick={() => onRun("Auto-save settings")}>Auto-save settings</Button>
-          </div>
-        )}
-
-        {active === "Share" && (
-          <div className="w-action-grid">
-            <Button variant="primary" onClick={() => onRun("Create public link")}>Create public link</Button>
-            <Button variant="default" onClick={() => onRun("Invite teacher")}>Invite teacher</Button>
-            <Button variant="default" onClick={() => onRun("Invite student")}>Invite student</Button>
-            <Button variant="default" onClick={() => onRun("Manage permissions")}>Manage permissions</Button>
-          </div>
-        )}
-
-        {active === "Export" && (
-          <div className="w-action-grid">
-            <Button variant="default" onClick={() => onRun("Export JSON")}>Export JSON</Button>
-            <Button variant="default" onClick={() => onRun("Export CSV")}>Export CSV</Button>
-            <Button variant="default" onClick={() => onRun("Export ICS")}>Export ICS</Button>
-            <Button variant="default" onClick={() => onRun("Export PDF")}>Export PDF</Button>
-          </div>
-        )}
-
-        {active === "Preview" && (
-          <div className="w-action-grid">
-            <Button variant="default" onClick={() => onRun("Desktop preview")}>Desktop preview</Button>
-            <Button variant="default" onClick={() => onRun("Tablet preview")}>Tablet preview</Button>
-            <Button variant="default" onClick={() => onRun("Mobile preview")}>Mobile preview</Button>
-            <Button variant="default" onClick={() => onRun("Public view preview")}>Public view preview</Button>
-          </div>
-        )}
-
-        {active === "Undo" && (
-          <div className="w-action-grid">
-            <Button variant="primary" onClick={() => onRun("Undo last change")}>Undo last change</Button>
-            <Button variant="default" onClick={() => onRun("Show checkpoints")}>Show checkpoints</Button>
-          </div>
-        )}
-
-        {active === "Redo" && (
-          <div className="w-action-grid">
-            <Button variant="primary" onClick={() => onRun("Redo last change")}>Redo last change</Button>
-            <Button variant="default" onClick={() => onRun("Show checkpoints")}>Show checkpoints</Button>
-          </div>
-        )}
-
-        {active === "Conflicts" && (
-          <div className="w-action-grid">
-            <Button variant="primary" onClick={() => onRun("Scan conflicts")}>Scan conflicts</Button>
-            <Button variant="default" onClick={() => onRun("Clear conflict highlights")}>Clear highlights</Button>
-          </div>
-        )}
+    <Modal open={open} onClose={onClose} title="" className="w-[550px] !p-0 overflow-hidden bg-[var(--surface)] border border-[var(--line)]">
+      <div className="flex items-center px-4 py-3 border-b border-[var(--line)] bg-[var(--surface-2)]">
+        <span className="material-symbols-outlined text-[var(--muted)] text-xl mr-3">search</span>
+        <input 
+          autoFocus
+          className="flex-1 bg-transparent border-none outline-none text-white placeholder-[var(--muted)] text-base"
+          placeholder="Type a command or search..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <span className="text-[10px] font-bold text-[var(--muted)] bg-[var(--surface-3)] px-2 py-1 rounded border border-[var(--line)] font-mono">ESC</span>
       </div>
 
-      <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-[var(--line)]">
-        <Button variant="ghost" onClick={onClose}>Close</Button>
-        <Button variant="primary" onClick={() => { onRun(`${active} settings applied`); onClose(); }}>Apply</Button>
+      <div className="max-h-[60vh] overflow-y-auto p-2">
+        {filteredActions.length === 0 ? (
+          <div className="py-12 text-center text-[var(--muted)] text-sm">
+            No commands found for "{query}"
+          </div>
+        ) : (
+          filteredActions.map((action) => (
+            <button
+              key={action.label}
+              onClick={() => {
+                onRun(action.label);
+                setQuery("");
+                onClose();
+              }}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-[var(--surface-2)] transition-colors group cursor-pointer text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[var(--surface-3)] border border-[var(--line)] text-[var(--muted)] group-hover:text-[var(--gold)] group-hover:border-[var(--gold)]/30 transition-colors">
+                  <span className="material-symbols-outlined text-[18px]">{action.icon}</span>
+                </div>
+                <span className="text-white font-medium text-sm group-hover:text-[var(--gold-soft)] transition-colors">{action.label}</span>
+              </div>
+              <span className="text-xs font-semibold text-[var(--muted)] bg-[var(--surface-3)] px-2 py-0.5 rounded border border-[var(--line)] opacity-0 group-hover:opacity-100 transition-opacity">ENTER</span>
+            </button>
+          ))
+        )}
       </div>
     </Modal>
   );
@@ -159,25 +136,25 @@ export function RowActionCenter({
 
       <div className="mt-4">
         {active === "Edit" && (
-          <div className="w-action-grid">
-            <Button variant="default" onClick={() => onEdit(row)}>Edit title</Button>
-            <Button variant="default" onClick={() => onPlaceholder(`Edit time of ${row.course}`)}>Edit time</Button>
-            <Button variant="default" onClick={() => onPlaceholder(`Edit room of ${row.course}`)}>Edit room</Button>
-            <Button variant="primary" onClick={() => onPlaceholder(`Open full edit for ${row.course}`)}>Open editor</Button>
+          <div className="grid grid-cols-1 gap-2">
+            <Button variant="secondary" onClick={() => { onEdit(row); onClose(); }}>Edit title</Button>
+            <Button variant="secondary" onClick={() => { onPlaceholder(`Edit time of ${row.course}`); onClose(); }}>Edit time</Button>
+            <Button variant="secondary" onClick={() => { onPlaceholder(`Edit room of ${row.course}`); onClose(); }}>Edit room</Button>
+            <Button variant="primary" onClick={() => { onPlaceholder(`Open full edit for ${row.course}`); onClose(); }}>Open editor</Button>
           </div>
         )}
 
         {active === "Duplicate" && (
-          <div className="w-action-grid">
+          <div className="grid grid-cols-1 gap-2">
             <Button variant="primary" onClick={() => { onDuplicate(row); onClose(); }}>Confirm duplicate</Button>
-            <Button variant="default" onClick={onClose}>Cancel</Button>
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
           </div>
         )}
 
         {active === "Delete" && (
-          <div className="w-action-grid">
+          <div className="grid grid-cols-1 gap-2">
             <Button variant="danger" onClick={() => { onDelete(row); onClose(); }}>Confirm delete</Button>
-            <Button variant="default" onClick={onClose}>Cancel</Button>
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
           </div>
         )}
       </div>

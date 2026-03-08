@@ -39,10 +39,18 @@ import {
   downloadFile,
   copyText
 } from "@/lib/utils";
+import { useSession, signOut as nextAuthSignOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Toggle } from "@/components/ui/Toggle";
 import { ActionCenter, RowActionCenter } from "@/components/workspace/ActionCenter";
 import { DataTable } from "@/components/workspace/DataTable";
 import { AppShell } from "@/components/layout/AppShell";
+import { DashboardView } from "@/components/workspace/DashboardView";
+import { TimetableView } from "@/components/workspace/TimetableView";
+import { CoursesView } from "@/components/workspace/CoursesView";
+import { SettingsView } from "@/components/workspace/SettingsView";
+import { EditCourseModal, type EditCourseMode } from "@/components/workspace/EditCourseModal";
+import { Modal } from "@/components/ui/Modal";
 
 const placeholderRows: Row[] = [
   {
@@ -106,9 +114,22 @@ const actions: Array<{ icon: string; label: ActionLabel }> = [
   { icon: "warning", label: "Conflicts" }
 ];
 
-const WEEK_DAYS = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu"];
+const WEEK_DAYS = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
 
-
+interface CreateForm {
+  workspaceTitle: string;
+  groupCode: string;
+  groupName: string;
+  instructorName: string;
+  instructorEmail: string;
+  instructorPhone: string;
+  courseTitle: string;
+  courseCode: string;
+  courseStatus: string;
+  courseGroupId: string;
+  courseInstructorId: string;
+  courseRoomId: string;
+}
 
 function courseToRow(item: CourseApiItem, fallback?: Row): Row {
   return {
@@ -241,32 +262,14 @@ function scanConflicts(rows: Row[]): { rows: Row[]; count: number } {
   return { rows: nextRows, count };
 }
 
-function SvgLogo() {
-  return (
-    <svg viewBox="0 0 48 48" className="w-logo" aria-hidden>
-      <defs>
-        <linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#60a5fa" />
-          <stop offset="100%" stopColor="#2563eb" />
-        </linearGradient>
-      </defs>
-      <rect x="4" y="4" width="40" height="40" rx="12" fill="url(#logo-g)" />
-      <path d="M14 26h20M14 19h20M14 33h12" stroke="white" strokeWidth="3" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 
 export default function WorkspacePage() {
-  const [theme, setTheme] = useState<ThemeChoice>("c");
-  const [showSettings, setShowSettings] = useState(false);
-  const [showActionCenter, setShowActionCenter] = useState(false);
-  const [activeAction, setActiveAction] = useState<ActionLabel>("New");
-  const [mainTab, setMainTab] = useState<MainTab>("Dashboard");
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("Theme");
+  const { data: session, status } = useSession();
+  const router = useRouter();
 
-  const [showRowCenter, setShowRowCenter] = useState(false);
-  const [activeRowAction, setActiveRowAction] = useState<RowAction>("Edit");
+  const [theme, setTheme] = useState<ThemeChoice>("c");
+  const [mainTab, setMainTab] = useState<MainTab>("Dashboard");
   const [selectedRow, setSelectedRow] = useState<Row | null>(null);
 
   const [miniMap, setMiniMap] = useState(true);
@@ -279,6 +282,22 @@ export default function WorkspacePage() {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [authState, setAuthState] = useState<"unknown" | "authed" | "guest">("unknown");
   const [loadingRows, setLoadingRows] = useState(false);
+
+  const [courseModalOpen, setCourseModalOpen] = useState(false);
+  const [courseModalMode, setCourseModalMode] = useState<EditCourseMode>('full');
+  const [courseModalData, setCourseModalData] = useState<Partial<Row>>({});
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    actionLabel: string;
+    danger: boolean;
+    onConfirm: () => void;
+  }>({ open: false, title: '', message: '', actionLabel: '', danger: false, onConfirm: () => {} });
+
+  const confirmAction = (title: string, message: string, actionLabel: string, danger: boolean, onConfirm: () => void) => {
+    setConfirmModal({ open: true, title, message, actionLabel, danger, onConfirm });
+  };
 
   const [groups, setGroups] = useState<GroupApiItem[]>([]);
   const [instructors, setInstructors] = useState<InstructorApiItem[]>([]);
@@ -296,10 +315,10 @@ export default function WorkspacePage() {
   const [previewMode, setPreviewMode] = useState<PreviewMode>("default");
   const [defaultInviteRole, setDefaultInviteRole] = useState<InviteRole>("VIEWER");
 
-  const [createModalType, setCreateModalType] = useState<CreateEntityType | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
-  const [createForm, setCreateForm] = useState({
-    workspaceTitle: "My Workspace",
+  const [createModalType, setCreateModalType] = useState<CreateEntityType | null>(null);
+  const [createForm, setCreateForm] = useState<CreateForm>({
+    workspaceTitle: "",
     groupCode: "",
     groupName: "",
     instructorName: "",
@@ -324,15 +343,24 @@ export default function WorkspacePage() {
     window.setTimeout(() => setToast(null), 2200);
   };
 
+
+
+  const ensureCanWrite = (action: string): boolean => {
+    if (authState !== "authed") {
+      showToast(`Guest mode is read-only. Login required to ${action}.`);
+      return false;
+    }
+    return true;
+  };
+
   const openCreateModal = (type: CreateEntityType) => {
     if (!ensureCanWrite(`create ${type}`)) return;
 
-    setShowActionCenter(false);
     setCreateModalType(type);
     setCreateSubmitting(false);
 
     if (type === "workspace") {
-      setCreateForm((current) => ({
+      setCreateForm((current: CreateForm) => ({
         ...current,
         workspaceTitle: current.workspaceTitle || "My Workspace"
       }));
@@ -341,7 +369,7 @@ export default function WorkspacePage() {
 
     if (type === "group") {
       const code = `G-${randomInt(10, 99)}`;
-      setCreateForm((current) => ({
+      setCreateForm((current: CreateForm) => ({
         ...current,
         groupCode: code,
         groupName: current.groupName || `Group ${code}`
@@ -350,16 +378,14 @@ export default function WorkspacePage() {
     }
 
     if (type === "instructor") {
-      setCreateForm((current) => ({
+      setCreateForm((current: CreateForm) => ({
         ...current,
-        instructorName: current.instructorName || `Instructor ${randomInt(10, 99)}`,
-        instructorEmail: current.instructorEmail || "",
-        instructorPhone: current.instructorPhone || ""
+        instructorName: current.instructorName || ""
       }));
       return;
     }
 
-    setCreateForm((current) => ({
+    setCreateForm((current: CreateForm) => ({
       ...current,
       courseTitle: current.courseTitle || `New Course ${randomInt(100, 999)}`,
       courseCode: current.courseCode || `CRS-${randomInt(100, 999)}`,
@@ -455,13 +481,7 @@ export default function WorkspacePage() {
     await submitCreateModal();
   };
 
-  const ensureCanWrite = (action: string): boolean => {
-    if (authState !== "authed") {
-      showToast(`Guest mode is read-only. Login required to ${action}.`);
-      return false;
-    }
-    return true;
-  };
+
 
   const pushUndoSnapshot = () => {
     setUndoStack((stack) => [...stack.slice(-24), cloneRows(rowsRef.current)]);
@@ -608,28 +628,7 @@ export default function WorkspacePage() {
 
   const createRoom = async () => {
     if (!ensureCanWrite("create a room")) return;
-
-    const code = window.prompt("Room code", `R-${randomInt(100, 999)}`)?.trim();
-    if (!code) return;
-
-    const name = window.prompt("Room name", code)?.trim();
-    if (!name) return;
-
-    const response = await fetch("/api/v1/rooms", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ workspaceId, code: normalizeCode(code), name })
-    });
-
-    const payload = await parseJson<SinglePayload<RoomApiItem>>(response);
-    if (!response.ok || !payload?.ok) {
-      showToast(payload?.message || "Create room failed");
-      return;
-    }
-
-    showToast("Room created");
-    await fetchReferenceData();
+    router.push('/workspace/rooms');
   };
 
   const createInstructor = async (payload: { name: string; email?: string; phone?: string }): Promise<boolean> => {
@@ -789,32 +788,17 @@ export default function WorkspacePage() {
       return;
     }
 
-    const nextName = window.prompt("Edit course title", row.course)?.trim();
-    if (!nextName) return;
-
-    const updated = await patchCourseApi(row.id, { title: nextName });
-    if (!updated) return;
-
-    showToast("Course updated");
-    await fetchCourses();
+    setCourseModalData(row);
+    setCourseModalMode('title');
+    setCourseModalOpen(true);
   };
 
   const editCourseTime = async (row: Row) => {
     if (!ensureCanWrite("edit schedule details")) return;
 
-    const day = window.prompt("Day (Sat/Sun/Mon/Tue/Wed/Thu)", row.day === "--" ? "Mon" : row.day)?.trim();
-    if (!day) return;
-
-    const time = window.prompt("Time range (HH:MM-HH:MM)", row.time === "--" ? "09:00-10:00" : row.time)?.trim();
-    if (!time || !parseTimeRange(time)) {
-      showToast("Invalid time format");
-      return;
-    }
-
-    applyLocalRows(
-      (current) => current.map((item) => (item.id === row.id ? { ...item, day, time } : item)),
-      "Schedule note updated"
-    );
+    setCourseModalData(row);
+    setCourseModalMode('time');
+    setCourseModalOpen(true);
   };
 
   const editCourseRoom = async (row: Row) => {
@@ -826,26 +810,16 @@ export default function WorkspacePage() {
     }
 
     if (!rooms.length) {
-      const shouldCreateRoom = window.confirm("No rooms available. Create one now?");
-      if (shouldCreateRoom) await createRoom();
+      confirmAction("No Rooms", "No rooms available. Create one now?", "Create Room", false, () => {
+        setConfirmModal(prev => ({ ...prev, open: false }));
+        router.push('/workspace/rooms');
+      });
       return;
     }
 
-    const options = rooms.map((room) => room.code).join(", ");
-    const input = window.prompt(`Choose room code (${options})`, row.room === "-" ? rooms[0]?.code ?? "" : row.room)?.trim();
-    if (!input) return;
-
-    const selected = rooms.find((room) => room.code.toLowerCase() === input.toLowerCase());
-    if (!selected) {
-      showToast("Room code not found");
-      return;
-    }
-
-    const updated = await patchCourseApi(row.id, { roomId: selected.id });
-    if (!updated) return;
-
-    showToast("Room updated");
-    await fetchCourses();
+    setCourseModalData(row);
+    setCourseModalMode('room');
+    setCourseModalOpen(true);
   };
 
   const openFullEdit = async (row: Row) => {
@@ -856,47 +830,9 @@ export default function WorkspacePage() {
       return;
     }
 
-    const title = window.prompt("Course title", row.course)?.trim();
-    if (!title) return;
-
-    const code = window.prompt("Course code", row.code ?? normalizeCode(row.course))?.trim();
-    if (!code) return;
-
-    const statusRaw = window.prompt("Status (ACTIVE / DRAFT / CONFLICT)", row.status.toUpperCase())?.trim().toUpperCase();
-    const status = statusRaw || "ACTIVE";
-
-    const groupPrompt = window.prompt(
-      `Group code (${groups.map((group) => group.code).join(", ") || "none"})`,
-      row.group === "-" ? "" : row.group
-    )?.trim();
-    const instructorPrompt = window.prompt(
-      `Instructor name (${instructors.map((instructor) => instructor.name).join(", ") || "none"})`,
-      row.instructor === "-" ? "" : row.instructor
-    )?.trim();
-    const roomPrompt = window.prompt(
-      `Room code (${rooms.map((room) => room.code).join(", ") || "none"})`,
-      row.room === "-" ? "" : row.room
-    )?.trim();
-
-    const selectedGroup = groupPrompt ? groups.find((group) => group.code.toLowerCase() === groupPrompt.toLowerCase()) : null;
-    const selectedInstructor = instructorPrompt
-      ? instructors.find((instructor) => instructor.name.toLowerCase() === instructorPrompt.toLowerCase())
-      : null;
-    const selectedRoom = roomPrompt ? rooms.find((room) => room.code.toLowerCase() === roomPrompt.toLowerCase()) : null;
-
-    const updated = await patchCourseApi(row.id, {
-      title,
-      code,
-      status,
-      groupId: selectedGroup?.id ?? null,
-      instructorId: selectedInstructor?.id ?? null,
-      roomId: selectedRoom?.id ?? null
-    });
-
-    if (!updated) return;
-
-    showToast("Full edit saved");
-    await fetchCourses();
+    setCourseModalData(row);
+    setCourseModalMode('full');
+    setCourseModalOpen(true);
   };
 
   const duplicateCourse = async (row: Row) => {
@@ -991,25 +927,9 @@ export default function WorkspacePage() {
       return;
     }
 
-    const title = window.prompt("Title for duplicate", `${row.course} Copy`)?.trim();
-    if (!title) return;
-
-    const code = window.prompt("Code for duplicate", `${row.code ?? normalizeCode(row.course)}-${randomInt(10, 99)}`)?.trim();
-    if (!code) return;
-
-    const created = await createCourseApi({
-      code,
-      title,
-      status: "DRAFT",
-      groupId: row.groupId ?? null,
-      instructorId: row.instructorId ?? null,
-      roomId: row.roomId ?? null
-    });
-
-    if (!created) return;
-
-    showToast("Duplicate created with edits");
-    await fetchCourses();
+    setCourseModalData(row);
+    setCourseModalMode('duplicate');
+    setCourseModalOpen(true);
   };
 
   const archiveCourse = async (row: Row) => {
@@ -1039,14 +959,19 @@ export default function WorkspacePage() {
       return;
     }
 
-    const approved = window.confirm(hard ? `Hard delete ${row.course}?` : `Delete ${row.course}?`);
-    if (!approved) return;
-
-    const deleted = await deleteCourseApi(row.id);
-    if (!deleted) return;
-
-    showToast(hard ? "Hard delete complete" : "Course deleted");
-    await fetchCourses();
+    confirmAction(
+      hard ? "Hard Delete Course" : "Delete Course",
+      `Are you sure you want to delete ${row.course}?`,
+      "Delete",
+      true,
+      async () => {
+        setConfirmModal(prev => ({ ...prev, open: false }));
+        const deleted = await deleteCourseApi(row.id, hard);
+        if (!deleted) return;
+        showToast(hard ? "Hard delete complete" : "Course deleted");
+        await fetchCourses();
+      }
+    );
   };
 
   const deleteAllInGroup = async (row: Row) => {
@@ -1064,18 +989,22 @@ export default function WorkspacePage() {
       return;
     }
 
-    const approved = window.confirm(`Delete ${matches.length} course(s) in group ${targetGroup}?`);
-    if (!approved) return;
-
-    let deleted = 0;
-
-    for (const item of matches) {
-      const ok = await deleteCourseApi(item.id, true);
-      if (ok) deleted += 1;
-    }
-
-    showToast(`Deleted ${deleted}/${matches.length} course(s)`);
-    if (deleted > 0) await fetchCourses();
+    confirmAction(
+      "Delete Group Courses",
+      `Are you sure you want to delete ${matches.length} course(s) in group ${targetGroup}?`,
+      "Delete All",
+      true,
+      async () => {
+        setConfirmModal(prev => ({ ...prev, open: false }));
+        let deleted = 0;
+        for (const item of matches) {
+          const ok = await deleteCourseApi(item.id, true);
+          if (ok) deleted += 1;
+        }
+        showToast(`Deleted ${deleted}/${matches.length} course(s)`);
+        if (deleted > 0) await fetchCourses();
+      }
+    );
   };
 
   const exportJson = () => {
@@ -1248,9 +1177,8 @@ export default function WorkspacePage() {
     }
 
     if (name === "Manage permissions") {
-      setSettingsTab("Permissions");
-      setShowSettings(true);
-      showToast("Permissions panel opened");
+      setMainTab("Settings");
+      showToast("Settings panel opened");
       return;
     }
 
@@ -1324,84 +1252,8 @@ export default function WorkspacePage() {
       return;
     }
 
-    if (name.startsWith("Edit time of ")) {
-      if (!selectedRow) {
-        showToast("No row selected");
-        return;
-      }
-      await editCourseTime(selectedRow);
-      return;
-    }
-
-    if (name.startsWith("Edit room of ")) {
-      if (!selectedRow) {
-        showToast("No row selected");
-        return;
-      }
-      await editCourseRoom(selectedRow);
-      return;
-    }
-
-    if (name.startsWith("Open full edit for ")) {
-      if (!selectedRow) {
-        showToast("No row selected");
-        return;
-      }
-      await openFullEdit(selectedRow);
-      return;
-    }
-
-    if (name.startsWith("Duplicate ") && name.endsWith(" to all days")) {
-      if (!selectedRow) {
-        showToast("No row selected");
-        return;
-      }
-      await duplicateAllDays(selectedRow);
-      return;
-    }
-
-    if (name.startsWith("Duplicate ") && name.endsWith(" to group A2")) {
-      if (!selectedRow) {
-        showToast("No row selected");
-        return;
-      }
-      await duplicateToA2(selectedRow);
-      return;
-    }
-
-    if (name.startsWith("Duplicate + edit ")) {
-      if (!selectedRow) {
-        showToast("No row selected");
-        return;
-      }
-      await duplicateAndEdit(selectedRow);
-      return;
-    }
-
-    if (name.startsWith("Archive ")) {
-      if (!selectedRow) {
-        showToast("No row selected");
-        return;
-      }
-      await archiveCourse(selectedRow);
-      return;
-    }
-
-    if (name.startsWith("Delete all ") && name.includes(" in group ")) {
-      if (!selectedRow) {
-        showToast("No row selected");
-        return;
-      }
-      await deleteAllInGroup(selectedRow);
-      return;
-    }
-
     if (name.startsWith("Hard delete ")) {
-      if (!selectedRow) {
-        showToast("No row selected");
-        return;
-      }
-      await deleteCourse(selectedRow, true);
+      await deleteCourse(selectedRow!, true);
       return;
     }
 
@@ -1505,49 +1357,74 @@ export default function WorkspacePage() {
       name === "Timetable settings applied" ||
       name === "Permissions settings applied"
     ) {
-      showToast(`${settingsTab} settings applied`);
+      showToast("Settings applied");
       return;
     }
 
     showToast(`${name} executed`);
   };
 
+  const openAction = (label: ActionLabel) => {
+    if (label === "New") {
+      setCourseModalData({});
+      setCourseModalMode('create');
+      setCourseModalOpen(true);
+      return;
+    }
+
+    if (label === "Export") {
+      exportIcs();
+      return;
+    }
+
+    if (label === "Share") {
+      runAction("Create public link");
+      return;
+    }
+
+    if (label === "Conflicts") {
+      applyConflictScan();
+      return;
+    }
+
+    runAction(label);
+  };
+
+  const openRowAction = (label: RowAction, row: Row) => {
+    setSelectedRow(row);
+    if (label === "Edit") {
+      openFullEdit(row);
+      return;
+    }
+
+    if (label === "Duplicate") {
+      duplicateCourse(row);
+      return;
+    }
+
+    if (label === "Delete") {
+      deleteCourse(row);
+      return;
+    }
+  };
+
   const openLoginPage = () => {
     window.location.assign("/auth");
   };
 
-  const signOut = async () => {
-    const response = await fetch("/api/auth/logout", {
-      method: "POST",
-      credentials: "include"
-    });
-
-    if (!response.ok) {
-      showToast("Logout failed");
-      return;
-    }
-
-    setAuthState("guest");
-    setWorkspaceId(null);
-    setRows(placeholderRows);
-    showToast("Logged out");
-  };
-
-  const openAction = (label: ActionLabel) => {
-    setActiveAction(label);
-    setShowActionCenter(true);
-  };
-
-  const openRowAction = (action: RowAction, row: Row) => {
-    setSelectedRow(row);
-    setActiveRowAction(action);
-    setShowRowCenter(true);
+  const handleSignOut = async () => {
+    // NextAuth handles the session clearing and redirecting
+    // We explicitly import signOut from next-auth/react above
+    await nextAuthSignOut({ callbackUrl: "/auth" });
   };
 
   useEffect(() => {
+    if (status === "loading") return;
+    
+    // Auto-fetch data once NextAuth knows if we have a token
     void fetchCourses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [status]);
 
   useEffect(() => {
     try {
@@ -1642,379 +1519,145 @@ export default function WorkspacePage() {
           : "Create Course";
 
   return (
-    <div className={`w-root option-${theme} ${animationsEnabled ? "" : "reduce-motion"}`} dir="ltr" style={{ fontSize: `${fontScale}%` }}>
+    <div className={animationsEnabled ? "" : "reduce-motion"} dir="ltr" style={{ fontSize: `${fontScale}%` }}>
       <AppShell
-        title="Students Timetable Workspace"
-        subtitle="Production UI preview • all controls are now functional"
+        title={mainTab === 'Dashboard' ? 'Dashboard' : mainTab === 'Timetable' ? 'Timetable' : mainTab === 'Courses' ? 'Courses' : mainTab === 'Settings' ? 'Configuration' : 'Workspace'}
+        subtitle={mainTab === 'Dashboard' ? 'Your workspace overview' : mainTab === 'Timetable' ? 'Weekly schedule grid' : mainTab === 'Courses' ? 'Manage course entries' : mainTab === 'Settings' ? 'Workspace preferences' : undefined}
         actions={
           <div className="flex gap-2">
-            <button className="w-icon-btn" onClick={() => setShowSettings(true)}>
-              <span className="material-symbols-outlined">tune</span>
+            <button className="p-2 rounded-lg text-[var(--text-secondary)] hover:text-white hover:bg-[var(--surface-2)] transition-all" onClick={() => setMainTab("Settings")}>
+              <span className="material-symbols-outlined text-xl">tune</span>
             </button>
           </div>
         }
       >
-        <div className="w-main border-transparent" style={{ padding: 0, margin: 0, minHeight: 'auto' }}>
-        <section className="w-option-card c" style={cardStyle}>
-          <div className="w-dense-top">
-            <div className="w-mini-menu">
-              {(["Dashboard", "Timetable", "Courses", "Settings"] as MainTab[]).map((tab) => (
-                <button
-                  key={tab}
-                  className={mainTab === tab ? "active" : ""}
-                  onClick={() => {
-                    if (tab === "Settings") setShowSettings(true);
-                    setMainTab(tab);
-                  }}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {!isPublicPreview && (
-            <div className="w-action-scroll">
-              {actions.map((item, index) => (
-                <button key={item.label} className={`w-btn ${index === 0 ? "primary" : ""}`} onClick={() => openAction(item.label)}>
-                  <span className="material-symbols-outlined">{item.icon}</span>
-                  <span>{item.label}</span>
-                </button>
-              ))}
-              <button className="w-btn" onClick={() => setShowSettings(true)}>
-                <span className="material-symbols-outlined">tune</span>
-                <span>Settings</span>
-              </button>
-              <button className="w-btn" onClick={() => setPreviewMode("default")}>
-                <span className="material-symbols-outlined">desktop_windows</span>
-                <span>Reset Preview</span>
-              </button>
-              {authState === "authed" ? (
-                <button className="w-btn" onClick={() => void signOut()}>
-                  <span className="material-symbols-outlined">logout</span>
-                  <span>Logout</span>
-                </button>
-              ) : (
-                <button className="w-btn primary" onClick={openLoginPage}>
-                  <span className="material-symbols-outlined">login</span>
-                  <span>Login</span>
-                </button>
+        <div className="h-full w-full flex-1">
+              {mainTab === "Dashboard" && (
+                <DashboardView 
+                   rows={rows} 
+                   conflictsCount={rows.filter(r => r.status === 'Conflict').length} 
+                   groupsCount={groups.length} 
+                   instructorsCount={instructors.length}
+                   onAction={openAction}
+                   isLoading={loadingRows}
+                />
               )}
-            </div>
-          )}
 
-          <div className="w-tab-content">
-            {mainTab === "Dashboard" && <p>Dashboard: quick actions, current dataset health, and operation chips.</p>}
-            {mainTab === "Timetable" && <p>Timetable: editable local day/time metadata + conflict scan support.</p>}
-            {mainTab === "Courses" && <p>Courses: API-backed CRUD actions for authenticated users.</p>}
-            {mainTab === "Settings" && <p>Settings: all controls now apply real state changes.</p>}
-          </div>
+              {mainTab === "Timetable" && (
+                <TimetableView 
+                   rows={rows} 
+                   timeMode={timeMode} 
+                   weekStart={weekStart} 
+                   onRowAction={openRowAction} 
+                   isLoading={loadingRows}
+                />
+              )}
 
-          <DataTable rows={authState === "authed" ? rows : placeholderRows} dense={denseRows} timeMode={timeMode} onRowAction={openRowAction} />
+              {mainTab === "Courses" && (
+                <CoursesView 
+                   rows={rows} 
+                   denseRows={denseRows} 
+                   timeMode={timeMode} 
+                   onAction={openAction}
+                   onRowAction={openRowAction} 
+                   isLoading={loadingRows}
+                />
+              )}
 
-          {!isPublicPreview && (
-            <div className="w-footer-controls">
-              <Toggle label="Auto Save" checked={autoSave} onCheckedChange={() => setAutoSave((value) => !value)} />
-              <Toggle label="Smart Placement" checked={smartPlacement} onCheckedChange={() => setSmartPlacement((value) => !value)} />
-              <Toggle label="Mini Map" checked={miniMap} onCheckedChange={() => setMiniMap((value) => !value)} />
-              <Toggle label="Dense Table Mode" checked={denseRows} onCheckedChange={() => setDenseRows((value) => !value)} />
-            </div>
-          )}
-        </section>
+              {mainTab === "Settings" && (
+                <SettingsView 
+                   denseRows={denseRows} onSetDenseRows={setDenseRows}
+                   miniMap={miniMap} onSetMiniMap={setMiniMap}
+                   animationsEnabled={animationsEnabled} onSetAnimationsEnabled={setAnimationsEnabled}
+                   fontScale={fontScale} onSetFontScale={setFontScale}
+                   autoSave={autoSave} onSetAutoSave={setAutoSave}
+                   smartPlacement={smartPlacement} onSetSmartPlacement={setSmartPlacement}
+                   timeMode={timeMode} onSetTimeMode={setTimeMode}
+                   weekStart={weekStart} onSetWeekStart={setWeekStart}
+                   conflictPolicy={conflictPolicy} onSetConflictPolicy={setConflictPolicy}
+                   snapMinutes={snapMinutes} onSetSnapMinutes={setSnapMinutes}
+                   onExportJson={() => { exportJson(); showToast("JSON exported"); }}
+                   onCreateSnapshot={() => { saveCheckpoint(); }}
+                   onDeleteWorkspace={() => {
+                     confirmAction(
+                       "Delete Workspace",
+                       "This will permanently delete your workspace, all courses, and associated data. This action cannot be undone.",
+                       "Delete Everything",
+                       true,
+                       async () => {
+                         setConfirmModal(prev => ({...prev, open: false}));
+                         showToast("Workspace deletion is not yet implemented");
+                       }
+                     );
+                   }}
+                />
+              )}
         </div>
       </AppShell>
 
-      <ActionCenter
-        open={showActionCenter}
-        active={activeAction}
-        onClose={() => setShowActionCenter(false)}
-        onPick={setActiveAction}
-        onRun={runAction}
+      <EditCourseModal 
+        open={courseModalOpen}
+        onClose={() => setCourseModalOpen(false)}
+        mode={courseModalMode}
+        initialData={courseModalData}
+        groups={groups}
+        instructors={instructors}
+        rooms={rooms}
+        onSave={async (data, id) => {
+          if (courseModalMode === 'title') {
+            const updated = await patchCourseApi(id!, { title: data.course });
+            if (updated) { showToast("Course updated"); await fetchCourses(); }
+          } else if (courseModalMode === 'time') {
+            if (!data.time || !parseTimeRange(data.time)) throw new Error("Invalid time format");
+            applyLocalRows((current) => current.map((item) => (item.id === id ? { ...item, day: data.day || 'Mon', time: data.time || '09:00-10:00' } : item)), "Schedule note updated");
+          } else if (courseModalMode === 'room') {
+            const updated = await patchCourseApi(id!, { roomId: data.roomId });
+            if (updated) { showToast("Room updated"); await fetchCourses(); }
+          } else if (courseModalMode === 'full') {
+            const updated = await patchCourseApi(id!, {
+              title: data.course,
+              code: data.code,
+              status: data.status,
+              groupId: data.groupId,
+              instructorId: data.instructorId,
+              roomId: data.roomId
+            });
+            if (updated) { showToast("Full edit saved"); await fetchCourses(); }
+          } else if (courseModalMode === 'duplicate') {
+            const created = await createCourseApi({
+              code: data.code!,
+              title: data.course!,
+              status: data.status || 'Active',
+              groupId: data.groupId,
+              instructorId: data.instructorId,
+              roomId: data.roomId
+            });
+            if (created) { showToast("Duplicate created"); await fetchCourses(); }
+          } else if (courseModalMode === 'create') {
+            const created = await createCourseApi({
+              code: data.code!,
+              title: data.course!,
+              status: data.status || 'Active',
+              groupId: data.groupId,
+              instructorId: data.instructorId,
+              roomId: data.roomId
+            });
+            if (created) { showToast("Course created"); await fetchCourses(); }
+          }
+        }}
       />
 
-      <RowActionCenter
-        open={showRowCenter}
-        row={selectedRow}
-        active={activeRowAction}
-        onClose={() => setShowRowCenter(false)}
-        onPick={setActiveRowAction}
-        onEdit={updateCourseName}
-        onDuplicate={duplicateCourse}
-        onDelete={deleteCourse}
-        onPlaceholder={runAction}
-      />
+      <Modal open={confirmModal.open} onClose={() => setConfirmModal(prev => ({...prev, open: false}))} title={confirmModal.title} actions={
+        <>
+          <button onClick={() => setConfirmModal(prev => ({...prev, open: false}))} className="px-4 py-2 rounded-lg text-sm font-medium text-[var(--muted)] hover:text-white transition-colors">Cancel</button>
+          <button onClick={confirmModal.onConfirm} className={`px-4 py-2 rounded-lg text-sm font-medium text-white transition-opacity ${confirmModal.danger ? 'bg-[var(--danger)] hover:opacity-90' : 'bg-[var(--gold)] text-[#111] hover:opacity-90'}`}>
+            {confirmModal.actionLabel}
+          </button>
+        </>
+      }>
+        <p className="text-[var(--muted)] text-sm">{confirmModal.message}</p>
+      </Modal>
 
-      {createModalType && (
-        <div className="w-settings-overlay" onClick={closeCreateModal}>
-          <div className="w-settings-panel" onClick={(event) => event.stopPropagation()}>
-            <div className="w-settings-head">
-              <h3>{createModalTitle}</h3>
-              <button className="w-icon-btn" onClick={closeCreateModal} disabled={createSubmitting}>
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            <p className="w-settings-sub">Use this form instead of browser prompts for cleaner mobile UX.</p>
-
-            <form className="w-form-grid" onSubmit={(event) => void handleCreateSubmit(event)}>
-              {createModalType === "workspace" && (
-                <label className="w-form-label">
-                  Workspace title
-                  <input
-                    className="w-input"
-                    value={createForm.workspaceTitle}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, workspaceTitle: event.target.value }))}
-                    placeholder="My Workspace"
-                    required
-                    maxLength={120}
-                  />
-                </label>
-              )}
-
-              {createModalType === "group" && (
-                <>
-                  <label className="w-form-label">
-                    Group code
-                    <input
-                      className="w-input"
-                      value={createForm.groupCode}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, groupCode: event.target.value }))}
-                      placeholder="A1"
-                      required
-                      maxLength={32}
-                    />
-                  </label>
-                  <label className="w-form-label">
-                    Group name
-                    <input
-                      className="w-input"
-                      value={createForm.groupName}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, groupName: event.target.value }))}
-                      placeholder="Group A1"
-                      required
-                      maxLength={120}
-                    />
-                  </label>
-                </>
-              )}
-
-              {createModalType === "instructor" && (
-                <>
-                  <label className="w-form-label">
-                    Instructor name
-                    <input
-                      className="w-input"
-                      value={createForm.instructorName}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, instructorName: event.target.value }))}
-                      placeholder="Dr. Ahmed"
-                      required
-                      maxLength={120}
-                    />
-                  </label>
-                  <label className="w-form-label">
-                    Email (optional)
-                    <input
-                      className="w-input"
-                      type="email"
-                      value={createForm.instructorEmail}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, instructorEmail: event.target.value }))}
-                      placeholder="name@example.com"
-                      maxLength={120}
-                    />
-                  </label>
-                  <label className="w-form-label">
-                    Phone (optional)
-                    <input
-                      className="w-input"
-                      value={createForm.instructorPhone}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, instructorPhone: event.target.value }))}
-                      placeholder="+20 ..."
-                      maxLength={40}
-                    />
-                  </label>
-                </>
-              )}
-
-              {createModalType === "course" && (
-                <>
-                  <label className="w-form-label">
-                    Course title
-                    <input
-                      className="w-input"
-                      value={createForm.courseTitle}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, courseTitle: event.target.value }))}
-                      placeholder="Mathematics 1"
-                      required
-                      maxLength={140}
-                    />
-                  </label>
-
-                  <label className="w-form-label">
-                    Course code
-                    <input
-                      className="w-input"
-                      value={createForm.courseCode}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, courseCode: event.target.value }))}
-                      placeholder="MATH-101"
-                      required
-                      maxLength={32}
-                    />
-                  </label>
-
-                  <label className="w-form-label">
-                    Status
-                    <select
-                      className="w-select"
-                      value={createForm.courseStatus}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, courseStatus: event.target.value }))}
-                    >
-                      <option value="DRAFT">Draft</option>
-                      <option value="ACTIVE">Active</option>
-                      <option value="CONFLICT">Conflict</option>
-                    </select>
-                  </label>
-
-                  <label className="w-form-label">
-                    Group (optional)
-                    <select
-                      className="w-select"
-                      value={createForm.courseGroupId}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, courseGroupId: event.target.value }))}
-                    >
-                      <option value="">No group</option>
-                      {groups.map((group) => (
-                        <option key={group.id} value={group.id}>{group.code} — {group.name}</option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="w-form-label">
-                    Instructor (optional)
-                    <select
-                      className="w-select"
-                      value={createForm.courseInstructorId}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, courseInstructorId: event.target.value }))}
-                    >
-                      <option value="">No instructor</option>
-                      {instructors.map((instructor) => (
-                        <option key={instructor.id} value={instructor.id}>{instructor.name}</option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="w-form-label">
-                    Room (optional)
-                    <select
-                      className="w-select"
-                      value={createForm.courseRoomId}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, courseRoomId: event.target.value }))}
-                    >
-                      <option value="">No room</option>
-                      {rooms.map((room) => (
-                        <option key={room.id} value={room.id}>{room.code} — {room.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                </>
-              )}
-
-              <div className="w-settings-actions">
-                <button type="button" className="w-btn" onClick={closeCreateModal} disabled={createSubmitting}>Cancel</button>
-                <button type="submit" className="w-btn primary" disabled={createSubmitting}>
-                  {createSubmitting ? "Creating..." : "Create"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showSettings && (
-        <div className="w-settings-overlay" onClick={() => setShowSettings(false)}>
-          <div className="w-settings-panel" onClick={(event) => event.stopPropagation()}>
-            <div className="w-settings-head">
-              <h3>Settings Menu</h3>
-              <button className="w-icon-btn" onClick={() => setShowSettings(false)}>
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            <p className="w-settings-sub">Each settings section has its own tab, controls, and custom actions.</p>
-
-            <div className="w-action-tabs">
-              {(["Theme", "Display", "Timetable", "Permissions"] as SettingsTab[]).map((tab) => (
-                <button key={tab} className={`w-action-tab ${settingsTab === tab ? "active" : ""}`} onClick={() => setSettingsTab(tab)}>
-                  <span className="material-symbols-outlined">
-                    {tab === "Theme" ? "palette" : tab === "Display" ? "display_settings" : tab === "Timetable" ? "calendar_month" : "admin_panel_settings"}
-                  </span>
-                  <span>{tab}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="w-action-content">
-              {settingsTab === "Theme" && (
-                <div className="w-theme-grid">
-                  <button className={`w-theme-btn ${theme === "c" ? "active" : ""}`} onClick={() => setTheme("c")}>
-                    <strong>Midnight Pro</strong>
-                    <span>Dark dense operator layout</span>
-                  </button>
-                  <button className={`w-theme-btn ${theme === "a" ? "active" : ""}`} onClick={() => setTheme("a")}>
-                    <strong>Classic Light</strong>
-                    <span>Clean bright productivity style</span>
-                  </button>
-                  <button className={`w-theme-btn ${theme === "b" ? "active" : ""}`} onClick={() => setTheme("b")}>
-                    <strong>Glass Neon</strong>
-                    <span>Frosted glass with accent glow</span>
-                  </button>
-                </div>
-              )}
-
-              {settingsTab === "Display" && (
-                <div className="w-action-grid">
-                  <button className="w-btn" onClick={() => void runAction("Change font size")}>Font size</button>
-                  <button className="w-btn" onClick={() => void runAction("Row density")}>Row density</button>
-                  <button className="w-btn" onClick={() => void runAction("Sidebar mode")}>Sidebar mode</button>
-                  <button className="w-btn" onClick={() => void runAction("Animations")}>Animations</button>
-                </div>
-              )}
-
-              {settingsTab === "Timetable" && (
-                <div className="w-action-grid">
-                  <button className="w-btn" onClick={() => void runAction("Week starts Saturday")}>Week start</button>
-                  <button className="w-btn" onClick={() => void runAction("12h/24h toggle")}>Time mode</button>
-                  <button className="w-btn" onClick={() => void runAction("Conflict policy")}>Conflict policy</button>
-                  <button className="w-btn" onClick={() => void runAction("Snap interval")}>Snap interval</button>
-                </div>
-              )}
-
-              {settingsTab === "Permissions" && (
-                <div className="w-action-grid">
-                  <button className="w-btn" onClick={() => void runAction("Manage owner role")}>Owner</button>
-                  <button className="w-btn" onClick={() => void runAction("Manage teacher role")}>Teacher</button>
-                  <button className="w-btn" onClick={() => void runAction("Manage student role")}>Student</button>
-                  <button className="w-btn" onClick={() => void runAction("Manage viewer role")}>Viewer</button>
-                </div>
-              )}
-            </div>
-
-            <div className="w-settings-actions">
-              <button className="w-btn" onClick={() => setShowSettings(false)}>Close</button>
-              <button
-                className="w-btn primary"
-                onClick={() => {
-                  void runAction(`${settingsTab} settings applied`);
-                  setShowSettings(false);
-                }}
-              >
-                Apply
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {toast && <div className="w-toast">{toast}</div>}
     </div>
   );
 }
