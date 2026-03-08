@@ -1,0 +1,375 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum MemberRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum ShareLinkType {
+  PUBLIC
+  PRIVATE
+}
+
+model User {
+  id              String            @id @default(cuid())
+  email           String            @unique
+  passwordHash    String?
+  displayName     String?
+  emailVerified   DateTime?
+  emailVerifiedAt DateTime?
+  image           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  ownedTimetables Timetable[]       @relation("TimetableOwner")
+  memberships     TimetableMember[]
+  createdEvents   TimetableEvent[]  @relation("CreatedEvents")
+  updatedEvents   TimetableEvent[]  @relation("UpdatedEvents")
+  shareLinks      ShareLink[]       @relation("ShareLinkCreator")
+  auditLogs       AuditLog[]
+
+  // New workspace platform relations
+  ownedWorkspaces      Workspace[]          @relation("WorkspaceOwner")
+  workspaceMemberships WorkspaceMember[]
+  workspaceShares      WorkspaceShareLink[] @relation("WorkspaceShareCreator")
+  workspaceRevisions   WorkspaceRevision[]  @relation("WorkspaceRevisionAuthor")
+  otpCodes             OtpCode[]
+
+  // NextAuth relations
+  accounts Account[]
+  sessions Session[]
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Timetable {
+  id           String            @id @default(cuid())
+  ownerId      String
+  title        String            @default("جدولي الدراسي")
+  days         Json
+  startMinute  Int               @default(480)
+  endMinute    Int               @default(1320)
+  snapMinutes  Int               @default(15)
+  allowOverlap Boolean           @default(false)
+  version      Int               @default(1)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  owner        User              @relation("TimetableOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  events       TimetableEvent[]
+  members      TimetableMember[]
+  shareLinks   ShareLink[]
+  auditLogs    AuditLog[]
+}
+
+model TimetableMember {
+  id          String     @id @default(cuid())
+  timetableId String
+  userId      String
+  role        MemberRole
+  createdAt   DateTime   @default(now())
+  timetable   Timetable  @relation(fields: [timetableId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([timetableId, userId])
+}
+
+model TimetableEvent {
+  id              String    @id @default(cuid())
+  timetableId     String
+  title           String
+  day             String
+  startMinute     Int
+  durationMinutes Int
+  color           String    @default("#4f46e5")
+  version         Int       @default(1)
+  createdById     String?
+  updatedById     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  timetable       Timetable @relation(fields: [timetableId], references: [id], onDelete: Cascade)
+  createdBy       User?     @relation("CreatedEvents", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy       User?     @relation("UpdatedEvents", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([timetableId, day, startMinute])
+}
+
+model ShareLink {
+  id          String        @id @default(cuid())
+  token       String        @unique
+  timetableId String
+  type        ShareLinkType @default(PUBLIC)
+  role        MemberRole    @default(VIEWER)
+  revoked     Boolean       @default(false)
+  createdById String
+  createdAt   DateTime      @default(now())
+  timetable   Timetable     @relation(fields: [timetableId], references: [id], onDelete: Cascade)
+  createdBy   User          @relation("ShareLinkCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([timetableId, revoked])
+}
+
+model AuditLog {
+  id          String     @id @default(cuid())
+  userId      String?
+  timetableId String?
+  action      String
+  payload     Json?
+  createdAt   DateTime   @default(now())
+  user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  timetable   Timetable? @relation(fields: [timetableId], references: [id], onDelete: SetNull)
+}
+
+enum WorkspaceRole {
+  OWNER
+  TEACHER
+  STUDENT
+  VIEWER
+}
+
+enum WeekStart {
+  SATURDAY
+  SUNDAY
+  MONDAY
+}
+
+enum TimeFormat {
+  H12
+  H24
+  BOTH
+}
+
+enum ConflictMode {
+  WARNING
+  STRICT
+  OFF
+}
+
+enum OtpPurpose {
+  LOGIN
+  REGISTER_VERIFY
+  PASSWORD_RESET
+}
+
+enum WorkspaceShareVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+model Workspace {
+  id           String               @id @default(cuid())
+  ownerId      String
+  title        String
+  locale       String               @default("en")
+  weekStart    WeekStart            @default(SATURDAY)
+  timeFormat   TimeFormat           @default(BOTH)
+  conflictMode ConflictMode         @default(WARNING)
+  timeZone     String               @default("UTC")
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  owner        User                 @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members      WorkspaceMember[]
+  groups       AcademicGroup[]
+  courses      Course[]
+  instructors  Instructor[]
+  rooms        Room[]
+  sessions     SessionEntry[]
+  shares       WorkspaceShareLink[]
+  revisions    WorkspaceRevision[]
+
+  @@index([ownerId, createdAt])
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(VIEWER)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId, role])
+}
+
+model AcademicGroup {
+  id          String         @id @default(cuid())
+  workspaceId String
+  code        String
+  name        String
+  yearLabel   String?
+  color       String?        @default("#2563eb")
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  courses     Course[]
+  sessions    SessionEntry[]
+
+  @@unique([workspaceId, code])
+  @@index([workspaceId, name])
+}
+
+model Instructor {
+  id          String         @id @default(cuid())
+  workspaceId String
+  name        String
+  email       String?
+  phone       String?
+  color       String?        @default("#0ea5e9")
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  courses     Course[]
+  sessions    SessionEntry[]
+
+  @@index([workspaceId, name])
+}
+
+model Room {
+  id          String         @id @default(cuid())
+  workspaceId String
+  code        String
+  name        String
+  capacity    Int?
+  building    String?
+  color       String?        @default("#22c55e")
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  courses     Course[]
+  sessions    SessionEntry[]
+
+  @@unique([workspaceId, code])
+  @@index([workspaceId, name])
+}
+
+model Course {
+  id           String         @id @default(cuid())
+  workspaceId  String
+  groupId      String?
+  instructorId String?
+  roomId       String?
+  code         String
+  title        String
+  color        String         @default("#3b82f6")
+  creditHours  Int?
+  status       String         @default("ACTIVE")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  group        AcademicGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  instructor   Instructor?    @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+  room         Room?          @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  sessions     SessionEntry[]
+
+  @@unique([workspaceId, code])
+  @@index([workspaceId, title])
+}
+
+model SessionEntry {
+  id           String         @id @default(cuid())
+  workspaceId  String
+  courseId     String
+  groupId      String?
+  instructorId String?
+  roomId       String?
+  day          String
+  startMinute  Int
+  endMinute    Int
+  note         String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  course       Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  group        AcademicGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  instructor   Instructor?    @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+  room         Room?          @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, day, startMinute])
+  @@index([workspaceId, roomId, day, startMinute])
+  @@index([workspaceId, instructorId, day, startMinute])
+}
+
+model WorkspaceShareLink {
+  id          String                   @id @default(cuid())
+  workspaceId String
+  token       String                   @unique
+  visibility  WorkspaceShareVisibility @default(PUBLIC)
+  role        WorkspaceRole            @default(VIEWER)
+  revoked     Boolean                  @default(false)
+  createdById String
+  expiresAt   DateTime?
+  createdAt   DateTime                 @default(now())
+  workspace   Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy   User                     @relation("WorkspaceShareCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, revoked])
+}
+
+model WorkspaceRevision {
+  id          String    @id @default(cuid())
+  workspaceId String
+  createdById String?
+  label       String?
+  snapshot    Json
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy   User?     @relation("WorkspaceRevisionAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+}
+
+model OtpCode {
+  id         String     @id @default(cuid())
+  userId     String?
+  email      String
+  codeHash   String
+  purpose    OtpPurpose
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime   @default(now())
+  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([email, purpose, createdAt])
+  @@index([userId, purpose, createdAt])
+}
