@@ -1,4 +1,4 @@
-# Students Timetable — PostgreSQL Cutover Plan
+# Students Timetable — PostgreSQL Cutover Plan (Executed)
 
 ## Current State (Verified)
 

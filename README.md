@@ -1,96 +1,144 @@
-# Timetable Workspace V2.0
+# Students Timetable
 
-![Timetable Workspace Logo](file:///d:/ClaudeProjects/Timetable/public/globe.svg)
+Students Timetable is a production-deployed scheduling workspace for managing:
+- Workspaces
+- Courses
+- Groups
+- Instructors
+- Rooms
 
-**The Ultimate Scheduling Platform for Educational Institutions**
+Live deployment:
+- <https://demostb.duckdns.org>
 
-![Next.js](https://img.shields.io/badge/Next.js-15-black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
-![Prisma](https://img.shields.io/badge/Prisma-ORM-teal)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind-CSS-38B2AC)
-![NextAuth](https://img.shields.io/badge/NextAuth-Secure-green)
+## Current product state
 
-Timetable Workspace V2.0 is a complete reimagining of the legacy student timetable application. Designed with a premium, modern SaaS aesthetic, it provides robust tools to visually manage courses, instructors, rooms, and student cohorts while actively preventing scheduling conflicts.
+### Canonical product model
+The active product architecture is the **workspace model**:
+- `Workspace`
+- `Course`
+- `AcademicGroup`
+- `Instructor`
+- `Room`
 
-## ✨ Key Features
+Legacy timetable/share/auth remnants have been deprecated from the live product path where they were misleading or broken.
 
-- **Advanced Timetable Grid:** Visually manage and edit courses on a calendar-style timetable grid.
-- **Smart Conflict Detection:** Instantly highlights overlapping instructors, rooms, and cohorts.
-- **Dedicated Management Pages:** Full CRUD control for Groups, Instructors, and Rooms.
-- **Command Palette:** Lightning-fast navigation and actions via the ActionCenter.
-- **Responsive & Dark Mode First:** A carefully crafted CSS custom-property design system with a stunning dark mode default.
-- **OAuth Authentication:** Seamless Google and GitHub login powered by NextAuth.js.
+### Current auth state
+- Canonical auth/session model: **NextAuth**
+- Live provider state: **credentials only**
+- Google OAuth: intentionally disabled until reconfigured and re-verified
+- GitHub OAuth: intentionally disabled until reconfigured and re-verified
 
-## 📸 Screenshots
+### Current database state
+- Live runtime database: **PostgreSQL**
+- Prisma provider: **postgresql**
+- Migration state: healthy
 
-> Note: Screenshots of the Landing Page, Auth Flow, Dashboard, Grid View, Course Editor, and Settings sections will be added shortly.
+### Realtime state
+Realtime is **deferred/removed from the live product path** for this release. See `docs/realtime-decision.md`.
 
-## 🚀 Getting Started
+## Stack
+- Next.js 16
+- React 19
+- TypeScript
+- Prisma
+- NextAuth
+- Tailwind CSS
+- PostgreSQL
+- systemd + Caddy for production runtime
+
+## Local development
 
 ### Prerequisites
-- Node.js 18.x or later
-- npm, yarn, pnpm, or bun
+- Node.js 20+
+- npm
+- PostgreSQL (preferred) or a compatible `DATABASE_URL`
 
-### Installation
+### Environment variables
+Create `.env` with at least:
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/timetable.git
-   cd timetable
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Configure Environment Variables:
-   Copy your environment variables into `.env`.
-   ```env
-   DATABASE_URL="postgres://..."
-   NEXTAUTH_SECRET="your-secret"
-   NEXTAUTH_URL="http://localhost:3000"
-   GOOGLE_CLIENT_ID="your-google-client-id"
-   GOOGLE_CLIENT_SECRET="your-google-client-secret"
-   GITHUB_ID="your-github-id"
-   GITHUB_SECRET="your-github-secret"
-   ```
-
-4. Run Database Migrations:
-   ```bash
-   npx prisma generate
-   npx prisma db push
-   ```
-
-5. Start the Development Server:
-   ```bash
-   npm run dev
-   ```
-
-Open [http://localhost:3000](http://localhost:3000) to view the application in your browser.
-
-## 🏗️ Architecture
-
-```text
-├── src
-│   ├── app               # Next.js App Router
-│   │   ├── auth          # Authentication Pages
-│   │   ├── workspace     # Core App Module (Dashboard, Timetable, Courses, Settings)
-│   │   └── api           # Serverless API routes
-│   ├── components        # Reusable React UI Code
-│   │   ├── ui            # Base primitives (Avatars, DatePickers, Modals)
-│   │   ├── layout        # Global structural pieces (Sidebar, Header, AppShell)
-│   │   └── workspace     # High-level feature components
-│   ├── lib               # Utilities, Auth Options, database connections
-│   └── types             # Strict TypeScript models
-├── prisma                # Relational Database schema definition
-└── public                # Static SVGs, generic assets
+```env
+DATABASE_URL="postgresql://..."
+AUTH_SECRET="..."
+NEXTAUTH_SECRET="..."
+NEXTAUTH_URL="http://localhost:3000"
+AUTH_ENABLE_GOOGLE="false"
+AUTH_ENABLE_GITHUB="false"
 ```
 
-## 🤝 Contributing
+If you later re-enable OAuth, also provide:
 
-Contributions are welcome! Please adhere to our established architecture, primarily pulling from the centralized GUI CSS custom variable design token system (`src/app/globals.css`).
+```env
+GOOGLE_CLIENT_ID="..."
+GOOGLE_CLIENT_SECRET="..."
+GITHUB_ID="..."
+GITHUB_SECRET="..."
+AUTH_ENABLE_GOOGLE="true"
+AUTH_ENABLE_GITHUB="true"
+```
 
-## 📝 License
+### Install and run
 
-This project is licensed under the MIT License.
+```bash
+npm install
+npx prisma generate
+npx prisma migrate deploy
+npm run dev
+```
+
+### Build and start
+
+```bash
+npm run build
+npm run start
+```
+
+## Production deployment
+
+Production app path:
+- `/home/ubuntu/.openclaw/workspace/students-timetable-app`
+
+Runtime:
+- systemd service: `students-timetable.service`
+- reverse proxy: Caddy
+
+### Deploy/update sequence
+
+```bash
+cd /home/ubuntu/.openclaw/workspace/students-timetable-app
+git pull
+npm install
+npx prisma generate
+npx prisma migrate deploy
+npm run build
+sudo systemctl restart students-timetable.service
+```
+
+### Health checks
+
+```bash
+curl -I https://demostb.duckdns.org/
+curl https://demostb.duckdns.org/api/health
+```
+
+## Backups
+
+PostgreSQL backups are generated by:
+- script: `scripts/backup_postgres.sh`
+- timer: `students-timetable-backup.timer`
+
+Backups are stored in:
+- `backups/postgres/`
+
+## Important docs
+- `docs/postgres-cutover-plan.md` — executed PostgreSQL cutover plan and rationale
+- `docs/realtime-decision.md` — realtime deferment/removal decision
+- `docs/operations.md` — deployment, backup, rollback, and maintenance notes
+
+## Known limitations
+- OAuth providers remain intentionally disabled until provider dashboards are reconfigured and verified end-to-end
+- legacy timetable data structures still exist in the schema for compatibility/data retention and should be removed in a later cleanup sprint once confirmed unnecessary
+
+## Next recommended enhancements
+- re-enable OAuth only after provider dashboard verification and end-to-end testing
+- remove remaining legacy timetable data structures after compatibility review
+- add broader automated integration tests for auth and CRUD flows

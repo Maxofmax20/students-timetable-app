@@ -19,5 +19,3 @@ export const DEFAULT_TIMETABLE = {
   allowOverlap: false
 };
 
-export const SESSION_COOKIE = 'stt_session';
-export const OTP_PENDING_COOKIE = 'stt_otp_pending';
