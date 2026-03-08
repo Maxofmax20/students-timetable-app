@@ -65,14 +65,14 @@ export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, 
               <p className="text-[var(--text-secondary)] text-sm">Manage and organize all university courses.</p>
            </div>
            
-           <div className="flex items-center gap-3">
+           <div className="flex w-full flex-col sm:w-auto sm:flex-row items-stretch sm:items-center gap-3">
               <SearchInput 
                 placeholder="Search courses, groups, instructors..." 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-[300px]"
+                containerClassName="w-full sm:w-auto sm:min-w-[300px]"
               />
-              <Button onClick={() => onAction('New')} variant="primary" className="gap-2">
+              <Button onClick={() => onAction('New')} variant="primary" className="gap-2 w-full sm:w-auto justify-center">
                 <span className="material-symbols-outlined text-[20px]">add</span>
                 Add Course
               </Button>
