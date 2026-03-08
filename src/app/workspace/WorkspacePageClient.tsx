@@ -40,7 +40,7 @@ import {
   copyText
 } from "@/lib/utils";
 import { useSession, signOut as nextAuthSignOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Toggle } from "@/components/ui/Toggle";
 import { ActionCenter, RowActionCenter } from "@/components/workspace/ActionCenter";
 import { DataTable } from "@/components/workspace/DataTable";
@@ -266,9 +266,29 @@ function scanConflicts(rows: Row[]): { rows: Row[]; count: number } {
 export default function WorkspacePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [theme, setTheme] = useState<ThemeChoice>("c");
-  const [mainTab, setMainTab] = useState<MainTab>("Dashboard");
+  const [mainTab, setMainTabState] = useState<MainTab>(() => {
+    const t = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : null;
+    return (t === "Timetable" || t === "Courses" || t === "Settings") ? t as MainTab : "Dashboard";
+  });
+  
+  // Sync mainTab with URL ?tab= param
+  useEffect(() => {
+    const t = searchParams?.get("tab");
+    if (t === "Dashboard" || t === "Timetable" || t === "Courses" || t === "Settings") {
+      setMainTabState(t);
+    } else if (!t) {
+      setMainTabState("Dashboard");
+    }
+  }, [searchParams]);
+
+  const setMainTab = (tab: MainTab) => {
+    setMainTabState(tab);
+    router.replace("/workspace?tab=" + tab, { scroll: false });
+  };
+
   const [selectedRow, setSelectedRow] = useState<Row | null>(null);
 
   const [miniMap, setMiniMap] = useState(true);
