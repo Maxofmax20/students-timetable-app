@@ -722,16 +722,29 @@ export default function WorkspacePage() {
   };
 
 
-  const saveWorkspaceSetting = async (patch: Record<string, unknown>) => {
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const saveWorkspaceSetting = (patch: Record<string, unknown>, debounceMs = 0) => {
     if (!workspaceId) return;
-    try {
-      await fetch(`/api/v1/workspaces/${workspaceId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(patch),
-      });
-    } catch {}
+    const doSave = async () => {
+      try {
+        const res = await fetch(`/api/v1/workspaces/${workspaceId}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(patch),
+        });
+        if (!res.ok) showToast("Failed to save setting");
+      } catch {
+        showToast("Failed to save setting");
+      }
+    };
+    if (debounceMs > 0) {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(doSave, debounceMs);
+    } else {
+      doSave();
+    }
   };
 
   const deleteWorkspace = async (): Promise<boolean> => {
@@ -1654,7 +1667,7 @@ export default function WorkspacePage() {
                    denseRows={denseRows} onSetDenseRows={(v) => { setDenseRows(v); saveWorkspaceSetting({ denseRows: v }); }}
                    miniMap={miniMap} onSetMiniMap={setMiniMap}
                    animationsEnabled={animationsEnabled} onSetAnimationsEnabled={(v) => { setAnimationsEnabled(v); saveWorkspaceSetting({ animationsEnabled: v }); }}
-                   fontScale={fontScale} onSetFontScale={(v) => { setFontScale(v); saveWorkspaceSetting({ fontScale: v }); }}
+                   fontScale={fontScale} onSetFontScale={(v) => { setFontScale(v); saveWorkspaceSetting({ fontScale: v }, 500); }}
                    autoSave={autoSave} onSetAutoSave={(v) => { setAutoSave(v); saveWorkspaceSetting({ autoSave: v }); }}
                    smartPlacement={smartPlacement} onSetSmartPlacement={(v) => { setSmartPlacement(v); saveWorkspaceSetting({ smartPlacement: v }); }}
                    timeMode={timeMode} onSetTimeMode={(v) => { setTimeMode(v); saveWorkspaceSetting({ timeFormat: v === "12h" ? "H12" : "H24" }); }}

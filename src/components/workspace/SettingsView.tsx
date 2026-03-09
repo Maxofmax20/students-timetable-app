@@ -93,7 +93,7 @@ export function SettingsView(props: SettingsViewProps) {
             <div className="space-y-8 animate-fade-in">
               <Header title="Appearance" desc="Customize how your workspace looks and feels." />
               <div className="space-y-6">
-                <OptionRow title="Dense Mode" desc="Fit more rows in the course table.">
+                <OptionRow title="Dense Mode" desc="Fit more rows in the course table. Saved to workspace.">
                    <ToggleButton checked={props.denseRows} onChange={props.onSetDenseRows} />
                 </OptionRow>
                 <OptionRow title="UI Animations" desc="Enable smooth transitions and micro-interactions.">
