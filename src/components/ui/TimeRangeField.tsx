@@ -95,7 +95,12 @@ export function TimeRangeField({ label = 'Time range', start, end, onStartChange
         />
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="rounded-[24px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] p-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-[11px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Quick lengths</div>
+          <div className="text-[11px] text-[var(--text-secondary)]">Tap once to lock a common session duration.</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
         {QUICK_DURATIONS.map((minutes) => {
           const active = timeToMinutes(end) - timeToMinutes(start) === minutes;
           return (
@@ -114,6 +119,7 @@ export function TimeRangeField({ label = 'Time range', start, end, onStartChange
             </button>
           );
         })}
+        </div>
       </div>
 
       {errorText ? <div className="text-[11px] font-semibold text-[var(--danger)]">{errorText}</div> : helperText ? <div className="text-[11px] text-[var(--text-secondary)]">{helperText}</div> : null}

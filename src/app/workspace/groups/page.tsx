@@ -113,23 +113,35 @@ export default function GroupsPage() {
     <AppShell title="Student Groups" subtitle="Manage cohorts and academic groups">
        <div className="flex flex-col gap-6 p-1 md:p-6 lg:p-8 animate-panel-pop">
           
-          <div className="flex flex-wrap items-center justify-between gap-4 px-2">
-             <div className="flex flex-col gap-1">
-                <h2 className="text-3xl font-bold text-white tracking-tight">Groups</h2>
-                <p className="text-[var(--text-secondary)] text-sm">Organize students into trackable cohorts.</p>
+          <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
+             <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-col gap-1">
+                   <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Resource directory</div>
+                   <h2 className="text-3xl font-bold text-white tracking-tight">Groups</h2>
+                   <p className="text-[var(--text-secondary)] text-sm">Organize students into trackable cohorts and keep assignments tidy.</p>
+                </div>
+                
+                <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                   <SearchInput 
+                     placeholder="Search groups..." 
+                     value={search}
+                     onChange={(e) => setSearch(e.target.value)}
+                     onClear={() => setSearch('')}
+                     className="w-full sm:w-[320px]"
+                   />
+                   <Button onClick={openCreate} variant="primary" className="gap-2">
+                     <span className="material-symbols-outlined text-[20px]">add</span>
+                     New Group
+                   </Button>
+                </div>
              </div>
-             
-             <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <SearchInput 
-                  placeholder="Search groups..." 
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full sm:w-[280px]"
-                />
-                <Button onClick={openCreate} variant="primary" className="gap-2">
-                  <span className="material-symbols-outlined text-[20px]">add</span>
-                  New Group
-                </Button>
+             <div className="mt-4 flex flex-wrap gap-2">
+               <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+                 {groups.length} total groups
+               </span>
+               <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--gold)]">
+                 {search ? `${filteredGroups.length} matching search` : 'Create, rename, or retire cohorts'}
+               </span>
              </div>
           </div>
 
@@ -237,10 +249,15 @@ export default function GroupsPage() {
            </div>
          }
        >
-         <p className="text-[var(--text-secondary)] text-sm leading-relaxed">
-           Are you sure you want to delete <span className="text-white font-bold">{selectedGroup?.name}</span>? 
-           All courses assigned to this group will become unassigned. This action cannot be undone.
-         </p>
+         <div className="rounded-[24px] border border-[var(--danger)]/25 bg-[linear-gradient(135deg,var(--danger-muted),transparent)] p-4">
+           <div className="flex items-start gap-3">
+             <span className="material-symbols-outlined text-[20px] text-[var(--danger)]">warning</span>
+             <p className="text-[var(--text-secondary)] text-sm leading-relaxed">
+               Are you sure you want to delete <span className="text-white font-bold">{selectedGroup?.name}</span>? 
+               All courses assigned to this group will become unassigned. This action cannot be undone.
+             </p>
+           </div>
+         </div>
        </Modal>
     </AppShell>
   );

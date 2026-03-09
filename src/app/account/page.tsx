@@ -226,6 +226,26 @@ export default function AccountPage() {
   return (
     <AppShell title="Account Settings" subtitle="Manage your identity, security, and data export">
       <div className="p-4 md:p-6 max-w-4xl mx-auto flex flex-col gap-8 w-full pb-24">
+        <section className="rounded-[32px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-5 shadow-[var(--shadow-sm)] md:p-6">
+          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Account overview</div>
+              <h2 className="mt-1 text-2xl font-black tracking-tight text-white">{displayName || 'Your account'}</h2>
+              <p className="mt-2 max-w-2xl text-sm text-[var(--text-secondary)]">
+                Keep your public profile clear, secure your sign-in methods, and control exports or destructive actions from one consistent surface.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {providerBadges.map((provider) => (
+                <span key={provider} className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-xs font-bold text-white">
+                  <span className="material-symbols-outlined text-sm text-[var(--gold)]">verified_user</span>
+                  {providerLabels[provider as keyof typeof providerLabels] ?? provider}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section className="flex flex-col gap-5">
           <h3 className="text-xl font-bold text-[var(--gold-soft)] flex items-center gap-2">
             <span className="material-symbols-outlined">person</span>
@@ -241,6 +261,7 @@ export default function AccountPage() {
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
                 placeholder="Your name"
+                helperText="This is the name shown in workspace menus and collaborative surfaces."
                 containerClassName="max-w-md"
               />
               <Input
@@ -352,7 +373,12 @@ export default function AccountPage() {
           </>
         }
       >
-        <div className="space-y-4">
+        <div className="rounded-[24px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] p-4 md:p-5">
+          <div className="mb-4">
+            <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Security update</div>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">Use a strong password you can remember or store safely.</p>
+          </div>
+          <div className="space-y-4">
           {profile.hasPassword && (
             <Input
               label="Current Password"
@@ -370,6 +396,7 @@ export default function AccountPage() {
             placeholder="At least 8 characters"
             helperText="Use a strong password you have not used elsewhere."
           />
+          </div>
         </div>
       </Modal>
 
@@ -391,14 +418,20 @@ export default function AccountPage() {
         }
       >
         <div className="space-y-4">
-          <p className="text-sm text-[var(--text-secondary)]">
-            This removes your account, owned workspaces, and associated records. Shared or collaborative content you do not own may be retained under other accounts.
-          </p>
+          <div className="rounded-[24px] border border-[var(--danger)]/25 bg-[linear-gradient(135deg,var(--danger-muted),transparent)] p-4">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-[20px] text-[var(--danger)]">warning</span>
+              <p className="text-sm text-[var(--text-secondary)]">
+                This removes your account, owned workspaces, and associated records. Shared or collaborative content you do not own may be retained under other accounts.
+              </p>
+            </div>
+          </div>
           <Input
             label="Confirmation"
             value={confirmDelete}
             onChange={(event) => setConfirmDelete(event.target.value)}
             placeholder="Type DELETE"
+            helperText="This destructive action only unlocks when you type DELETE exactly."
           />
         </div>
       </Modal>

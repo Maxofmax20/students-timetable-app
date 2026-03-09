@@ -1,37 +1,74 @@
 'use client';
 
-import type { ChangeEventHandler } from 'react';
+import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 type SearchInputProps = {
   value?: string;
-  onChange?: ChangeEventHandler<HTMLInputElement>;
+  onChange?: React.ChangeEventHandler<HTMLInputElement>;
   placeholder?: string;
   containerClassName?: string;
   className?: string;
   inputClassName?: string;
+  onClear?: () => void;
 };
 
-export function SearchInput({ value = '', onChange, placeholder = 'Search…', containerClassName, className, inputClassName }: SearchInputProps) {
+export function SearchInput({
+  value = '',
+  onChange,
+  placeholder = 'Search…',
+  containerClassName,
+  className,
+  inputClassName,
+  onClear
+}: SearchInputProps) {
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const clearValue = () => {
+    if (onClear) {
+      onClear();
+      inputRef.current?.focus();
+      return;
+    }
+
+    const input = inputRef.current;
+    if (!input) return;
+
+    const prototype = Object.getPrototypeOf(input);
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+    descriptor?.set?.call(input, '');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+  };
+
   return (
     <div className={cn('relative', containerClassName, className)}>
-      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]">
-        <span className="material-symbols-outlined text-[20px]">search</span>
-      </span>
+      <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
+        <span className="inline-flex h-8 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">
+          <span className="material-symbols-outlined text-[14px]">search</span>
+          Find
+        </span>
+      </div>
       <input
+        ref={inputRef}
         type="search"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
         className={cn(
-          'h-12 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] pl-12 pr-11 text-sm text-white shadow-[var(--shadow-sm)] outline-none transition-all placeholder:text-[var(--text-muted)] focus:border-[var(--gold)] focus:shadow-[var(--shadow-md)]',
+          'h-[52px] w-full rounded-[22px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] pl-[5.65rem] pr-12 text-sm font-medium text-white shadow-[var(--shadow-sm)] outline-none transition-all placeholder:text-[var(--text-muted)] focus:border-[var(--gold)] focus:ring-4 focus:ring-[var(--focus-ring)] focus:shadow-[var(--shadow-md)]',
           inputClassName
         )}
       />
       {value ? (
-        <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]">
+        <button
+          type="button"
+          onClick={clearValue}
+          className="absolute right-2 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-secondary)] transition-all hover:border-[var(--text-muted)] hover:text-white"
+          aria-label="Clear search"
+        >
           <span className="material-symbols-outlined text-[18px]">close_small</span>
-        </span>
+        </button>
       ) : null}
     </div>
   );

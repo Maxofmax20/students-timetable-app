@@ -126,23 +126,35 @@ export default function RoomsPage() {
     <AppShell title="Campus Facilities" subtitle="Manage rooms, labs, and lecture halls">
        <div className="flex flex-col gap-6 p-1 md:p-6 lg:p-8 animate-panel-pop">
           
-          <div className="flex flex-wrap items-center justify-between gap-4 px-2">
-             <div className="flex flex-col gap-1">
-                <h2 className="text-3xl font-bold text-white tracking-tight">Rooms</h2>
-                <p className="text-[var(--text-secondary)] text-sm">Assign physical spaces to scheduled courses.</p>
+          <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
+             <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-col gap-1">
+                   <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Facility directory</div>
+                   <h2 className="text-3xl font-bold text-white tracking-tight">Rooms</h2>
+                   <p className="text-[var(--text-secondary)] text-sm">Manage classrooms, labs, and lecture halls with clearer capacity and building context.</p>
+                </div>
+                
+                <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                   <SearchInput 
+                     placeholder="Search rooms or buildings..." 
+                     value={search}
+                     onChange={(e) => setSearch(e.target.value)}
+                     onClear={() => setSearch('')}
+                     className="w-full sm:w-[340px]"
+                   />
+                   <Button onClick={openCreate} variant="primary" className="gap-2">
+                     <span className="material-symbols-outlined text-[20px]">meeting_room</span>
+                     Add Room
+                   </Button>
+                </div>
              </div>
-             
-             <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <SearchInput 
-                  placeholder="Search rooms or buildings..." 
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full sm:w-[280px]"
-                />
-                <Button onClick={openCreate} variant="primary" className="gap-2">
-                  <span className="material-symbols-outlined text-[20px]">meeting_room</span>
-                  Add Room
-                </Button>
+             <div className="mt-4 flex flex-wrap gap-2">
+               <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+                 {rooms.length} spaces tracked
+               </span>
+               <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--gold)]">
+                 {search ? `${filteredRooms.length} matching search` : 'Code, capacity, and building in one place'}
+               </span>
              </div>
           </div>
 
@@ -287,10 +299,15 @@ export default function RoomsPage() {
            </div>
          }
        >
-         <p className="text-[var(--text-secondary)] text-sm leading-relaxed">
-           Are you sure you want to remove <span className="text-white font-bold">{selectedRoom?.name}</span>? 
-           Any courses scheduled in this room will become unassigned. This action cannot be undone.
-         </p>
+         <div className="rounded-[24px] border border-[var(--danger)]/25 bg-[linear-gradient(135deg,var(--danger-muted),transparent)] p-4">
+           <div className="flex items-start gap-3">
+             <span className="material-symbols-outlined text-[20px] text-[var(--danger)]">warning</span>
+             <p className="text-[var(--text-secondary)] text-sm leading-relaxed">
+               Are you sure you want to remove <span className="text-white font-bold">{selectedRoom?.name}</span>? 
+               Any courses scheduled in this room will become unassigned. This action cannot be undone.
+             </p>
+           </div>
+         </div>
        </Modal>
     </AppShell>
   );

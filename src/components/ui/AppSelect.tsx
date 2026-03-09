@@ -80,9 +80,9 @@ export function AppSelect({
       if (!triggerRef.current) return;
       const rect = triggerRef.current.getBoundingClientRect();
       const margin = 12;
-      const width = Math.max(rect.width, 280);
+      const width = Math.max(rect.width, 300);
       const left = Math.min(rect.left, window.innerWidth - width - margin);
-      const maxTop = window.innerHeight - Math.min(360, window.innerHeight * 0.6) - margin;
+      const maxTop = window.innerHeight - Math.min(420, window.innerHeight * 0.68) - margin;
       const top = Math.min(rect.bottom + 8, maxTop);
       setPanelStyle({ top, left: Math.max(margin, left), width });
     };
@@ -154,7 +154,7 @@ export function AppSelect({
   };
 
   const renderOptions = () => (
-    <div className="max-h-[min(48vh,320px)] overflow-y-auto p-2 sm:max-h-[320px]">
+    <div className="max-h-[min(52vh,360px)] overflow-y-auto p-2 sm:max-h-[360px]">
       {filteredOptions.length ? (
         filteredOptions.map((option, index) => {
           const active = option.value === value;
@@ -168,7 +168,7 @@ export function AppSelect({
               className={cn(
                 'mb-1 flex w-full items-start justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition-all last:mb-0',
                 active
-                  ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-white shadow-[var(--shadow-sm)]'
+                  ? 'border-[var(--gold)] bg-[linear-gradient(180deg,var(--gold-muted),color-mix(in srgb,var(--gold-muted) 72%,transparent))] text-white shadow-[var(--shadow-sm)]'
                   : highlighted
                     ? 'border-[var(--border)] bg-[var(--surface)] text-white shadow-[var(--shadow-sm)]'
                     : 'border-transparent bg-transparent text-[var(--text-secondary)] hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-white'
@@ -178,15 +178,22 @@ export function AppSelect({
             >
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold">{option.label}</div>
-                {option.description ? <div className="mt-1 text-xs text-[var(--text-secondary)]">{option.description}</div> : null}
+                {option.description ? (
+                  <div className={cn('mt-1 text-xs', active ? 'text-white/80' : highlighted ? 'text-[var(--text-secondary)]' : 'text-[var(--text-muted)]')}>
+                    {option.description}
+                  </div>
+                ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {option.badge ? (
-                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--gold)]">
+                  <span className={cn(
+                    'rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em]',
+                    active ? 'border-white/15 bg-white/10 text-white' : 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--gold)]'
+                  )}>
                     {option.badge}
                   </span>
                 ) : null}
-                {active ? <span className="material-symbols-outlined text-[20px] text-[var(--gold)]">check</span> : null}
+                {active ? <span className="material-symbols-outlined text-[20px] text-white">check</span> : null}
               </div>
             </button>
           );
@@ -229,21 +236,35 @@ export function AppSelect({
           }
         }}
         className={cn(
-          'group w-full rounded-2xl border bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] text-left transition-all outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]',
+          'group w-full rounded-[24px] border bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] text-left transition-all outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]',
           compact ? 'px-3 py-3' : 'px-4 py-3.5',
-          errorText ? 'border-[var(--danger)]/60' : 'border-[var(--border)] hover:border-[var(--text-muted)]',
+          errorText
+            ? 'border-[var(--danger)]/60'
+            : open || selected
+              ? 'border-[var(--gold)]/40 shadow-[var(--shadow-md)]'
+              : 'border-[var(--border)] hover:border-[var(--text-muted)]',
           disabled ? 'cursor-not-allowed opacity-60' : 'shadow-[var(--shadow-sm)] hover:-translate-y-[1px] hover:shadow-[var(--shadow-md)]'
         )}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-controls={open ? listId : undefined}
       >
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className={cn('truncate text-sm font-semibold', selected ? 'text-white' : 'text-[var(--text-muted)]')}>
-              {selected?.label || placeholder}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <div className={cn('truncate text-sm font-semibold', selected ? 'text-white' : 'text-[var(--text-muted)]')}>
+                {selected?.label || placeholder}
+              </div>
+              {selected ? (
+                <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
+                  Selected
+                </span>
+              ) : null}
             </div>
-            {selected?.description ? <div className="mt-1 truncate text-xs text-[var(--text-secondary)]">{selected.description}</div> : null}
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {selected?.description ? <div className="truncate text-xs text-[var(--text-secondary)]">{selected.description}</div> : null}
+              {!selected ? <div className="text-xs text-[var(--text-secondary)]">Tap to open the custom picker.</div> : null}
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {selected?.badge ? (
@@ -251,7 +272,7 @@ export function AppSelect({
                 {selected.badge}
               </span>
             ) : null}
-            <span className={cn('material-symbols-outlined text-[20px] text-[var(--text-muted)] transition-transform', open && 'rotate-180')}>
+            <span className={cn('material-symbols-outlined text-[20px] text-[var(--text-muted)] transition-transform', open && 'rotate-180 text-[var(--gold)]')}>
               expand_more
             </span>
           </div>
@@ -265,13 +286,13 @@ export function AppSelect({
             isMobile ? (
               <div className="fixed inset-0 z-[140]">
                 <button type="button" className="absolute inset-0 bg-black/60 backdrop-blur-sm" aria-label={`Close ${label || 'select'}`} onClick={() => setOpen(false)} />
-                <div className="absolute inset-x-0 bottom-0 rounded-t-[28px] border border-[var(--border)] bg-[var(--bg-raised)] shadow-[var(--shadow-lg)]">
+                <div className="absolute inset-x-0 bottom-0 flex max-h-[78vh] flex-col overflow-hidden rounded-t-[28px] border border-[var(--border)] bg-[var(--bg-raised)] shadow-[var(--shadow-lg)]">
                   <div className="border-b border-[var(--border)] px-4 pb-4 pt-3">
                     <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-[var(--border)]" />
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <div className="text-sm font-black uppercase tracking-[0.14em] text-[var(--gold)]">{label || 'Select option'}</div>
-                        <div className="mt-1 text-sm text-[var(--text-secondary)]">Choose one option below.</div>
+                        <div className="mt-1 text-sm text-[var(--text-secondary)]">Choose one option below without leaving the modal.</div>
                       </div>
                       <button
                         type="button"
@@ -282,9 +303,15 @@ export function AppSelect({
                         <span className="material-symbols-outlined text-[20px]">close</span>
                       </button>
                     </div>
+                    {selected ? (
+                      <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-xs font-semibold text-[var(--gold)]">
+                        <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                        {selected.label}
+                      </div>
+                    ) : null}
                   </div>
                   {renderSearch()}
-                  <div id={listId} ref={panelRef} role="listbox" className="pb-[max(1rem,env(safe-area-inset-bottom))]">
+                  <div id={listId} ref={panelRef} role="listbox" className="min-h-0 flex-1 pb-[max(1rem,env(safe-area-inset-bottom))]">
                     {renderOptions()}
                   </div>
                 </div>
