@@ -246,11 +246,14 @@ export default function WorkspaceCoursesPage() {
     <AppShell title="Courses" subtitle="Catalog-first course management, separate from the timetable agenda">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 pb-24">
         <section className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-lg)]">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2">
-              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--gold)]">Course catalog</div>
-              <h2 className="text-2xl font-bold tracking-tight text-white md:text-3xl">Manage course entities without confusing them with timetable rows.</h2>
-              <p className="max-w-2xl text-sm text-[var(--text-secondary)]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1.5 shadow-[var(--shadow-glow)]">
+                <span className="h-2.5 w-2.5 rounded-full bg-[var(--gold)]" />
+                <span className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--gold)]">Course catalog</span>
+              </div>
+              <h2 className="text-3xl font-black tracking-tight text-white md:text-4xl">Manage course entities without diluting the timetable.</h2>
+              <p className="max-w-2xl text-sm leading-relaxed text-[var(--text-secondary)] md:text-[15px]">
                 Courses hold catalog metadata. Scheduled occurrences belong to the timetable and are shown here only as supporting context.
               </p>
             </div>
@@ -270,10 +273,22 @@ export default function WorkspaceCoursesPage() {
           </div>
 
           <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <div className="rounded-2xl bg-[var(--surface-2)] px-3 py-3"><div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] font-bold">Total</div><div className="mt-1 text-lg font-bold text-white">{counts.total}</div></div>
-            <div className="rounded-2xl bg-[var(--surface-2)] px-3 py-3"><div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] font-bold">Lectures</div><div className="mt-1 text-lg font-bold text-white">{counts.lectures}</div></div>
-            <div className="rounded-2xl bg-[var(--surface-2)] px-3 py-3"><div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] font-bold">Sections</div><div className="mt-1 text-lg font-bold text-white">{counts.sections}</div></div>
-            <div className="rounded-2xl bg-[var(--surface-2)] px-3 py-3"><div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)] font-bold">Labs</div><div className="mt-1 text-lg font-bold text-white">{counts.labs}</div></div>
+            {[
+              { label: 'Total', value: counts.total, icon: 'book_2', tone: 'text-[var(--gold)]' },
+              { label: 'Lectures', value: counts.lectures, icon: 'co_present', tone: 'text-[var(--info)]' },
+              { label: 'Sections', value: counts.sections, icon: 'groups', tone: 'text-[var(--success)]' },
+              { label: 'Labs', value: counts.labs, icon: 'science', tone: 'text-[var(--warning)]' }
+            ].map((stat) => (
+              <div key={stat.label} className="group rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3 shadow-[var(--shadow-sm)] transition-all hover:border-[var(--text-muted)] hover:shadow-[var(--shadow-md)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">{stat.label}</div>
+                    <div className="mt-1 text-lg font-black text-white">{stat.value}</div>
+                  </div>
+                  <span className={`material-symbols-outlined text-[18px] transition-transform group-hover:scale-110 ${stat.tone}`}>{stat.icon}</span>
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -282,7 +297,7 @@ export default function WorkspaceCoursesPage() {
         ) : filtered.length ? (
           <div className="space-y-3">
             {filtered.map((course) => (
-              <div key={course.id} className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-lg)]">
+              <div key={course.id} className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-lg)] transition-all hover:border-[var(--text-muted)] hover:shadow-[var(--shadow-md)]">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="font-bold text-base text-white break-words">{course.title}</div>

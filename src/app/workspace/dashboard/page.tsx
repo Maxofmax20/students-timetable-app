@@ -131,12 +131,15 @@ export default function WorkspaceDashboardPage() {
     <AppShell title="Overview" subtitle="A truthful summary of your catalog, schedule health, and next actions">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 pb-24">
         <section className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5 md:p-6 shadow-[var(--shadow-lg)]">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2">
-              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--gold)]">Workspace overview</div>
-              <h2 className="text-2xl font-bold tracking-tight text-white md:text-3xl">Keep the catalog clean and the timetable real.</h2>
-              <p className="max-w-2xl text-sm text-[var(--text-secondary)]">
-                Courses stay metadata-first here. Scheduled sessions drive the timetable, integrity scan, and calendar export.
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1.5 shadow-[var(--shadow-glow)]">
+                <span className="h-2.5 w-2.5 rounded-full bg-[var(--gold)]" />
+                <span className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--gold)]">Workspace overview</span>
+              </div>
+              <h2 className="text-3xl font-black tracking-tight text-white md:text-4xl">Keep the catalog clean and the timetable beautifully truthful.</h2>
+              <p className="max-w-2xl text-sm leading-relaxed text-[var(--text-secondary)] md:text-[15px]">
+                Courses stay metadata-first. Real scheduled sessions drive the dashboard preview, integrity scan, timetable, and calendar export.
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -152,19 +155,22 @@ export default function WorkspaceDashboardPage() {
 
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {[
-            { label: 'Courses', value: courses.length, icon: 'book_2' },
-            { label: 'Scheduled sessions', value: scheduleItems.length, icon: 'calendar_month' },
-            { label: 'Groups', value: stats.groups, icon: 'groups' },
-            { label: 'Instructors', value: stats.instructors, icon: 'school' },
-            { label: 'Rooms', value: stats.rooms, icon: 'meeting_room' }
+            { label: 'Courses', value: courses.length, icon: 'book_2', tone: 'text-[var(--gold)]', alert: false },
+            { label: 'Scheduled sessions', value: scheduleItems.length, icon: 'calendar_month', tone: 'text-[var(--info)]', alert: false },
+            { label: 'Groups', value: stats.groups, icon: 'groups', tone: 'text-[var(--success)]', alert: false },
+            { label: 'Instructors', value: stats.instructors, icon: 'school', tone: 'text-[var(--text-secondary)]', alert: false },
+            { label: 'Rooms', value: stats.rooms, icon: 'meeting_room', tone: 'text-[var(--warning)]', alert: false }
           ].map((stat) => (
-            <div key={stat.label} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-sm)]">
+            <div
+              key={stat.label}
+              className="group relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-sm)] transition-all hover:border-[var(--text-muted)] hover:shadow-[var(--shadow-md)]"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">{stat.label}</div>
-                  <div className="mt-3 text-3xl font-bold tracking-tight text-white">{stat.value}</div>
+                  <div className="mt-3 text-3xl font-black tracking-tight text-white">{stat.value}</div>
                 </div>
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] text-[var(--gold)]">
+                <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] transition-transform group-hover:scale-110 ${stat.tone}`}>
                   <span className="material-symbols-outlined text-[20px]">{stat.icon}</span>
                 </div>
               </div>
@@ -188,18 +194,21 @@ export default function WorkspaceDashboardPage() {
                     label: 'New Course',
                     description: 'Create a course and optionally add its first scheduled session.',
                     icon: 'add_box',
+                    tone: 'text-[var(--gold)]',
                     onClick: () => router.push('/workspace/courses?create=1')
                   },
                   {
                     label: 'Check Conflicts',
                     description: 'Review room and instructor overlaps in the current timetable.',
                     icon: 'rule',
+                    tone: 'text-[var(--danger)]',
                     onClick: scanIntegrity
                   },
                   {
                     label: 'Export Calendar',
                     description: 'Download an ICS file built from real scheduled sessions only.',
                     icon: 'calendar_month',
+                    tone: 'text-[var(--info)]',
                     onClick: exportCalendar
                   }
                 ].map((action) => (
@@ -207,14 +216,14 @@ export default function WorkspaceDashboardPage() {
                     key={action.label}
                     type="button"
                     onClick={action.onClick}
-                    className="flex min-h-[132px] flex-col items-start gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-4 text-left transition-colors hover:border-[var(--text-muted)] hover:bg-[var(--surface-2)]"
+                    className="group flex min-h-[132px] flex-col items-start gap-4 rounded-3xl border border-[var(--border)] bg-[var(--bg-raised)] p-4 text-left transition-all hover:border-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:shadow-[var(--shadow-md)]"
                   >
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] text-[var(--gold)]">
+                    <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] transition-transform group-hover:scale-110 ${action.tone}`}>
                       <span className="material-symbols-outlined text-[21px]">{action.icon}</span>
                     </div>
                     <div>
                       <div className="text-base font-bold text-white">{action.label}</div>
-                      <div className="mt-1 text-sm text-[var(--text-secondary)]">{action.description}</div>
+                      <div className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">{action.description}</div>
                     </div>
                   </button>
                 ))}
@@ -228,18 +237,18 @@ export default function WorkspaceDashboardPage() {
               </div>
 
               <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-4">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
                   <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">Integrity result</div>
-                  <div className="mt-2 text-2xl font-bold text-white">{conflicts.length ? `${conflicts.length} overlap${conflicts.length === 1 ? '' : 's'}` : 'Clean scan'}</div>
+                  <div className={`mt-2 text-2xl font-black ${conflicts.length ? 'text-[var(--danger)]' : 'text-white'}`}>{conflicts.length ? `${conflicts.length} overlap${conflicts.length === 1 ? '' : 's'}` : 'Clean scan'}</div>
                   <div className="mt-2 text-sm text-[var(--text-secondary)]">
                     {scheduleItems.length
                       ? `Checked ${scheduleItems.length} scheduled session${scheduleItems.length === 1 ? '' : 's'}.`
                       : 'No scheduled sessions exist yet.'}
                   </div>
                 </div>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-4">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
                   <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">Calendar export</div>
-                  <div className="mt-2 text-2xl font-bold text-white">{scheduleItems.length} event{scheduleItems.length === 1 ? '' : 's'}</div>
+                  <div className="mt-2 text-2xl font-black text-white">{scheduleItems.length} event{scheduleItems.length === 1 ? '' : 's'}</div>
                   <div className="mt-2 text-sm text-[var(--text-secondary)]">
                     Export uses the same scheduled rows shown on the timetable page.
                   </div>

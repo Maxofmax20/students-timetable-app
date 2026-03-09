@@ -32,15 +32,21 @@ export function Header({ title, subtitle, onMenuClick, actions }: HeaderProps) {
   const currentTab = searchParams?.get("tab");
 
   const buildBreadcrumbs = () => {
-    const items = [{ label: "Workspace", href: "/workspace" }];
-    
-    if (pathname.includes('/groups')) items.push({ label: "Groups", href: "/workspace/groups" });
-    else if (pathname.includes('/instructors')) items.push({ label: "Instructors", href: "/workspace/instructors" });
-    else if (pathname.includes('/rooms')) items.push({ label: "Rooms", href: "/workspace/rooms" });
-    else if (pathname.includes('/account')) items[0] = { label: "Account", href: "/account" };
+    if (pathname === '/account' || pathname.startsWith('/account/')) {
+      return [{ label: 'Account', href: '/account' }];
+    }
+
+    const items = [{ label: 'Workspace', href: '/workspace/dashboard' }];
+
+    if (pathname.includes('/dashboard')) items.push({ label: 'Dashboard', href: '/workspace/dashboard' });
+    else if (pathname.includes('/courses')) items.push({ label: 'Courses', href: '/workspace/courses' });
+    else if (pathname.includes('/timetable')) items.push({ label: 'Timetable', href: '/workspace/timetable' });
+    else if (pathname.includes('/groups')) items.push({ label: 'Groups', href: '/workspace/groups' });
+    else if (pathname.includes('/instructors')) items.push({ label: 'Instructors', href: '/workspace/instructors' });
+    else if (pathname.includes('/rooms')) items.push({ label: 'Rooms', href: '/workspace/rooms' });
     else if (currentTab) items.push({ label: currentTab, href: `/workspace?tab=${currentTab}` });
-    else items.push({ label: "Dashboard", href: "/workspace?tab=Dashboard" });
-    
+    else items.push({ label: 'Dashboard', href: '/workspace/dashboard' });
+
     return items;
   };
 

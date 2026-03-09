@@ -84,14 +84,17 @@ export default function TimetablePage() {
     <AppShell title="Timetable" subtitle="A schedule-first weekly agenda built from real session entries">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 pb-24">
         <section className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-lg)]">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--gold)]">Weekly timetable</div>
-              <p className="mt-2 text-sm text-[var(--text-secondary)]">
-                This page is schedule-first. Every visible row here is eligible for calendar export.
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1.5 shadow-[var(--shadow-glow)]">
+                <span className="h-2.5 w-2.5 rounded-full bg-[var(--gold)]" />
+                <span className="text-[10px] font-black uppercase tracking-[0.22em] text-[var(--gold)]">Weekly timetable</span>
+              </div>
+              <p className="text-sm leading-relaxed text-[var(--text-secondary)] md:text-[15px]">
+                Every visible row here is built from real scheduled sessions and is eligible for calendar export.
               </p>
               {focusDay && (
-                <p className="mt-2 text-xs text-[var(--text-muted)]">
+                <p className="text-xs text-[var(--text-muted)]">
                   Focused on {dayLabels[focusDay] || focusDay}. <button type="button" className="font-semibold text-[var(--gold)]" onClick={() => router.push('/workspace/timetable')}>Clear focus</button>
                 </p>
               )}
@@ -128,7 +131,7 @@ export default function TimetablePage() {
                         key={item.id}
                         type="button"
                         onClick={() => router.push('/workspace/courses')}
-                        className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-4 text-left transition-colors hover:border-[var(--text-muted)] hover:bg-[var(--surface-2)]"
+                        className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-4 text-left transition-all hover:border-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:shadow-[var(--shadow-md)]"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
