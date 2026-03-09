@@ -154,3 +154,100 @@ export function buildScheduleConflicts(items: ScheduleItem[]) {
 export function getDayLabel(day: string) {
   return scheduleDayOrder.includes(day as ScheduleDay) ? day : day;
 }
+
+export function getOrderedScheduleDays(weekStart: string, focusDay?: string) {
+  const weekStartMap: Record<string, ScheduleDay> = {
+    SATURDAY: 'Sat',
+    SUNDAY: 'Sun',
+    MONDAY: 'Mon'
+  };
+
+  const normalizedStart = weekStartMap[weekStart] || 'Sat';
+  const startIndex = scheduleDayOrder.indexOf(normalizedStart);
+  const baseDays = [...scheduleDayOrder.slice(startIndex), ...scheduleDayOrder.slice(0, startIndex)];
+  const focusKey = focusDay?.trim().substring(0, 3);
+
+  if (focusKey && baseDays.includes(focusKey as ScheduleDay)) {
+    return [focusKey as ScheduleDay, ...baseDays.filter((day) => day !== focusKey)] as ScheduleDay[];
+  }
+
+  return baseDays;
+}
+
+export function getScheduleBounds(items: ScheduleItem[]) {
+  if (!items.length) {
+    return {
+      startMinute: 8 * 60,
+      endMinute: 20 * 60
+    };
+  }
+
+  const earliest = Math.min(...items.map((item) => item.startMinute));
+  const latest = Math.max(...items.map((item) => item.endMinute));
+
+  const roundedStart = Math.floor(earliest / 60) * 60;
+  const roundedEnd = Math.ceil(latest / 60) * 60;
+
+  return {
+    startMinute: Math.min(8 * 60, roundedStart),
+    endMinute: Math.max(20 * 60, roundedEnd)
+  };
+}
+
+export type TimetableLayoutItem = {
+  item: ScheduleItem;
+  lane: number;
+  lanes: number;
+};
+
+export function layoutDayItems(items: ScheduleItem[]) {
+  const sorted = [...items].sort((a, b) => {
+    if (a.startMinute !== b.startMinute) return a.startMinute - b.startMinute;
+    if (a.endMinute !== b.endMinute) return a.endMinute - b.endMinute;
+    return a.course.localeCompare(b.course);
+  });
+
+  const clusters: ScheduleItem[][] = [];
+  let currentCluster: ScheduleItem[] = [];
+  let currentClusterEnd = -1;
+
+  for (const item of sorted) {
+    if (!currentCluster.length || item.startMinute < currentClusterEnd) {
+      currentCluster.push(item);
+      currentClusterEnd = Math.max(currentClusterEnd, item.endMinute);
+      continue;
+    }
+
+    clusters.push(currentCluster);
+    currentCluster = [item];
+    currentClusterEnd = item.endMinute;
+  }
+
+  if (currentCluster.length) {
+    clusters.push(currentCluster);
+  }
+
+  return clusters.flatMap((cluster) => {
+    const laneEndTimes: number[] = [];
+    const placements: Array<{ item: ScheduleItem; lane: number }> = [];
+
+    for (const item of cluster) {
+      let laneIndex = laneEndTimes.findIndex((endMinute) => endMinute <= item.startMinute);
+      if (laneIndex === -1) {
+        laneIndex = laneEndTimes.length;
+        laneEndTimes.push(item.endMinute);
+      } else {
+        laneEndTimes[laneIndex] = item.endMinute;
+      }
+
+      placements.push({ item, lane: laneIndex });
+    }
+
+    const lanes = Math.max(laneEndTimes.length, 1);
+    return placements.map((placement) => ({
+      item: placement.item,
+      lane: placement.lane,
+      lanes
+    }));
+  });
+}

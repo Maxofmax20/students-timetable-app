@@ -1,33 +1,17 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { AppShell } from '@/components/layout/AppShell';
 import { TimetableView } from '@/components/workspace/TimetableView';
 import { useToast } from '@/components/ui/Toast';
 import { buildScheduleItems, downloadScheduleCalendar } from '@/lib/schedule';
-import type { CourseApiItem, Row } from '@/types';
+import type { CourseApiItem } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
-function scheduleItemToRow(item: ReturnType<typeof buildScheduleItems>[number]): Row {
-  return {
-    id: item.id,
-    source: 'real',
-    code: item.code,
-    course: `${item.course} — ${item.type}`,
-    group: item.group,
-    instructor: item.instructor,
-    room: item.room,
-    day: item.day,
-    time: item.timeLabel,
-    status: 'Active'
-  };
-}
-
 export default function TimetablePage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const focusDay = searchParams?.get('day') || '';
   const { status } = useSession({
@@ -39,6 +23,7 @@ export default function TimetablePage() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [courses, setCourses] = useState<CourseApiItem[]>([]);
+  const [weekStart, setWeekStart] = useState('SATURDAY');
 
   const load = async () => {
     setLoading(true);
@@ -50,6 +35,15 @@ export default function TimetablePage() {
       }
 
       setCourses(payload.data?.items || []);
+
+      const workspaceId = payload.data?.workspaceId;
+      if (workspaceId) {
+        const workspaceResponse = await fetch(`/api/v1/workspaces/${workspaceId}`, { credentials: 'include' });
+        const workspacePayload = await workspaceResponse.json().catch(() => null);
+        if (workspaceResponse.ok && workspacePayload?.ok && workspacePayload?.data?.weekStart) {
+          setWeekStart(workspacePayload.data.weekStart);
+        }
+      }
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Failed to load timetable', 'error');
     } finally {
@@ -64,7 +58,6 @@ export default function TimetablePage() {
   }, [status]);
 
   const items = useMemo(() => buildScheduleItems(courses), [courses]);
-  const rows = useMemo(() => items.map(scheduleItemToRow), [items]);
 
   const exportCalendar = () => {
     const result = downloadScheduleCalendar(items, 'students-timetable-calendar.ics', 'Students Timetable');
@@ -79,11 +72,9 @@ export default function TimetablePage() {
   return (
     <AppShell title="Timetable" subtitle="Visualize and resolve scheduling overlaps.">
       <TimetableView
-        rows={rows}
-        timeMode="24h"
-        weekStart="SATURDAY"
+        items={items}
+        weekStart={weekStart}
         focusDay={focusDay}
-        onRowAction={() => router.push('/workspace/courses')}
         onExportCalendar={exportCalendar}
         isLoading={status === 'loading' || loading}
       />

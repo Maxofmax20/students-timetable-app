@@ -1,14 +1,19 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import type { Row, RowAction } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
+import type { Row, RowAction } from '@/types';
+import type { ScheduleItem } from '@/lib/schedule';
+import { formatMinute, getOrderedScheduleDays, getScheduleBounds, layoutDayItems } from '@/lib/schedule';
+
+type ViewMode = 'grid' | 'list';
 
 interface TimetableViewProps {
-  rows: Row[];
-  timeMode: string;
+  items?: ScheduleItem[];
+  rows?: Row[];
+  timeMode?: string;
   weekStart: string;
   focusDay?: string;
   onRowAction?: (action: RowAction, row: Row) => void;
@@ -16,36 +21,143 @@ interface TimetableViewProps {
   isLoading?: boolean;
 }
 
-const ORDERED_DAYS = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'] as const;
-const WEEK_START_MAP: Record<string, (typeof ORDERED_DAYS)[number]> = {
-  SATURDAY: 'Sat',
-  SUNDAY: 'Sun',
-  MONDAY: 'Mon'
-};
+const GRID_ROW_HEIGHT = 72;
+const GRID_MIN_COLUMN_WIDTH = 180;
+const TIMETABLE_VIEW_KEY = 'students-timetable:view-mode';
 
-export function TimetableView({ rows, weekStart, focusDay, onRowAction, onExportCalendar, isLoading }: TimetableViewProps) {
-  const normalizedWeekStart = WEEK_START_MAP[weekStart] || 'Sat';
-  const startIdx = ORDERED_DAYS.findIndex((day) => day === normalizedWeekStart);
-  const baseDays = [...ORDERED_DAYS.slice(startIdx), ...ORDERED_DAYS.slice(0, startIdx)];
-  const focusDayKey = focusDay?.substring(0, 3);
-  const displayDays = focusDayKey && baseDays.includes(focusDayKey as (typeof ORDERED_DAYS)[number])
-    ? [focusDayKey as (typeof ORDERED_DAYS)[number], ...baseDays.filter((day) => day !== focusDayKey)]
-    : baseDays;
+function getItemTone(item: ScheduleItem) {
+  const variants = [
+    'border-blue-400/40 bg-blue-500/12',
+    'border-emerald-400/40 bg-emerald-500/12',
+    'border-rose-400/40 bg-rose-500/12',
+    'border-amber-400/40 bg-amber-500/12',
+    'border-purple-400/40 bg-purple-500/12'
+  ];
+
+  const seed = `${item.groupId ?? item.group}:${item.roomId ?? item.room}`;
+  const hash = seed.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return variants[hash % variants.length];
+}
+
+function buildHourMarks(startMinute: number, endMinute: number) {
+  const marks: number[] = [];
+  for (let minute = startMinute; minute <= endMinute; minute += 60) {
+    marks.push(minute);
+  }
+  return marks;
+}
+
+function parseRowTimeToMinutes(value: string) {
+  const parts = value.split(/\s*(?:→|->|–|—|-)\s*/).filter(Boolean);
+  if (parts.length !== 2) return null;
+
+  const [start, end] = parts.map((part) => part.trim());
+  const [startHour, startMinute] = start.split(':').map(Number);
+  const [endHour, endMinute] = end.split(':').map(Number);
+
+  if ([startHour, startMinute, endHour, endMinute].some((part) => !Number.isFinite(part))) {
+    return null;
+  }
+
+  return {
+    startMinute: startHour * 60 + startMinute,
+    endMinute: endHour * 60 + endMinute
+  };
+}
+
+function rowToScheduleItem(row: Row): ScheduleItem | null {
+  const parsed = parseRowTimeToMinutes(row.time);
+  if (!parsed) return null;
+
+  const [course, type] = row.course.split(' — ');
+  return {
+    id: row.id,
+    courseId: row.id,
+    code: row.code || row.id,
+    course: course || row.course,
+    type: type || 'Session',
+    status: row.status.toUpperCase(),
+    group: row.group,
+    groupId: row.groupId ?? null,
+    room: row.room,
+    roomId: row.roomId ?? null,
+    instructor: row.instructor,
+    instructorId: row.instructorId ?? null,
+    day: row.day.substring(0, 3),
+    startMinute: parsed.startMinute,
+    endMinute: parsed.endMinute,
+    timeLabel: `${formatMinute(parsed.startMinute)} → ${formatMinute(parsed.endMinute)}`
+  };
+}
+
+export function TimetableView({ items, rows = [], weekStart, focusDay, onRowAction, onExportCalendar, isLoading }: TimetableViewProps) {
+  const [isMobile, setIsMobile] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const media = window.matchMedia('(max-width: 767px)');
+    const stored = window.localStorage.getItem(TIMETABLE_VIEW_KEY);
+
+    if (stored === 'list' || stored === 'grid') {
+      setViewMode(stored);
+    }
+
+    const update = () => {
+      const mobile = media.matches;
+      setIsMobile(mobile);
+      if (mobile) {
+        setViewMode('list');
+      }
+    };
+
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  const canonicalItems = useMemo(() => {
+    if (items?.length) return items;
+    return rows.map(rowToScheduleItem).filter(Boolean) as ScheduleItem[];
+  }, [items, rows]);
+
+  const orderedDays = useMemo(() => getOrderedScheduleDays(weekStart, focusDay), [weekStart, focusDay]);
+  const itemsByDay = useMemo(
+    () => Object.fromEntries(orderedDays.map((day) => [day, canonicalItems.filter((item) => item.day === day)])) as Record<string, ScheduleItem[]>,
+    [canonicalItems, orderedDays]
+  );
+  const hasItems = canonicalItems.length > 0;
+  const { startMinute, endMinute } = useMemo(() => getScheduleBounds(canonicalItems), [canonicalItems]);
+  const hourMarks = useMemo(() => buildHourMarks(startMinute, endMinute), [startMinute, endMinute]);
+  const totalHours = Math.max((endMinute - startMinute) / 60, 1);
+
+  const showGrid = !isMobile && viewMode === 'grid';
+
+  const handleModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(TIMETABLE_VIEW_KEY, mode);
+    }
+  };
 
   if (isLoading) {
     return (
-      <div className="flex h-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg)] animate-panel-pop shadow-[var(--shadow-md)]">
-        <div className="flex items-center justify-between border-b border-[var(--border-soft)] p-6">
+      <div className="flex h-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg)] shadow-[var(--shadow-md)] animate-panel-pop">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border-soft)] bg-[var(--bg-raised)]/50 p-4 md:p-6">
           <div className="space-y-2">
-            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-8 w-40" />
             <Skeleton className="h-4 w-64" />
           </div>
-          <Skeleton className="h-10 w-32" />
+          <div className="flex gap-3">
+            <Skeleton className="h-10 w-28" />
+            <Skeleton className="h-10 w-32" />
+          </div>
         </div>
-        <div className="flex-1 p-6">
+        <div className="flex-1 p-4 md:p-6 lg:p-8">
           <div className="space-y-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
+            {[...Array(4)].map((_, index) => (
+              <div key={index} className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
                 <div className="flex items-center justify-between border-b border-[var(--border-soft)] bg-[var(--surface-2)] px-4 py-3">
                   <Skeleton className="h-4 w-20" />
                   <Skeleton className="h-3 w-12" />
@@ -62,17 +174,44 @@ export function TimetableView({ rows, weekStart, focusDay, onRowAction, onExport
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg)] animate-panel-pop shadow-[var(--shadow-md)]">
+    <div className="flex h-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg)] shadow-[var(--shadow-md)] animate-panel-pop">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border-soft)] bg-[var(--bg-raised)]/50 p-4 md:p-6">
         <div className="flex flex-col gap-1">
           <h2 className="text-xl font-bold tracking-tight text-white md:text-2xl">Timetable</h2>
-          <p className="text-sm text-[var(--text-secondary)]">Visualize and resolve scheduling overlaps.</p>
+          <p className="text-sm text-[var(--text-secondary)]">
+            {isMobile ? 'List view is used on mobile for a readable, reliable schedule.' : 'Switch between Grid and List on desktop using the same real schedule data.'}
+          </p>
         </div>
 
         <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--gold)]">
-            List view
-          </div>
+          {isMobile ? (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--gold)]">
+              List view
+            </div>
+          ) : (
+            <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-1 shadow-inner">
+              <button
+                type="button"
+                onClick={() => handleModeChange('grid')}
+                className={cn(
+                  'rounded-lg px-3 py-1.5 text-sm font-bold transition-all md:px-4',
+                  showGrid ? 'border border-[var(--border)] bg-[var(--surface-3)] text-white shadow-md' : 'text-[var(--text-muted)] hover:text-white'
+                )}
+              >
+                Grid
+              </button>
+              <button
+                type="button"
+                onClick={() => handleModeChange('list')}
+                className={cn(
+                  'rounded-lg px-3 py-1.5 text-sm font-bold transition-all md:px-4',
+                  !showGrid ? 'border border-[var(--border)] bg-[var(--surface-3)] text-white shadow-md' : 'text-[var(--text-muted)] hover:text-white'
+                )}
+              >
+                List
+              </button>
+            </div>
+          )}
 
           <Button variant="secondary" size="sm" className="gap-2" onClick={onExportCalendar}>
             <span className="material-symbols-outlined text-[18px]">calendar_month</span>
@@ -82,84 +221,157 @@ export function TimetableView({ rows, weekStart, focusDay, onRowAction, onExport
       </div>
 
       <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-        <div className="mb-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-lg)]">
-          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--gold)]">Weekly agenda</div>
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            The timetable is shown in its stable list view so every scheduled session remains visible and reliable.
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          {displayDays.map((day) => {
-            const dayRows = rows
-              .filter((row) => row.day.substring(0, 3).toLowerCase() === day.toLowerCase() && row.time !== '--')
-              .sort((a, b) => a.time.localeCompare(b.time));
-
-            return (
-              <section key={day} className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
-                <div className="flex items-center justify-between gap-3 border-b border-[var(--border-soft)] bg-[var(--surface-2)] px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-[0.15em] text-[var(--gold)]">{day}</div>
-                  <div className="text-[11px] text-[var(--text-muted)]">{dayRows.length} item{dayRows.length === 1 ? '' : 's'}</div>
+        {!hasItems ? (
+          <div className="rounded-[var(--radius-xl)] border border-dashed border-[var(--border)] bg-[var(--surface)] p-8 text-center shadow-[var(--shadow-lg)]">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] text-[var(--gold)]">
+              <span className="material-symbols-outlined text-[26px]">event_busy</span>
+            </div>
+            <h3 className="mt-4 text-lg font-bold text-white">No scheduled sessions yet</h3>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              Add real session day/time details in Courses and they will appear in both the list and grid timetable views.
+            </p>
+          </div>
+        ) : showGrid ? (
+          <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
+            <div className="grid border-b border-[var(--border)] bg-[var(--surface-2)]" style={{ gridTemplateColumns: `88px repeat(${orderedDays.length}, minmax(${GRID_MIN_COLUMN_WIDTH}px, 1fr))` }}>
+              <div className="border-r border-[var(--border)]" />
+              {orderedDays.map((day) => (
+                <div key={day} className="border-r border-[var(--border-soft)] px-4 py-4 text-center text-xs font-bold uppercase tracking-[0.15em] text-[var(--gold)] last:border-r-0">
+                  {day}
                 </div>
+              ))}
+            </div>
 
-                {dayRows.length ? (
-                  <div className="space-y-3 p-3">
-                    {dayRows.map((course) => {
-                      const isConflict = course.status === 'Conflict';
-                      const [courseTitle, courseKindRaw] = course.course.split(' — ');
-                      const courseKind = courseKindRaw || 'Session';
+            <div className="grid" style={{ gridTemplateColumns: `88px repeat(${orderedDays.length}, minmax(${GRID_MIN_COLUMN_WIDTH}px, 1fr))` }}>
+              <div className="relative border-r border-[var(--border)] bg-[var(--surface)]">
+                {hourMarks.map((mark, index) => (
+                  <div
+                    key={mark}
+                    className="absolute inset-x-0 px-3 text-right text-[11px] font-bold text-[var(--text-muted)]"
+                    style={{ top: `${index * GRID_ROW_HEIGHT - 8}px` }}
+                  >
+                    {formatMinute(mark)}
+                  </div>
+                ))}
+              </div>
+
+              {orderedDays.map((day) => {
+                const dayItems = itemsByDay[day] || [];
+                const placements = layoutDayItems(dayItems);
+
+                return (
+                  <div
+                    key={day}
+                    className="relative border-r border-[var(--border-soft)] last:border-r-0"
+                    style={{ minHeight: `${totalHours * GRID_ROW_HEIGHT}px` }}
+                  >
+                    {hourMarks.slice(0, -1).map((mark, index) => (
+                      <div
+                        key={mark}
+                        className="pointer-events-none absolute inset-x-0 border-t border-[var(--border-soft)]/70"
+                        style={{ top: `${index * GRID_ROW_HEIGHT}px` }}
+                      />
+                    ))}
+
+                    {placements.map(({ item, lane, lanes }) => {
+                      const top = ((item.startMinute - startMinute) / 60) * GRID_ROW_HEIGHT;
+                      const height = Math.max(((item.endMinute - item.startMinute) / 60) * GRID_ROW_HEIGHT, 56);
+                      const width = `calc(${100 / lanes}% - 8px)`;
+                      const left = `calc(${(lane * 100) / lanes}% + 4px)`;
+                      const tone = getItemTone(item);
 
                       return (
-                        <button
-                          key={course.id}
-                          onClick={() => onRowAction?.('Edit', course)}
-                          className={cn(
-                            'w-full rounded-2xl border bg-[var(--bg-raised)] p-4 text-left transition-all hover:shadow-[var(--shadow-md)]',
-                            isConflict ? 'border-[var(--danger)]/40' : 'border-[var(--border)]'
-                          )}
+                        <article
+                          key={item.id}
+                          className={cn('absolute overflow-hidden rounded-2xl border px-3 py-2 shadow-[var(--shadow-md)] transition-transform hover:scale-[1.01]', tone)}
+                          style={{ top: `${top + 4}px`, left, width, height: `${height - 8}px` }}
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="break-words text-sm font-bold leading-snug text-white">{courseTitle}</div>
-                              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-                                <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 font-semibold text-[var(--gold-soft)]">{courseKind}</span>
-                                <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 font-semibold text-white">{course.group}</span>
-                              </div>
+                          <div className="flex h-full flex-col justify-between gap-2">
+                            <div className="space-y-1 min-w-0">
+                              <div className="truncate text-xs font-bold text-white">{item.course}</div>
+                              <div className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-white/80">{item.type}</div>
                             </div>
-                            {isConflict ? <span className="material-symbols-outlined shrink-0 text-lg text-[var(--danger)]">warning</span> : null}
-                          </div>
 
-                          <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-                            <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2">
-                              <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Time</div>
-                              <div className="mt-1 font-semibold text-white">{course.time}</div>
-                            </div>
-                            <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2">
-                              <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Room</div>
-                              <div className="mt-1 font-semibold text-white">{course.room}</div>
-                            </div>
-                            <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2 sm:col-span-2">
-                              <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Instructor</div>
-                              <div className="mt-1 break-words font-semibold text-white">{course.instructor}</div>
+                            <div className="space-y-1 text-[10px] text-white/85">
+                              <div className="truncate font-semibold">{item.group}</div>
+                              <div className="truncate">{item.room}</div>
+                              <div className="truncate">{formatMinute(item.startMinute)} → {formatMinute(item.endMinute)}</div>
+                              {height >= 96 ? <div className="truncate text-white/70">{item.instructor}</div> : null}
                             </div>
                           </div>
-                        </button>
+                        </article>
                       );
                     })}
                   </div>
-                ) : (
-                  <div className="p-4 text-sm text-[var(--text-secondary)]">No scheduled classes for {day}.</div>
-                )}
-              </section>
-            );
-          })}
-
-          {!rows.length ? (
-            <div className="rounded-[var(--radius-xl)] border border-dashed border-[var(--border)] bg-[var(--surface)] p-8 text-center text-[var(--text-secondary)]">
-              No scheduled courses yet.
+                );
+              })}
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-lg)]">
+              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--gold)]">Weekly agenda</div>
+              <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                The same real schedule items shown in Grid mode are grouped day by day here for easier scanning.
+              </p>
+            </div>
+
+            {orderedDays.map((day) => {
+              const dayItems = [...(itemsByDay[day] || [])].sort((a, b) => a.startMinute - b.startMinute);
+
+              return (
+                <section key={day} className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
+                  <div className="flex items-center justify-between gap-3 border-b border-[var(--border-soft)] bg-[var(--surface-2)] px-4 py-3">
+                    <div className="text-xs font-bold uppercase tracking-[0.15em] text-[var(--gold)]">{day}</div>
+                    <div className="text-[11px] text-[var(--text-muted)]">{dayItems.length} item{dayItems.length === 1 ? '' : 's'}</div>
+                  </div>
+
+                  {dayItems.length ? (
+                    <div className="space-y-3 p-3">
+                      {dayItems.map((item) => {
+                        const isConflict = item.status === 'CONFLICT';
+                        return (
+                          <article
+                            key={item.id}
+                            className={cn('rounded-2xl border bg-[var(--bg-raised)] p-4 transition-all hover:shadow-[var(--shadow-md)]', isConflict ? 'border-[var(--danger)]/40' : 'border-[var(--border)]')}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="break-words text-sm font-bold leading-snug text-white">{item.course}</div>
+                                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 font-semibold text-[var(--gold-soft)]">{item.type}</span>
+                                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 font-semibold text-white">{item.group}</span>
+                                </div>
+                              </div>
+                              {isConflict ? <span className="material-symbols-outlined shrink-0 text-lg text-[var(--danger)]">warning</span> : null}
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                              <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2">
+                                <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Time</div>
+                                <div className="mt-1 font-semibold text-white">{formatMinute(item.startMinute)} → {formatMinute(item.endMinute)}</div>
+                              </div>
+                              <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2">
+                                <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Room</div>
+                                <div className="mt-1 font-semibold text-white">{item.room}</div>
+                              </div>
+                              <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2 sm:col-span-2">
+                                <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Instructor</div>
+                                <div className="mt-1 break-words font-semibold text-white">{item.instructor}</div>
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-sm text-[var(--text-secondary)]">No scheduled classes for {day}.</div>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
