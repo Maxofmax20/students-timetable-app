@@ -203,6 +203,12 @@ model Workspace {
   weekStart    WeekStart            @default(SATURDAY)
   timeFormat   TimeFormat           @default(BOTH)
   conflictMode ConflictMode         @default(WARNING)
+  snapMinutes  Int                  @default(15)
+  denseRows    Boolean              @default(true)
+  autoSave     Boolean              @default(true)
+  smartPlacement Boolean            @default(true)
+  fontScale    Int                  @default(100)
+  animationsEnabled Boolean         @default(true)
   timeZone     String               @default("UTC")
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt

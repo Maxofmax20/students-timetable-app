@@ -1,0 +1,7 @@
+-- AlterTable
+ALTER TABLE "Workspace" ADD COLUMN     "animationsEnabled" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "autoSave" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "denseRows" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "fontScale" INTEGER NOT NULL DEFAULT 100,
+ADD COLUMN     "smartPlacement" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "snapMinutes" INTEGER NOT NULL DEFAULT 15;

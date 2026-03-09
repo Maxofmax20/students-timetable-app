@@ -578,6 +578,26 @@ export default function WorkspacePage() {
     }
   };
 
+
+  const fetchWorkspaceSettings = async (wsId: string) => {
+    try {
+      const res = await fetch(`/api/v1/workspaces/${wsId}`, { credentials: "include" });
+      const payload = await res.json();
+      if (res.ok && payload?.ok && payload.data) {
+        const ws = payload.data;
+        if (ws.weekStart) setWeekStart(ws.weekStart === "SATURDAY" ? "SATURDAY" : ws.weekStart === "SUNDAY" ? "SUNDAY" : "MONDAY");
+        if (ws.timeFormat) setTimeMode(ws.timeFormat === "H12" ? "12h" : "24h");
+        if (ws.conflictMode) setConflictPolicy(ws.conflictMode);
+        if (typeof ws.snapMinutes === "number") setSnapMinutes(ws.snapMinutes);
+        if (typeof ws.denseRows === "boolean") setDenseRows(ws.denseRows);
+        if (typeof ws.autoSave === "boolean") setAutoSave(ws.autoSave);
+        if (typeof ws.smartPlacement === "boolean") setSmartPlacement(ws.smartPlacement);
+        if (typeof ws.fontScale === "number") setFontScale(ws.fontScale);
+        if (typeof ws.animationsEnabled === "boolean") setAnimationsEnabled(ws.animationsEnabled);
+      }
+    } catch {}
+  };
+
   const fetchCourses = async () => {
     setLoadingRows(true);
 
@@ -607,7 +627,9 @@ export default function WorkspacePage() {
       const mapped = (payload.data.items ?? []).map((item) => courseToRow(item, previous.get(item.id)));
 
       setAuthState("authed");
-      setWorkspaceId(payload.data.workspaceId ?? workspaceId ?? null);
+      const resolvedWsId = payload.data.workspaceId ?? workspaceId ?? null;
+      setWorkspaceId(resolvedWsId);
+      if (resolvedWsId) await fetchWorkspaceSettings(resolvedWsId);
       setRows(mapped.length ? mapped : []);
 
       await fetchReferenceData(payload.data.workspaceId ?? workspaceId ?? null);
@@ -697,6 +719,19 @@ export default function WorkspacePage() {
     showToast(`Workspace "${payload.data.title}" created`);
     await fetchCourses();
     return true;
+  };
+
+
+  const saveWorkspaceSetting = async (patch: Record<string, unknown>) => {
+    if (!workspaceId) return;
+    try {
+      await fetch(`/api/v1/workspaces/${workspaceId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(patch),
+      });
+    } catch {}
   };
 
   const deleteWorkspace = async (): Promise<boolean> => {
@@ -1616,16 +1651,16 @@ export default function WorkspacePage() {
 
               {mainTab === "Settings" && (
                 <SettingsView 
-                   denseRows={denseRows} onSetDenseRows={setDenseRows}
+                   denseRows={denseRows} onSetDenseRows={(v) => { setDenseRows(v); saveWorkspaceSetting({ denseRows: v }); }}
                    miniMap={miniMap} onSetMiniMap={setMiniMap}
-                   animationsEnabled={animationsEnabled} onSetAnimationsEnabled={setAnimationsEnabled}
-                   fontScale={fontScale} onSetFontScale={setFontScale}
-                   autoSave={autoSave} onSetAutoSave={setAutoSave}
-                   smartPlacement={smartPlacement} onSetSmartPlacement={setSmartPlacement}
-                   timeMode={timeMode} onSetTimeMode={setTimeMode}
-                   weekStart={weekStart} onSetWeekStart={setWeekStart}
-                   conflictPolicy={conflictPolicy} onSetConflictPolicy={setConflictPolicy}
-                   snapMinutes={snapMinutes} onSetSnapMinutes={setSnapMinutes}
+                   animationsEnabled={animationsEnabled} onSetAnimationsEnabled={(v) => { setAnimationsEnabled(v); saveWorkspaceSetting({ animationsEnabled: v }); }}
+                   fontScale={fontScale} onSetFontScale={(v) => { setFontScale(v); saveWorkspaceSetting({ fontScale: v }); }}
+                   autoSave={autoSave} onSetAutoSave={(v) => { setAutoSave(v); saveWorkspaceSetting({ autoSave: v }); }}
+                   smartPlacement={smartPlacement} onSetSmartPlacement={(v) => { setSmartPlacement(v); saveWorkspaceSetting({ smartPlacement: v }); }}
+                   timeMode={timeMode} onSetTimeMode={(v) => { setTimeMode(v); saveWorkspaceSetting({ timeFormat: v === "12h" ? "H12" : "H24" }); }}
+                   weekStart={weekStart} onSetWeekStart={(v) => { setWeekStart(v); saveWorkspaceSetting({ weekStart: v }); }}
+                   conflictPolicy={conflictPolicy} onSetConflictPolicy={(v) => { setConflictPolicy(v); saveWorkspaceSetting({ conflictMode: v }); }}
+                   snapMinutes={snapMinutes} onSetSnapMinutes={(v) => { setSnapMinutes(v); saveWorkspaceSetting({ snapMinutes: v }); }}
                    onExportJson={() => { exportJson(); showToast("JSON exported"); }}
                    onCreateSnapshot={() => { saveCheckpoint(); }}
                    onDeleteWorkspace={() => {
