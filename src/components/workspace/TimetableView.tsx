@@ -11,6 +11,7 @@ interface TimetableViewProps {
   rows: Row[];
   timeMode: string;
   weekStart: string;
+  focusDay?: string;
   onRowAction?: (action: RowAction, row: Row) => void;
   onExportCalendar?: () => void;
   isLoading?: boolean;
@@ -18,7 +19,7 @@ interface TimetableViewProps {
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8 AM to 8 PM
 
-export function TimetableView({ rows, timeMode, weekStart, onRowAction, onExportCalendar, isLoading }: TimetableViewProps) {
+export function TimetableView({ rows, timeMode, weekStart, focusDay, onRowAction, onExportCalendar, isLoading }: TimetableViewProps) {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isMobile, setIsMobile] = useState(false);
 
@@ -35,7 +36,11 @@ export function TimetableView({ rows, timeMode, weekStart, onRowAction, onExport
 
   const orderedDays = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu'];
   const startIdx = orderedDays.findIndex(d => d.toUpperCase() === weekStart) || 0;
-  const displayDays = [...orderedDays.slice(startIdx), ...orderedDays.slice(0, startIdx)];
+  const baseDays = [...orderedDays.slice(startIdx), ...orderedDays.slice(0, startIdx)];
+  const focusDayKey = focusDay?.substring(0, 3);
+  const displayDays = focusDayKey && baseDays.includes(focusDayKey)
+    ? [focusDayKey, ...baseDays.filter((day) => day !== focusDayKey)]
+    : baseDays;
 
   if (isLoading) {
     return (

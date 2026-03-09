@@ -8,7 +8,9 @@ export interface DashboardViewProps {
   conflictsCount: number;
   groupsCount: number;
   instructorsCount: number;
+  roomsCount?: number;
   onAction: (actionName: ActionLabel) => void;
+  onPreviewSelect?: (row: RowData) => void;
   isLoading?: boolean;
 }
 
@@ -17,11 +19,13 @@ export function DashboardView({
   conflictsCount, 
   groupsCount, 
   instructorsCount,
+  roomsCount,
   onAction,
+  onPreviewSelect,
   isLoading
 }: DashboardViewProps) {
-  // Show first 3 courses as a quick preview
-  const previewCourses = rows.slice(0, 3);
+  // Show first 4 courses as a quick preview
+  const previewCourses = rows.slice(0, 4);
 
   if (isLoading) {
     return (
@@ -31,8 +35,8 @@ export function DashboardView({
           <Skeleton className="h-5 w-96" />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          {[...Array(5)].map((_, i) => (
              <div key={i} className="p-6 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)]">
                 <div className="flex justify-between items-start mb-4">
                    <div className="space-y-2">
@@ -87,12 +91,13 @@ export function DashboardView({
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[
           { label: 'Total Courses', value: rows.length, icon: 'calendar_view_week', color: 'var(--gold)' },
           { label: 'Active Conflicts', value: conflictsCount, icon: 'warning', color: 'var(--danger)', isAlert: conflictsCount > 0 },
           { label: 'Student Groups', value: groupsCount, icon: 'group_work', color: 'var(--success)' },
           { label: 'Instructors', value: instructorsCount, icon: 'school', color: 'var(--info)' },
+          { label: 'Rooms', value: roomsCount ?? 0, icon: 'meeting_room', color: 'var(--warning)' },
         ].map((stat) => (
           <div 
             key={stat.label}
@@ -162,16 +167,37 @@ export function DashboardView({
           <div className="flex-1 p-6 rounded-[var(--radius-lg)] bg-[var(--surface)] border border-[var(--border)] flex flex-col gap-4">
             {previewCourses.length > 0 ? (
               <div className="space-y-3">
-                {previewCourses.map((row, i) => (
-                  <div key={i} className="group p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border-soft)] hover:border-[var(--text-muted)] transition-all flex items-center gap-3">
-                    <div className="w-1.5 h-10 rounded-full bg-[var(--gold)]"></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-white truncate">{row.course}</p>
-                      <p className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wider">{row.time}</p>
+                {previewCourses.map((row, i) => {
+                  const content = (
+                    <>
+                      <div className="w-1.5 h-10 rounded-full bg-[var(--gold)]"></div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-white truncate">{row.course}</p>
+                        <p className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wider">{row.day} • {row.time}</p>
+                      </div>
+                      <span className="material-symbols-outlined text-[var(--text-muted)] group-hover:text-white transition-colors">chevron_right</span>
+                    </>
+                  );
+
+                  if (onPreviewSelect) {
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => onPreviewSelect(row)}
+                        className="group flex w-full items-center gap-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-2)] p-3 text-left transition-all hover:border-[var(--text-muted)]"
+                      >
+                        {content}
+                      </button>
+                    );
+                  }
+
+                  return (
+                    <div key={i} className="group p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border-soft)] hover:border-[var(--text-muted)] transition-all flex items-center gap-3">
+                      {content}
                     </div>
-                    <span className="material-symbols-outlined text-[var(--text-muted)] group-hover:text-white transition-colors">chevron_right</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[var(--bg-raised)]/50 rounded-xl border border-[var(--border)] border-dashed">

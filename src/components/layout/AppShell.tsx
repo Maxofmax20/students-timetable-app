@@ -41,7 +41,7 @@ export function AppShell({ children, title, subtitle, actions }: AppShellProps) 
 
   return (
     <ToastProvider>
-      <div className="flex h-screen w-full bg-[var(--bg)] overflow-hidden">
+      <div className="flex h-screen w-full overflow-hidden bg-[var(--bg)]">
         {/* Mobile Sidebar Overlay */}
         {sidebarOpen && (
           <button

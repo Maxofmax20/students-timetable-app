@@ -53,17 +53,17 @@ export function Header({ title, subtitle, onMenuClick, actions }: HeaderProps) {
   const breadcrumbs = buildBreadcrumbs();
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--bg-raised)]/80 backdrop-blur-xl px-4 md:px-6">
+    <header className="sticky top-0 z-30 flex h-[72px] shrink-0 items-center justify-between border-b-2 border-[var(--border)] bg-[var(--bg-raised)] px-4 shadow-[var(--shadow-md)] md:px-6">
       <div className="flex items-center gap-4 flex-1">
         <button 
-          className="lg:hidden text-[var(--text-secondary)] hover:text-white transition-colors flex items-center justify-center rounded-lg p-2 hover:bg-[var(--surface-2)]"
+          className="flex items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-2.5 text-[var(--text-secondary)] transition-colors hover:text-white lg:hidden"
           onClick={onMenuClick}
         >
           <span className="material-symbols-outlined">menu</span>
         </button>
         
         {/* Breadcrumbs */}
-        <nav className="hidden md:flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider">
+        <nav className="hidden items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.18em] md:flex">
           {breadcrumbs.map((crumb, idx) => (
             <React.Fragment key={crumb.href}>
               {idx > 0 && <span className="text-[var(--text-muted)] mx-0.5">/</span>}
@@ -81,7 +81,7 @@ export function Header({ title, subtitle, onMenuClick, actions }: HeaderProps) {
         </nav>
 
         {/* Search */}
-        <div className="hidden lg:flex flex-1 max-w-sm ml-4">
+        <div className="ml-4 hidden max-w-sm flex-1 lg:flex">
           <SearchInput placeholder="Search everything..." />
         </div>
       </div>
@@ -96,7 +96,7 @@ export function Header({ title, subtitle, onMenuClick, actions }: HeaderProps) {
         {session?.user && (
            <DropdownMenu
              trigger={
-                <button className="flex items-center group gap-2.5 pl-3 pr-1 py-1 rounded-full bg-[var(--surface-2)] border border-[var(--border-soft)] hover:border-[var(--text-muted)] transition-all">
+                <button className="group flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] pl-3 pr-1 py-1.5 shadow-[var(--shadow-sm)] transition-all hover:border-[var(--text-muted)] hover:shadow-[var(--shadow-md)]">
                    <div className="flex flex-col items-end hidden sm:flex">
                      <span className="text-xs font-bold text-white leading-none">{session.user.name}</span>
                      <span className="text-[10px] text-[var(--text-muted)] font-medium">Free Plan</span>
@@ -107,7 +107,7 @@ export function Header({ title, subtitle, onMenuClick, actions }: HeaderProps) {
              }
              align="right"
            >
-             <div className="px-4 py-3 border-b border-[var(--border-soft)] bg-[var(--bg-raised)]/50">
+             <div className="border-b border-[var(--border)] bg-[var(--bg-raised)] px-4 py-3">
                 <p className="text-sm font-bold text-white">{session.user.name}</p>
                 <p className="text-xs text-[var(--text-secondary)] truncate max-w-[180px]">{session.user.email}</p>
              </div>

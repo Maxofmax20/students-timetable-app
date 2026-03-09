@@ -10,20 +10,20 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "secondary", size = "md", isLoading, children, disabled, type, ...props }, ref) => {
     const variants = {
-      primary: "bg-gradient-to-br from-[var(--gold)] to-[var(--gold-hover)] text-[var(--gold-fg)] border-none shadow-[var(--shadow-glow)] hover:brightness-110",
-      secondary: "bg-[var(--surface-2)] text-[var(--text)] border-[var(--border)] hover:bg-[var(--surface-3)] hover:border-[var(--text-muted)]",
-      ghost: "bg-transparent text-[var(--text-secondary)] border-transparent hover:bg-[var(--surface-2)] hover:text-[var(--text)]",
-      danger: "bg-[var(--danger)] text-white border-none hover:brightness-110",
-      "ghost-danger": "bg-transparent text-[var(--danger)] border-transparent hover:bg-[var(--danger-muted)]",
-      "soft-gold": "bg-[var(--gold-muted)] text-[var(--gold)] border-[var(--gold)]/20 hover:bg-[var(--gold)]/20"
+      primary: "border-[var(--gold-hover)] bg-[var(--gold)] text-[var(--gold-fg)] shadow-[var(--shadow-glow)] hover:bg-[var(--gold-hover)] hover:shadow-[var(--shadow-md)]",
+      secondary: "border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)] shadow-[var(--shadow-sm)] hover:border-[var(--text-muted)] hover:bg-[var(--surface-3)] hover:shadow-[var(--shadow-md)]",
+      ghost: "border-transparent bg-transparent text-[var(--text-secondary)] hover:border-[var(--border)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]",
+      danger: "border-[var(--danger)] bg-[var(--danger)] text-white shadow-[var(--shadow-sm)] hover:brightness-110 hover:shadow-[var(--shadow-md)]",
+      "ghost-danger": "border-transparent bg-transparent text-[var(--danger)] hover:border-[var(--danger)]/20 hover:bg-[var(--danger-muted)]",
+      "soft-gold": "border-[var(--gold)]/25 bg-[var(--gold-muted)] text-[var(--gold)] shadow-[var(--shadow-sm)] hover:bg-[var(--gold)]/20"
     };
 
     const sizes = {
-      sm: "h-8 px-3 text-xs gap-1.5",
-      md: "h-10 px-4 text-sm gap-2",
+      sm: "h-9 px-3.5 text-xs gap-1.5",
+      md: "h-11 px-4.5 text-sm gap-2",
       lg: "h-12 px-6 text-base gap-2.5",
-      icon: "h-10 w-10 p-0 items-center justify-center",
-      full: "h-10 w-full px-4 text-sm justify-center"
+      icon: "h-11 w-11 p-0 items-center justify-center",
+      full: "h-11 w-full px-4 text-sm justify-center"
     };
 
     return (
@@ -32,7 +32,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         type={type ?? "button"}
         disabled={disabled || isLoading}
         className={cn(
-          "inline-flex items-center font-semibold rounded-[var(--radius-md)] border transition-all duration-200 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none disabled:active:scale-100",
+          "inline-flex items-center rounded-xl border font-bold tracking-[0.01em] transition-all duration-200 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 disabled:active:scale-100",
           variants[variant],
           sizes[size],
           className

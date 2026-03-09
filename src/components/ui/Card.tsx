@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("rounded-lg border border-[var(--line)] bg-[var(--surface-2)] shadow-sm", className)} {...props} />
+    <div ref={ref} className={cn("rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-md)]", className)} {...props} />
   )
 );
 Card.displayName = "Card";
@@ -17,7 +17,7 @@ CardHeader.displayName = "CardHeader";
 
 export const CardTitle = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
-    <h3 ref={ref} className={cn("text-lg font-semibold leading-none tracking-tight text-[var(--gold-soft)]", className)} {...props} />
+    <h3 ref={ref} className={cn("text-lg font-black leading-none tracking-tight text-[var(--gold)]", className)} {...props} />
   )
 );
 CardTitle.displayName = "CardTitle";
