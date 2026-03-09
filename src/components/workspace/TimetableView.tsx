@@ -22,7 +22,8 @@ interface TimetableViewProps {
 }
 
 const GRID_ROW_HEIGHT = 72;
-const GRID_MIN_COLUMN_WIDTH = 180;
+const GRID_TIME_RAIL_WIDTH = 72;
+const GRID_MIN_COLUMN_WIDTH = 96;
 const TIMETABLE_VIEW_KEY = 'students-timetable:view-mode';
 
 function getItemTone(item: ScheduleItem) {
@@ -133,6 +134,7 @@ export function TimetableView({ items, rows = [], weekStart, focusDay, onRowActi
   const totalHours = Math.max((endMinute - startMinute) / 60, 1);
 
   const showGrid = !isMobile && viewMode === 'grid';
+  const gridMinWidth = GRID_TIME_RAIL_WIDTH + orderedDays.length * GRID_MIN_COLUMN_WIDTH;
 
   const handleModeChange = (mode: ViewMode) => {
     setViewMode(mode);
@@ -232,79 +234,104 @@ export function TimetableView({ items, rows = [], weekStart, focusDay, onRowActi
             </p>
           </div>
         ) : showGrid ? (
-          <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
-            <div className="grid border-b border-[var(--border)] bg-[var(--surface-2)]" style={{ gridTemplateColumns: `88px repeat(${orderedDays.length}, minmax(${GRID_MIN_COLUMN_WIDTH}px, 1fr))` }}>
-              <div className="border-r border-[var(--border)]" />
-              {orderedDays.map((day) => (
-                <div key={day} className="border-r border-[var(--border-soft)] px-4 py-4 text-center text-xs font-bold uppercase tracking-[0.15em] text-[var(--gold)] last:border-r-0">
-                  {day}
-                </div>
-              ))}
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow-lg)]">
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--gold)]">Full week grid</div>
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                  All {orderedDays.length} days are rendered. On narrower desktop widths, scroll horizontally to reveal the full week.
+                </p>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                <span className="material-symbols-outlined text-[16px]">swap_horiz</span>
+                Horizontal scroll
+              </div>
             </div>
 
-            <div className="grid" style={{ gridTemplateColumns: `88px repeat(${orderedDays.length}, minmax(${GRID_MIN_COLUMN_WIDTH}px, 1fr))` }}>
-              <div className="relative border-r border-[var(--border)] bg-[var(--surface)]">
-                {hourMarks.map((mark, index) => (
-                  <div
-                    key={mark}
-                    className="absolute inset-x-0 px-3 text-right text-[11px] font-bold text-[var(--text-muted)]"
-                    style={{ top: `${index * GRID_ROW_HEIGHT - 8}px` }}
-                  >
-                    {formatMinute(mark)}
-                  </div>
-                ))}
-              </div>
-
-              {orderedDays.map((day) => {
-                const dayItems = itemsByDay[day] || [];
-                const placements = layoutDayItems(dayItems);
-
-                return (
-                  <div
-                    key={day}
-                    className="relative border-r border-[var(--border-soft)] last:border-r-0"
-                    style={{ minHeight: `${totalHours * GRID_ROW_HEIGHT}px` }}
-                  >
-                    {hourMarks.slice(0, -1).map((mark, index) => (
-                      <div
-                        key={mark}
-                        className="pointer-events-none absolute inset-x-0 border-t border-[var(--border-soft)]/70"
-                        style={{ top: `${index * GRID_ROW_HEIGHT}px` }}
-                      />
+            <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
+              <div className="overflow-x-auto overflow-y-hidden pb-2">
+                <div style={{ minWidth: `${gridMinWidth}px` }}>
+                  <div className="grid border-b border-[var(--border)] bg-[var(--surface-2)]" style={{ gridTemplateColumns: `${GRID_TIME_RAIL_WIDTH}px repeat(${orderedDays.length}, minmax(${GRID_MIN_COLUMN_WIDTH}px, 1fr))` }}>
+                    <div className="sticky left-0 z-20 border-r border-[var(--border)] bg-[var(--surface-2)]" />
+                    {orderedDays.map((day) => (
+                      <div key={day} className="border-r border-[var(--border-soft)] px-4 py-4 text-center text-xs font-bold uppercase tracking-[0.15em] text-[var(--gold)] last:border-r-0">
+                        {day}
+                      </div>
                     ))}
+                  </div>
 
-                    {placements.map(({ item, lane, lanes }) => {
-                      const top = ((item.startMinute - startMinute) / 60) * GRID_ROW_HEIGHT;
-                      const height = Math.max(((item.endMinute - item.startMinute) / 60) * GRID_ROW_HEIGHT, 56);
-                      const width = `calc(${100 / lanes}% - 8px)`;
-                      const left = `calc(${(lane * 100) / lanes}% + 4px)`;
-                      const tone = getItemTone(item);
+                  <div className="grid" style={{ gridTemplateColumns: `${GRID_TIME_RAIL_WIDTH}px repeat(${orderedDays.length}, minmax(${GRID_MIN_COLUMN_WIDTH}px, 1fr))` }}>
+                    <div className="sticky left-0 z-10 relative border-r border-[var(--border)] bg-[var(--surface)]">
+                      {hourMarks.map((mark, index) => (
+                        <div
+                          key={mark}
+                          className="absolute inset-x-0 px-3 text-right text-[11px] font-bold text-[var(--text-muted)]"
+                          style={{ top: `${index * GRID_ROW_HEIGHT - 8}px` }}
+                        >
+                          {formatMinute(mark)}
+                        </div>
+                      ))}
+                    </div>
+
+                    {orderedDays.map((day) => {
+                      const dayItems = itemsByDay[day] || [];
+                      const placements = layoutDayItems(dayItems);
 
                       return (
-                        <article
-                          key={item.id}
-                          className={cn('absolute overflow-hidden rounded-2xl border px-3 py-2 shadow-[var(--shadow-md)] transition-transform hover:scale-[1.01]', tone)}
-                          style={{ top: `${top + 4}px`, left, width, height: `${height - 8}px` }}
+                        <div
+                          key={day}
+                          className="relative border-r border-[var(--border-soft)] last:border-r-0"
+                          style={{ minHeight: `${totalHours * GRID_ROW_HEIGHT}px` }}
                         >
-                          <div className="flex h-full flex-col justify-between gap-2">
-                            <div className="space-y-1 min-w-0">
-                              <div className="truncate text-xs font-bold text-white">{item.course}</div>
-                              <div className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-white/80">{item.type}</div>
-                            </div>
+                          {hourMarks.slice(0, -1).map((mark, index) => (
+                            <div
+                              key={mark}
+                              className="pointer-events-none absolute inset-x-0 border-t border-[var(--border-soft)]/70"
+                              style={{ top: `${index * GRID_ROW_HEIGHT}px` }}
+                            />
+                          ))}
 
-                            <div className="space-y-1 text-[10px] text-white/85">
-                              <div className="truncate font-semibold">{item.group}</div>
-                              <div className="truncate">{item.room}</div>
-                              <div className="truncate">{formatMinute(item.startMinute)} → {formatMinute(item.endMinute)}</div>
-                              {height >= 96 ? <div className="truncate text-white/70">{item.instructor}</div> : null}
+                          {dayItems.length === 0 ? (
+                            <div className="pointer-events-none absolute inset-x-3 top-3 rounded-xl border border-dashed border-[var(--border)]/80 bg-[var(--surface-2)]/70 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                              No sessions
                             </div>
-                          </div>
-                        </article>
+                          ) : null}
+
+                          {placements.map(({ item, lane, lanes }) => {
+                            const top = ((item.startMinute - startMinute) / 60) * GRID_ROW_HEIGHT;
+                            const height = Math.max(((item.endMinute - item.startMinute) / 60) * GRID_ROW_HEIGHT, 56);
+                            const width = `calc(${100 / lanes}% - 8px)`;
+                            const left = `calc(${(lane * 100) / lanes}% + 4px)`;
+                            const tone = getItemTone(item);
+
+                            return (
+                              <article
+                                key={item.id}
+                                className={cn('absolute overflow-hidden rounded-2xl border px-3 py-2 shadow-[var(--shadow-md)] transition-transform hover:scale-[1.01]', tone)}
+                                style={{ top: `${top + 4}px`, left, width, height: `${height - 8}px` }}
+                              >
+                                <div className="flex h-full flex-col justify-between gap-2">
+                                  <div className="space-y-1 min-w-0">
+                                    <div className="truncate text-xs font-bold text-white">{item.course}</div>
+                                    <div className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-white/80">{item.type}</div>
+                                  </div>
+
+                                  <div className="space-y-1 text-[10px] text-white/85">
+                                    <div className="truncate font-semibold">{item.group}</div>
+                                    <div className="truncate">{item.room}</div>
+                                    <div className="truncate">{formatMinute(item.startMinute)} → {formatMinute(item.endMinute)}</div>
+                                    {height >= 96 ? <div className="truncate text-white/70">{item.instructor}</div> : null}
+                                  </div>
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
                       );
                     })}
                   </div>
-                );
-              })}
+                </div>
+              </div>
             </div>
           </div>
         ) : (
@@ -312,7 +339,7 @@ export function TimetableView({ items, rows = [], weekStart, focusDay, onRowActi
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-lg)]">
               <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--gold)]">Weekly agenda</div>
               <p className="mt-2 text-sm text-[var(--text-secondary)]">
-                The same real schedule items shown in Grid mode are grouped day by day here for easier scanning.
+                The same real schedule items are grouped day by day here for easier scanning.
               </p>
             </div>
 
