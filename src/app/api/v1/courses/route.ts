@@ -18,8 +18,73 @@ const createSchema = z.object({
   roomId: z.string().cuid().nullable().optional(),
   color: z.string().max(32).optional(),
   creditHours: z.number().int().positive().max(12).nullable().optional(),
-  status: z.string().max(24).optional()
+  status: z.string().max(24).optional(),
+  day: z.string().trim().max(24).nullable().optional(),
+  time: z.string().trim().max(32).nullable().optional()
 });
+
+const courseInclude = {
+  group: { select: { id: true, code: true, name: true } },
+  instructor: { select: { id: true, name: true } },
+  room: { select: { id: true, code: true, name: true } },
+  sessions: {
+    orderBy: [{ day: "asc" }, { startMinute: "asc" }],
+    include: {
+      group: { select: { id: true, code: true, name: true } },
+      instructor: { select: { id: true, name: true } },
+      room: { select: { id: true, code: true, name: true } }
+    }
+  }
+} satisfies Prisma.CourseInclude;
+
+function parseTimeLabel(label: string) {
+  const [hours, minutes] = label.trim().split(":").map((value) => Number(value));
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    throw new ApiError(400, "INVALID_SESSION_TIME");
+  }
+  return hours * 60 + minutes;
+}
+
+function parseTimeRange(value?: string | null) {
+  if (!value) return null;
+  const parts = value.split(/→|->|-/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length !== 2) throw new ApiError(400, "INVALID_SESSION_TIME");
+  const startMinute = parseTimeLabel(parts[0]);
+  const endMinute = parseTimeLabel(parts[1]);
+  if (endMinute <= startMinute) throw new ApiError(400, "INVALID_SESSION_TIME");
+  return { startMinute, endMinute };
+}
+
+function normalizeDay(day?: string | null) {
+  if (!day) return null;
+  const normalized = day.trim().toLowerCase();
+  const map: Record<string, string> = {
+    sat: "Sat",
+    saturday: "Sat",
+    السبت: "Sat",
+    sun: "Sun",
+    sunday: "Sun",
+    الأحد: "Sun",
+    mon: "Mon",
+    monday: "Mon",
+    الإثنين: "Mon",
+    الاثنين: "Mon",
+    tue: "Tue",
+    tuesday: "Tue",
+    الثلاثاء: "Tue",
+    wed: "Wed",
+    wednesday: "Wed",
+    الأربعاء: "Wed",
+    الاربعاء: "Wed",
+    thu: "Thu",
+    thursday: "Thu",
+    الخميس: "Thu",
+    fri: "Fri",
+    friday: "Fri",
+    الجمعة: "Fri"
+  };
+  return map[normalized] ?? day.trim();
+}
 
 async function resolveWorkspace(userId: string, workspaceId?: string) {
   if (!workspaceId) return getOrCreatePersonalWorkspace(userId);
@@ -61,11 +126,7 @@ export async function GET(request: NextRequest) {
     const items = await prisma.course.findMany({
       where: { workspaceId: workspace.id },
       orderBy: [{ code: "asc" }, { title: "asc" }],
-      include: {
-        group: { select: { id: true, code: true, name: true } },
-        instructor: { select: { id: true, name: true } },
-        room: { select: { id: true, code: true, name: true } }
-      }
+      include: courseInclude
     });
 
     return NextResponse.json({ ok: true, data: { workspaceId: workspace.id, items } });
@@ -86,6 +147,9 @@ export async function POST(request: NextRequest) {
     await requireWorkspaceRole(session.userId, workspace.id, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
     await assertForeignBelongsToWorkspace(workspace.id, body.groupId, body.instructorId, body.roomId);
 
+    const normalizedDay = normalizeDay(body.day);
+    const parsedTime = parseTimeRange(body.time);
+
     const created = await prisma.course.create({
       data: {
         workspaceId: workspace.id,
@@ -96,13 +160,20 @@ export async function POST(request: NextRequest) {
         roomId: body.roomId ?? null,
         color: body.color ?? "#3b82f6",
         creditHours: body.creditHours ?? null,
-        status: body.status ?? "ACTIVE"
+        status: body.status ?? "ACTIVE",
+        sessions: normalizedDay && parsedTime ? {
+          create: [{
+            workspaceId: workspace.id,
+            day: normalizedDay,
+            startMinute: parsedTime.startMinute,
+            endMinute: parsedTime.endMinute,
+            groupId: body.groupId ?? null,
+            instructorId: body.instructorId ?? null,
+            roomId: body.roomId ?? null
+          }]
+        } : undefined
       },
-      include: {
-        group: { select: { id: true, code: true, name: true } },
-        instructor: { select: { id: true, name: true } },
-        room: { select: { id: true, code: true, name: true } }
-      }
+      include: courseInclude
     });
 
     return NextResponse.json({ ok: true, data: created }, { status: 201 });

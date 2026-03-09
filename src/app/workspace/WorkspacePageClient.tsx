@@ -51,6 +51,7 @@ import { CoursesView } from "@/components/workspace/CoursesView";
 import { SettingsView } from "@/components/workspace/SettingsView";
 import { EditCourseModal, type EditCourseMode } from "@/components/workspace/EditCourseModal";
 import { Modal } from "@/components/ui/Modal";
+import { downloadIcsFile } from "@/lib/ics";
 
 const placeholderRows: Row[] = [
   {
@@ -130,21 +131,32 @@ interface CreateForm {
   courseRoomId: string;
 }
 
+function minutesToLabel(total: number) {
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  return `${hours}:${`${minutes}`.padStart(2, "0")}`;
+}
+
 function courseToRow(item: CourseApiItem, fallback?: Row): Row {
+  const session = item.sessions?.[0];
+  const sessionGroup = session?.group;
+  const sessionInstructor = session?.instructor;
+  const sessionRoom = session?.room;
+
   return {
     id: item.id,
     code: item.code,
     source: "real",
     course: item.title,
-    group: item.group?.code || fallback?.group || "-",
-    instructor: item.instructor?.name || fallback?.instructor || "-",
-    room: item.room?.code || fallback?.room || "-",
-    day: fallback?.day || "--",
-    time: fallback?.time || "--",
+    group: sessionGroup?.code || item.group?.code || fallback?.group || "-",
+    instructor: sessionInstructor?.name || item.instructor?.name || fallback?.instructor || "-",
+    room: sessionRoom?.code || item.room?.code || fallback?.room || "-",
+    day: session?.day || fallback?.day || "--",
+    time: session ? `${minutesToLabel(session.startMinute)} → ${minutesToLabel(session.endMinute)}` : (fallback?.time || "--"),
     status: toUiStatus(item.status),
-    groupId: item.groupId ?? item.group?.id ?? fallback?.groupId ?? null,
-    instructorId: item.instructorId ?? item.instructor?.id ?? fallback?.instructorId ?? null,
-    roomId: item.roomId ?? item.room?.id ?? fallback?.roomId ?? null
+    groupId: session?.groupId ?? item.groupId ?? item.group?.id ?? fallback?.groupId ?? null,
+    instructorId: session?.instructorId ?? item.instructorId ?? item.instructor?.id ?? fallback?.instructorId ?? null,
+    roomId: session?.roomId ?? item.roomId ?? item.room?.id ?? fallback?.roomId ?? null
   };
 }
 
@@ -699,6 +711,18 @@ export default function WorkspacePage() {
     return true;
   };
 
+  const downloadCalendarExport = async () => {
+    const exportable = rowsRef.current.filter((row) => row.day && row.day !== '--' && row.time && row.time !== '--');
+    if (!exportable.length) {
+      showToast('No scheduled sessions to export');
+      return;
+    }
+
+    const filenameBase = workspaceId || 'workspace';
+    downloadIcsFile(exportable, `${filenameBase}-timetable.ics`, 'Students Timetable');
+    showToast('Calendar export downloaded');
+  };
+
   const createWorkspace = async (title: string): Promise<boolean> => {
     if (!ensureCanWrite("create a workspace")) return false;
 
@@ -782,6 +806,8 @@ export default function WorkspacePage() {
       groupId?: string | null;
       instructorId?: string | null;
       roomId?: string | null;
+      day?: string | null;
+      time?: string | null;
     },
     silent = false
   ): Promise<boolean> => {
@@ -798,7 +824,9 @@ export default function WorkspacePage() {
         status: payload.status ?? "DRAFT",
         groupId: payload.groupId ?? null,
         instructorId: payload.instructorId ?? null,
-        roomId: payload.roomId ?? null
+        roomId: payload.roomId ?? null,
+        day: payload.day ?? null,
+        time: payload.time ?? null
       })
     });
 
@@ -1647,6 +1675,7 @@ export default function WorkspacePage() {
                    timeMode={timeMode} 
                    weekStart={weekStart} 
                    onRowAction={openRowAction} 
+                   onExportCalendar={downloadCalendarExport}
                    isLoading={loadingRows}
                 />
               )}
@@ -1707,7 +1736,8 @@ export default function WorkspacePage() {
             if (updated) { showToast("Course updated"); await fetchCourses(); }
           } else if (courseModalMode === 'time') {
             if (!data.time || !parseTimeRange(data.time)) throw new Error("Invalid time format");
-            applyLocalRows((current) => current.map((item) => (item.id === id ? { ...item, day: data.day || 'Mon', time: data.time || '09:00-10:00' } : item)), "Schedule note updated");
+            const updated = await patchCourseApi(id!, { day: data.day || 'Mon', time: data.time });
+            if (updated) { showToast("Schedule updated"); await fetchCourses(); }
           } else if (courseModalMode === 'room') {
             const updated = await patchCourseApi(id!, { roomId: data.roomId });
             if (updated) { showToast("Room updated"); await fetchCourses(); }
@@ -1718,7 +1748,9 @@ export default function WorkspacePage() {
               status: data.status,
               groupId: data.groupId,
               instructorId: data.instructorId,
-              roomId: data.roomId
+              roomId: data.roomId,
+              day: data.day,
+              time: data.time
             });
             if (updated) { showToast("Full edit saved"); await fetchCourses(); }
           } else if (courseModalMode === 'duplicate') {
@@ -1728,7 +1760,9 @@ export default function WorkspacePage() {
               status: data.status || 'Active',
               groupId: data.groupId,
               instructorId: data.instructorId,
-              roomId: data.roomId
+              roomId: data.roomId,
+              day: data.day,
+              time: data.time
             });
             if (created) { showToast("Duplicate created"); await fetchCourses(); }
           } else if (courseModalMode === 'create') {
@@ -1738,7 +1772,9 @@ export default function WorkspacePage() {
               status: data.status || 'Active',
               groupId: data.groupId,
               instructorId: data.instructorId,
-              roomId: data.roomId
+              roomId: data.roomId,
+              day: data.day,
+              time: data.time
             });
             if (created) { showToast("Course created"); await fetchCourses(); }
           }

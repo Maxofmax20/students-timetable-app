@@ -12,12 +12,13 @@ interface TimetableViewProps {
   timeMode: string;
   weekStart: string;
   onRowAction?: (action: RowAction, row: Row) => void;
+  onExportCalendar?: () => void;
   isLoading?: boolean;
 }
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8 AM to 8 PM
 
-export function TimetableView({ rows, timeMode, weekStart, onRowAction, isLoading }: TimetableViewProps) {
+export function TimetableView({ rows, timeMode, weekStart, onRowAction, onExportCalendar, isLoading }: TimetableViewProps) {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isMobile, setIsMobile] = useState(false);
 
@@ -72,19 +73,35 @@ export function TimetableView({ rows, timeMode, weekStart, onRowAction, isLoadin
     );
   }
 
-  // Helper to parse "09:30-10:45"
+  // Accept common timetable delimiters so row mapping and rendering stay compatible.
   const parseTime = (timeStr: string) => {
     if (!timeStr || timeStr === '--') return null;
-    const [start, end] = timeStr.split('-');
-    if (!start || !end) return null;
-    
+
+    const parts = timeStr
+      .split(/\s*(?:→|->|–|—|-)\s*/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    if (parts.length !== 2) return null;
+
+    const [start, end] = parts;
     const [h1, m1] = start.split(':').map(Number);
     const [h2, m2] = end.split(':').map(Number);
-    
+
+    if ([h1, m1, h2, m2].some((value) => !Number.isFinite(value))) {
+      return null;
+    }
+
+    const startHour = h1 + m1 / 60;
+    const endHour = h2 + m2 / 60;
+    const duration = endHour - startHour;
+
+    if (duration <= 0) return null;
+
     return {
-      startHour: h1 + m1 / 60,
-      endHour: h2 + m2 / 60,
-      duration: (h2 + m2 / 60) - (h1 + m1 / 60)
+      startHour,
+      endHour,
+      duration
     };
   };
 
@@ -133,7 +150,7 @@ export function TimetableView({ rows, timeMode, weekStart, onRowAction, isLoadin
             </button>
           </div>
           
-          <Button variant="secondary" size="sm" className="gap-2">
+          <Button variant="secondary" size="sm" className="gap-2" onClick={onExportCalendar}>
             <span className="material-symbols-outlined text-[18px]">calendar_month</span>
             <span className="hidden sm:inline">Export ICS</span>
           </Button>
@@ -142,48 +159,70 @@ export function TimetableView({ rows, timeMode, weekStart, onRowAction, isLoadin
 
       {(isMobile || viewMode === 'list') ? (
         <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
+          <div className="mb-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-lg)]">
+            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--gold)]">Weekly agenda</div>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">Your timetable is grouped day by day so the full week is easy to read on mobile.</p>
+          </div>
           <div className="space-y-4">
             {displayDays.map((day) => {
-              const dayRows = rows.filter(r => r.day.substring(0,3).toLowerCase() === day.toLowerCase() && r.time !== '--');
-              if (!dayRows.length) return null;
+              const dayRows = rows
+                .filter(r => r.day.substring(0,3).toLowerCase() === day.toLowerCase() && r.time !== '--')
+                .sort((a, b) => a.time.localeCompare(b.time));
+
               return (
                 <section key={day} className="rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)] overflow-hidden">
-                  <div className="border-b border-[var(--border-soft)] bg-[var(--surface-2)] px-4 py-3 text-xs font-bold uppercase tracking-[0.15em] text-[var(--gold)]">
-                    {day}
+                  <div className="border-b border-[var(--border-soft)] bg-[var(--surface-2)] px-4 py-3 flex items-center justify-between gap-3">
+                    <div className="text-xs font-bold uppercase tracking-[0.15em] text-[var(--gold)]">{day}</div>
+                    <div className="text-[11px] text-[var(--text-muted)]">{dayRows.length} item{dayRows.length === 1 ? '' : 's'}</div>
                   </div>
-                  <div className="p-3 space-y-3">
-                    {dayRows.map((course) => {
-                      const isConflict = course.status === 'Conflict';
-                      return (
-                        <button
-                          key={course.id}
-                          onClick={() => onRowAction?.('Edit', course)}
-                          className={cn(
-                            "w-full rounded-2xl border p-4 text-left transition-all bg-[var(--bg-raised)]",
-                            isConflict ? "border-[var(--danger)]/40" : "border-[var(--border)]"
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="font-bold text-sm text-white truncate">{course.course}</div>
-                              <div className="mt-1 text-xs text-[var(--text-secondary)]">{course.group} • {course.instructor}</div>
+
+                  {dayRows.length ? (
+                    <div className="p-3 space-y-3">
+                      {dayRows.map((course) => {
+                        const isConflict = course.status === 'Conflict';
+                        const [courseTitle, courseKindRaw] = course.course.split(' — ');
+                        const courseKind = courseKindRaw || 'Session';
+                        return (
+                          <button
+                            key={course.id}
+                            onClick={() => onRowAction?.('Edit', course)}
+                            className={cn(
+                              "w-full rounded-2xl border p-4 text-left transition-all bg-[var(--bg-raised)]",
+                              isConflict ? "border-[var(--danger)]/40" : "border-[var(--border)]"
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="font-bold text-sm text-white leading-snug break-words">{courseTitle}</div>
+                                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 font-semibold text-[var(--gold-soft)]">{courseKind}</span>
+                                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 font-semibold text-white">{course.group}</span>
+                                </div>
+                              </div>
+                              {isConflict && <span className="material-symbols-outlined text-[var(--danger)] text-lg shrink-0">warning</span>}
                             </div>
-                            {isConflict && <span className="material-symbols-outlined text-[var(--danger)] text-lg shrink-0">warning</span>}
-                          </div>
-                          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                            <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2">
-                              <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-bold">Time</div>
-                              <div className="mt-1 text-white font-semibold">{course.time}</div>
+
+                            <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                              <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2">
+                                <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-bold">Time</div>
+                                <div className="mt-1 text-white font-semibold">{course.time}</div>
+                              </div>
+                              <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2">
+                                <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-bold">Room</div>
+                                <div className="mt-1 text-white font-semibold">{course.room}</div>
+                              </div>
+                              <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2 sm:col-span-2">
+                                <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-bold">Instructor</div>
+                                <div className="mt-1 text-white font-semibold break-words">{course.instructor}</div>
+                              </div>
                             </div>
-                            <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2">
-                              <div className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-bold">Room</div>
-                              <div className="mt-1 text-white font-semibold">{course.room}</div>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-sm text-[var(--text-secondary)]">No scheduled classes for {day}.</div>
+                  )}
                 </section>
               );
             })}

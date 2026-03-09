@@ -1,7 +1,11 @@
-export const dynamic = "force-dynamic";
+import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 
-import WorkspacePageClient from "./WorkspacePageClient";
+export const dynamic = 'force-dynamic';
 
-export default function WorkspacePage() {
-  return <WorkspacePageClient />;
+export default async function WorkspacePage() {
+  const userAgent = (await headers()).get('user-agent') || '';
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
+
+  redirect(isMobile ? '/workspace/timetable' : '/workspace/dashboard');
 }

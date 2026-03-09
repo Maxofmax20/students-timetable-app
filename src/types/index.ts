@@ -33,6 +33,19 @@ export type RowData = Row;
 
 export type RowUpdatePayload = Partial<Omit<Row, 'id' | 'source'>>;
 
+export type SessionApiItem = {
+  id: string;
+  day: string;
+  startMinute: number;
+  endMinute: number;
+  groupId?: string | null;
+  instructorId?: string | null;
+  roomId?: string | null;
+  group?: { id?: string; code?: string | null; name?: string | null } | null;
+  instructor?: { id?: string; name?: string | null } | null;
+  room?: { id?: string; code?: string | null; name?: string | null } | null;
+};
+
 export type CourseApiItem = {
   id: string;
   code: string;
@@ -44,6 +57,7 @@ export type CourseApiItem = {
   group?: { id?: string; code?: string | null; name?: string | null } | null;
   instructor?: { id?: string; name?: string | null } | null;
   room?: { id?: string; code?: string | null; name?: string | null } | null;
+  sessions?: SessionApiItem[];
 };
 
 export type GroupApiItem = {
@@ -91,4 +105,6 @@ export type CourseWritePayload = {
   groupId?: string | null;
   instructorId?: string | null;
   roomId?: string | null;
+  day?: string | null;
+  time?: string | null;
 };
