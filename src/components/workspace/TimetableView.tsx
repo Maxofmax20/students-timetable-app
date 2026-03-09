@@ -91,9 +91,10 @@ function rowToScheduleItem(row: Row): ScheduleItem | null {
   };
 }
 
-export function TimetableView({ items, rows = [], weekStart, focusDay, onRowAction, onExportCalendar, isLoading }: TimetableViewProps) {
+export function TimetableView({ items, rows = [], weekStart, focusDay, onExportCalendar, isLoading }: TimetableViewProps) {
   const [isMobile, setIsMobile] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [mobileDay, setMobileDay] = useState<string>('');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -106,11 +107,7 @@ export function TimetableView({ items, rows = [], weekStart, focusDay, onRowActi
     }
 
     const update = () => {
-      const mobile = media.matches;
-      setIsMobile(mobile);
-      if (mobile) {
-        setViewMode('list');
-      }
+      setIsMobile(media.matches);
     };
 
     update();
@@ -124,6 +121,18 @@ export function TimetableView({ items, rows = [], weekStart, focusDay, onRowActi
   }, [items, rows]);
 
   const orderedDays = useMemo(() => getOrderedScheduleDays(weekStart, focusDay), [weekStart, focusDay]);
+
+  useEffect(() => {
+    const preferredDay = focusDay?.trim().substring(0, 3);
+    if (preferredDay && orderedDays.includes(preferredDay as (typeof orderedDays)[number])) {
+      setMobileDay(preferredDay);
+      return;
+    }
+
+    const firstWithItems = orderedDays.find((day) => canonicalItems.some((item) => item.day === day));
+    setMobileDay(firstWithItems || orderedDays[0] || '');
+  }, [orderedDays, canonicalItems, focusDay]);
+
   const itemsByDay = useMemo(
     () => Object.fromEntries(orderedDays.map((day) => [day, canonicalItems.filter((item) => item.day === day)])) as Record<string, ScheduleItem[]>,
     [canonicalItems, orderedDays]
@@ -133,8 +142,14 @@ export function TimetableView({ items, rows = [], weekStart, focusDay, onRowActi
   const hourMarks = useMemo(() => buildHourMarks(startMinute, endMinute), [startMinute, endMinute]);
   const totalHours = Math.max((endMinute - startMinute) / 60, 1);
 
-  const showGrid = !isMobile && viewMode === 'grid';
+  const showDesktopGrid = !isMobile && viewMode === 'grid';
+  const showMobileGrid = isMobile && viewMode === 'grid';
   const gridMinWidth = GRID_TIME_RAIL_WIDTH + orderedDays.length * GRID_MIN_COLUMN_WIDTH;
+  const selectedMobileDay = mobileDay && orderedDays.includes(mobileDay as (typeof orderedDays)[number]) ? mobileDay : orderedDays[0];
+  const selectedMobileIndex = Math.max(orderedDays.indexOf(selectedMobileDay as (typeof orderedDays)[number]), 0);
+  const selectedMobileItems = selectedMobileDay ? (itemsByDay[selectedMobileDay] || []) : [];
+  const mobilePlacements = layoutDayItems(selectedMobileItems);
+  const mobileTimeRailWidth = 56;
 
   const handleModeChange = (mode: ViewMode) => {
     setViewMode(mode);
@@ -181,23 +196,21 @@ export function TimetableView({ items, rows = [], weekStart, focusDay, onRowActi
         <div className="flex flex-col gap-1">
           <h2 className="text-xl font-bold tracking-tight text-white md:text-2xl">Timetable</h2>
           <p className="text-sm text-[var(--text-secondary)]">
-            {isMobile ? 'List view is used on mobile for a readable, reliable schedule.' : 'Switch between Grid and List on desktop using the same real schedule data.'}
+            {isMobile
+              ? 'On phone, Grid shows one day at a time with clear day navigation. List stays available for scanning the whole week.'
+              : 'Switch between Grid and List on desktop using the same real schedule data.'}
           </p>
         </div>
 
-        <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
-          {isMobile ? (
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--gold)]">
-              List view
-            </div>
-          ) : (
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:items-end">
+          <div className="flex items-center justify-between gap-3 sm:justify-end">
             <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-1 shadow-inner">
               <button
                 type="button"
                 onClick={() => handleModeChange('grid')}
                 className={cn(
                   'rounded-lg px-3 py-1.5 text-sm font-bold transition-all md:px-4',
-                  showGrid ? 'border border-[var(--border)] bg-[var(--surface-3)] text-white shadow-md' : 'text-[var(--text-muted)] hover:text-white'
+                  viewMode === 'grid' ? 'border border-[var(--border)] bg-[var(--surface-3)] text-white shadow-md' : 'text-[var(--text-muted)] hover:text-white'
                 )}
               >
                 Grid
@@ -207,18 +220,24 @@ export function TimetableView({ items, rows = [], weekStart, focusDay, onRowActi
                 onClick={() => handleModeChange('list')}
                 className={cn(
                   'rounded-lg px-3 py-1.5 text-sm font-bold transition-all md:px-4',
-                  !showGrid ? 'border border-[var(--border)] bg-[var(--surface-3)] text-white shadow-md' : 'text-[var(--text-muted)] hover:text-white'
+                  viewMode === 'list' ? 'border border-[var(--border)] bg-[var(--surface-3)] text-white shadow-md' : 'text-[var(--text-muted)] hover:text-white'
                 )}
               >
                 List
               </button>
             </div>
-          )}
 
-          <Button variant="secondary" size="sm" className="gap-2" onClick={onExportCalendar}>
-            <span className="material-symbols-outlined text-[18px]">calendar_month</span>
-            <span className="hidden sm:inline">Export ICS</span>
-          </Button>
+            <Button variant="secondary" size="sm" className="gap-2" onClick={onExportCalendar}>
+              <span className="material-symbols-outlined text-[18px]">calendar_month</span>
+              <span className="hidden sm:inline">Export ICS</span>
+            </Button>
+          </div>
+
+          {isMobile ? (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--gold)]">
+              {viewMode === 'grid' ? 'Mobile grid' : 'List view'}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -233,7 +252,7 @@ export function TimetableView({ items, rows = [], weekStart, focusDay, onRowActi
               Add real session day/time details in Courses and they will appear in both the list and grid timetable views.
             </p>
           </div>
-        ) : showGrid ? (
+        ) : showDesktopGrid ? (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow-lg)]">
               <div>
@@ -330,6 +349,134 @@ export function TimetableView({ items, rows = [], weekStart, focusDay, onRowActi
                       );
                     })}
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : showMobileGrid ? (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-lg)]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--gold)]">Mobile grid</div>
+                  <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                    One day at a time, placed by real start/end times.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                  {selectedMobileIndex + 1} / {orderedDays.length}
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMobileDay(orderedDays[Math.max(selectedMobileIndex - 1, 0)])}
+                  disabled={selectedMobileIndex === 0}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-2)] text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Previous day"
+                >
+                  <span className="material-symbols-outlined text-[20px]">chevron_left</span>
+                </button>
+
+                <div className="min-w-0 flex-1 overflow-x-auto">
+                  <div className="flex min-w-max gap-2 pr-1">
+                    {orderedDays.map((day) => {
+                      const isActive = day === selectedMobileDay;
+                      const count = itemsByDay[day]?.length || 0;
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => setMobileDay(day)}
+                          className={cn(
+                            'rounded-xl border px-3 py-2 text-left transition-all',
+                            isActive
+                              ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-white shadow-[var(--shadow-sm)]'
+                              : 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-secondary)]'
+                          )}
+                        >
+                          <div className="text-xs font-bold uppercase tracking-[0.12em]">{day}</div>
+                          <div className="mt-0.5 text-[11px]">{count} item{count === 1 ? '' : 's'}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setMobileDay(orderedDays[Math.min(selectedMobileIndex + 1, orderedDays.length - 1)])}
+                  disabled={selectedMobileIndex === orderedDays.length - 1}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-2)] text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Next day"
+                >
+                  <span className="material-symbols-outlined text-[20px]">chevron_right</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
+              <div className="grid border-b border-[var(--border)] bg-[var(--surface-2)]" style={{ gridTemplateColumns: `${mobileTimeRailWidth}px 1fr` }}>
+                <div className="border-r border-[var(--border)]" />
+                <div className="px-4 py-4 text-center text-sm font-bold uppercase tracking-[0.15em] text-[var(--gold)]">{selectedMobileDay}</div>
+              </div>
+
+              <div className="grid" style={{ gridTemplateColumns: `${mobileTimeRailWidth}px 1fr` }}>
+                <div className="relative border-r border-[var(--border)] bg-[var(--surface)]">
+                  {hourMarks.map((mark, index) => (
+                    <div
+                      key={mark}
+                      className="absolute inset-x-0 px-2 text-right text-[10px] font-bold text-[var(--text-muted)]"
+                      style={{ top: `${index * GRID_ROW_HEIGHT - 7}px` }}
+                    >
+                      {formatMinute(mark)}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="relative" style={{ minHeight: `${totalHours * GRID_ROW_HEIGHT}px` }}>
+                  {hourMarks.slice(0, -1).map((mark, index) => (
+                    <div
+                      key={mark}
+                      className="pointer-events-none absolute inset-x-0 border-t border-[var(--border-soft)]/70"
+                      style={{ top: `${index * GRID_ROW_HEIGHT}px` }}
+                    />
+                  ))}
+
+                  {selectedMobileItems.length === 0 ? (
+                    <div className="absolute inset-x-3 top-3 rounded-xl border border-dashed border-[var(--border)]/80 bg-[var(--surface-2)]/70 px-3 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                      No sessions scheduled for {selectedMobileDay}
+                    </div>
+                  ) : null}
+
+                  {mobilePlacements.map(({ item, lane, lanes }) => {
+                    const top = ((item.startMinute - startMinute) / 60) * GRID_ROW_HEIGHT;
+                    const height = Math.max(((item.endMinute - item.startMinute) / 60) * GRID_ROW_HEIGHT, 68);
+                    const width = `calc(${100 / lanes}% - 8px)`;
+                    const left = `calc(${(lane * 100) / lanes}% + 4px)`;
+                    const tone = getItemTone(item);
+
+                    return (
+                      <article
+                        key={item.id}
+                        className={cn('absolute overflow-hidden rounded-2xl border px-3 py-3 shadow-[var(--shadow-md)] active:scale-[0.99]', tone)}
+                        style={{ top: `${top + 4}px`, left, width, height: `${height - 8}px` }}
+                      >
+                        <div className="flex h-full flex-col justify-between gap-2">
+                          <div className="space-y-1 min-w-0">
+                            <div className="line-clamp-2 text-sm font-bold leading-snug text-white">{item.course}</div>
+                            <div className="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-white/80">{item.type}</div>
+                          </div>
+                          <div className="space-y-1 text-[11px] text-white/90">
+                            <div className="truncate font-semibold">{item.group}</div>
+                            <div className="truncate">{item.room}</div>
+                            <div className="truncate">{formatMinute(item.startMinute)} → {formatMinute(item.endMinute)}</div>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               </div>
             </div>
