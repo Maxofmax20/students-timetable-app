@@ -44,8 +44,8 @@ export function SearchInput({
   return (
     <div className={cn('relative', containerClassName, className)}>
       <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
-        <span className="inline-flex h-8 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">
-          <span className="material-symbols-outlined text-[14px]">search</span>
+        <span className="inline-flex h-6 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 text-[9px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">
+          <span className="material-symbols-outlined text-[12px]">search</span>
           Find
         </span>
       </div>
@@ -56,7 +56,7 @@ export function SearchInput({
         onChange={onChange}
         placeholder={placeholder}
         className={cn(
-          'h-[52px] w-full rounded-[22px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] pl-[5.65rem] pr-12 text-sm font-medium text-white shadow-[var(--shadow-sm)] outline-none transition-all placeholder:text-[var(--text-muted)] focus:border-[var(--gold)] focus:ring-4 focus:ring-[var(--focus-ring)] focus:shadow-[var(--shadow-md)]',
+          'h-11 w-full rounded-2xl border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] pl-[4.5rem] pr-12 text-sm font-medium text-white shadow-[var(--shadow-sm)] outline-none transition-all placeholder:text-[var(--text-muted)] focus:border-[var(--gold)] focus:ring-4 focus:ring-[var(--focus-ring)] focus:shadow-[var(--shadow-md)]',
           inputClassName
         )}
       />

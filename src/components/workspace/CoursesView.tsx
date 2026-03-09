@@ -58,7 +58,7 @@ export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, 
   );
 
   return (
-     <div className="flex flex-col gap-6 p-1 md:p-6 h-full animate-panel-pop">
+     <div className="flex flex-col gap-6 p-1 md:p-6 flex-1 min-h-0 animate-panel-pop">
         <div className="flex flex-wrap items-center justify-between gap-4 px-2">
            <div className="flex flex-col gap-1">
               <h2 className="text-3xl font-bold text-white tracking-tight">Courses</h2>
@@ -79,7 +79,7 @@ export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, 
            </div>
         </div>
 
-        <div className="flex-1 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)] flex flex-col">
+        <div className="flex-1 bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-auto shadow-[var(--shadow-lg)] flex flex-col">
            {filteredRows.length > 0 ? (
              <DataTable 
                rows={filteredRows} 

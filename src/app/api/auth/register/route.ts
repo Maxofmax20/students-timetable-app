@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 import { DEFAULT_TIMETABLE } from '@/lib/constants';
 import { consumeRateLimit, getClientIp, withRateLimitHeaders } from '@/lib/rate-limit';
+import crypto from 'crypto';
 
 const schema = z.object({
   email: z.string().email().max(160),
@@ -11,20 +12,25 @@ const schema = z.object({
   displayName: z.string().min(2).max(60).optional()
 });
 
+function generateCode(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request.headers);
   const limit = consumeRateLimit(`auth:register:${ip}`, 10, 15 * 60 * 1000);
 
   if (!limit.ok) {
-    const response = NextResponse.json({ ok: false, message: 'تم تجاوز عدد المحاولات. حاول لاحقًا.' }, { status: 429 });
+    const response = NextResponse.json({ ok: false, message: 'Too many attempts. Try again later.' }, { status: 429 });
     return withRateLimitHeaders(response, limit);
   }
 
   try {
     const body = schema.parse(await request.json());
-    const existing = await prisma.user.findUnique({ where: { email: body.email.toLowerCase() } });
+    const email = body.email.toLowerCase();
+    const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
-      const response = NextResponse.json({ ok: false, message: 'البريد مستخدم بالفعل' }, { status: 409 });
+      const response = NextResponse.json({ ok: false, message: 'This email is already registered' }, { status: 409 });
       return withRateLimitHeaders(response, limit);
     }
 
@@ -32,7 +38,7 @@ export async function POST(request: NextRequest) {
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
-          email: body.email.toLowerCase(),
+          email,
           passwordHash,
           displayName: body.displayName
         }
@@ -58,11 +64,29 @@ export async function POST(request: NextRequest) {
         }
       });
 
+      // Generate email verification code
+      const code = generateCode();
+      const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+
+      await tx.otpCode.create({
+        data: {
+          email,
+          codeHash,
+          purpose: 'REGISTER_VERIFY',
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+          userId: user.id
+        }
+      });
+
+      // TODO: Send via SMTP when configured
+      console.log(`[REGISTER_VERIFY] Code for ${email}: ${code}`);
+
       return { user };
     });
 
     const response = NextResponse.json({
       ok: true,
+      requiresVerification: true,
       user: {
         id: result.user.id,
         email: result.user.email,
@@ -77,7 +101,7 @@ export async function POST(request: NextRequest) {
       return withRateLimitHeaders(response, limit);
     }
 
-    const response = NextResponse.json({ ok: false, message: 'تعذر إنشاء الحساب' }, { status: 500 });
+    const response = NextResponse.json({ ok: false, message: 'Account creation failed' }, { status: 500 });
     return withRateLimitHeaders(response, limit);
   }
 }

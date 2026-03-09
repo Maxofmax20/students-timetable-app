@@ -1,23 +1,29 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 
-type Mode = 'login' | 'register';
+type Mode = 'login' | 'register' | 'verify' | 'forgot' | 'reset';
 type ProviderMap = Record<string, { id: string; name: string }>;
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<Mode>('login');
+  const searchParams = useSearchParams();
+  const initialMode = (searchParams?.get('mode') as Mode) || 'login';
+  const resetToken = searchParams?.get('token') || '';
+
+  const [mode, setMode] = useState<Mode>(resetToken ? 'reset' : initialMode);
   const [providers, setProviders] = useState<ProviderMap>({});
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [verifyCode, setVerifyCode] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
@@ -28,28 +34,42 @@ export default function AuthPage() {
       .catch(() => setProviders({}));
   }, []);
 
-  async function submit(event: React.FormEvent) {
+  // Clear messages on mode change
+  useEffect(() => {
+    setError('');
+    setSuccess('');
+  }, [mode]);
+
+  async function handleLogin(event: React.FormEvent) {
     event.preventDefault();
     setError('');
     setLoading(true);
 
-    if (mode === 'login') {
-      const res = await signIn('credentials', {
-        redirect: false,
-        email,
-        password,
-      });
+    const res = await signIn('credentials', {
+      redirect: false,
+      email,
+      password,
+    });
 
-      if (res?.error) {
-        setError(res.error === 'CredentialsSignin' ? 'Invalid credentials' : res.error);
+    if (res?.error) {
+      if (res.error === 'EMAIL_NOT_VERIFIED' || res.error.includes('EMAIL_NOT_VERIFIED')) {
+        setMode('verify');
         setLoading(false);
         return;
       }
-      
-      router.push('/workspace');
-      router.refresh();
+      setError(res.error === 'CredentialsSignin' ? 'Invalid credentials' : res.error);
+      setLoading(false);
       return;
     }
+    
+    router.push('/workspace');
+    router.refresh();
+  }
+
+  async function handleRegister(event: React.FormEvent) {
+    event.preventDefault();
+    setError('');
+    setLoading(true);
 
     const response = await fetch('/api/auth/register', {
       method: 'POST',
@@ -64,15 +84,114 @@ export default function AuthPage() {
       return;
     }
 
-    await signIn('credentials', {
-      redirect: false,
-      email,
-      password,
-    });
+    if (data.requiresVerification) {
+      setMode('verify');
+      setLoading(false);
+      return;
+    }
 
+    await signIn('credentials', { redirect: false, email, password });
     router.push('/workspace');
     router.refresh();
   }
+
+  async function handleVerifyCode(event: React.FormEvent) {
+    event.preventDefault();
+    setError('');
+    setLoading(true);
+
+    const response = await fetch('/api/auth/verify-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code: verifyCode })
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      setError(data?.message || 'Verification failed');
+      setLoading(false);
+      return;
+    }
+
+    setSuccess('Email verified! Signing you in...');
+    const res = await signIn('credentials', { redirect: false, email, password });
+    if (res?.error) {
+      setMode('login');
+      setSuccess('Email verified. Please sign in.');
+      setLoading(false);
+      return;
+    }
+    router.push('/workspace');
+    router.refresh();
+  }
+
+  async function handleResendCode() {
+    setError('');
+    setLoading(true);
+    await fetch('/api/auth/resend-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    setSuccess('A new code has been sent if the account exists.');
+    setLoading(false);
+  }
+
+  async function handleForgotPassword(event: React.FormEvent) {
+    event.preventDefault();
+    setError('');
+    setLoading(true);
+
+    await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+
+    setSuccess('If an account exists with this email, a password reset link has been sent.');
+    setLoading(false);
+  }
+
+  async function handleResetPassword(event: React.FormEvent) {
+    event.preventDefault();
+    setError('');
+    setLoading(true);
+
+    const response = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: resetToken, password })
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      setError(data?.message || 'Password reset failed');
+      setLoading(false);
+      return;
+    }
+
+    setSuccess('Password reset successfully. You can now sign in.');
+    setTimeout(() => setMode('login'), 2000);
+    setLoading(false);
+  }
+
+  function submit(event: React.FormEvent) {
+    if (mode === 'login') return handleLogin(event);
+    if (mode === 'register') return handleRegister(event);
+    if (mode === 'verify') return handleVerifyCode(event);
+    if (mode === 'forgot') return handleForgotPassword(event);
+    if (mode === 'reset') return handleResetPassword(event);
+  }
+
+  const headings: Record<Mode, { title: string; subtitle: string }> = {
+    login: { title: 'Welcome back', subtitle: 'Enter your details to continue to your workspace.' },
+    register: { title: 'Get started', subtitle: 'Create an account to start building your timetable.' },
+    verify: { title: 'Verify your email', subtitle: `Enter the 6-digit code sent to ${email || 'your email'}.` },
+    forgot: { title: 'Forgot password', subtitle: 'Enter your email and we\'ll send you a reset link.' },
+    reset: { title: 'Reset password', subtitle: 'Enter your new password below.' }
+  };
+
+  const heading = headings[mode];
 
   return (
     <main className="min-h-screen w-full flex bg-[var(--bg)] text-[var(--text)] selection:bg-[var(--gold)]/30 font-sans selection:text-[var(--gold-fg)]">
@@ -127,16 +246,15 @@ export default function AuthPage() {
            
            <div className="flex flex-col gap-2">
               <h2 className="text-4xl font-extrabold text-white tracking-tight">
-                {mode === 'login' ? 'Welcome back' : 'Get started'}
+                {heading.title}
               </h2>
               <p className="text-[var(--text-secondary)] font-medium">
-                 {mode === 'login' 
-                   ? 'Enter your details to continue to your workspace.' 
-                   : 'Create an account to start building your timetable.'}
+                 {heading.subtitle}
               </p>
            </div>
 
            <form onSubmit={submit} className="space-y-5">
+              {/* Register: Name field */}
               {mode === 'register' && (
                 <div className="animate-fade-in">
                   <Input 
@@ -149,38 +267,97 @@ export default function AuthPage() {
                 </div>
               )}
               
-              <Input 
-                label="Email Address" 
-                type="email" 
-                placeholder="name@university.edu" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                icon="mail"
-              />
+              {/* Login, Register, Forgot: Email field */}
+              {(mode === 'login' || mode === 'register' || mode === 'forgot') && (
+                <Input 
+                  label="Email Address" 
+                  type="email" 
+                  placeholder="name@university.edu" 
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  icon="mail"
+                />
+              )}
 
-              <div className="space-y-1">
-                 <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest ml-1">Password</label>
-                    {mode === 'login' && (
-                      <Link href="#" className="text-[10px] font-bold text-[var(--gold)] hover:text-[var(--gold-hover)] uppercase tracking-wider">Forgot?</Link>
-                    )}
-                 </div>
-                 <Input 
+              {/* Login, Register: Password field */}
+              {(mode === 'login' || mode === 'register') && (
+                <div className="space-y-2">
+                   <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest ml-1">Password</label>
+                      {mode === 'login' && (
+                        <button 
+                          type="button" 
+                          onClick={() => setMode('forgot')} 
+                          className="text-[10px] font-bold text-[var(--gold)] hover:text-[var(--gold-hover)] uppercase tracking-wider"
+                        >
+                          Forgot?
+                        </button>
+                      )}
+                   </div>
+                   <Input 
+                      type="password" 
+                      placeholder="••••••••" 
+                      value={password} 
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      icon="lock"
+                      hideLabel
+                   />
+                </div>
+              )}
+
+              {/* Verify: Code field */}
+              {mode === 'verify' && (
+                <div className="animate-fade-in space-y-4">
+                  <Input
+                    label="Verification Code"
+                    placeholder="000000"
+                    value={verifyCode}
+                    onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    required
+                    icon="pin"
+                    className="text-center text-2xl tracking-[0.5em] font-mono"
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => void handleResendCode()} 
+                    className="text-xs font-bold text-[var(--gold)] hover:text-[var(--gold-hover)] transition-colors"
+                    disabled={loading}
+                  >
+                    Didn&apos;t receive a code? Resend
+                  </button>
+                </div>
+              )}
+
+              {/* Reset: New password field */}
+              {mode === 'reset' && (
+                <div className="animate-fade-in">
+                  <Input 
+                    label="New Password" 
                     type="password" 
                     placeholder="••••••••" 
                     value={password} 
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     icon="lock"
-                    hideLabel
-                 />
-              </div>
+                  />
+                </div>
+              )}
 
+              {/* Error message */}
               {error && (
                 <div className="p-4 rounded-xl bg-[var(--danger-muted)] border border-[var(--danger)]/20 text-[var(--danger)] text-xs font-bold flex items-center gap-3 animate-panel-pop">
                    <span className="material-symbols-outlined text-lg">error</span>
                    {error}
+                </div>
+              )}
+
+              {/* Success message */}
+              {success && (
+                <div className="p-4 rounded-xl bg-[var(--success-muted,var(--info-muted))] border border-[var(--success,var(--info))]/20 text-[var(--success,var(--info))] text-xs font-bold flex items-center gap-3 animate-panel-pop">
+                   <span className="material-symbols-outlined text-lg">check_circle</span>
+                   {success}
                 </div>
               )}
 
@@ -190,11 +367,18 @@ export default function AuthPage() {
                 type="submit" 
                 disabled={loading}
               >
-                {loading ? 'Authenticating...' : mode === 'login' ? 'Sign In' : 'Create Account'}
+                {loading ? 'Processing...' : {
+                  login: 'Sign In',
+                  register: 'Create Account',
+                  verify: 'Verify Email',
+                  forgot: 'Send Reset Link',
+                  reset: 'Reset Password',
+                }[mode]}
               </Button>
            </form>
 
-           {Object.keys(providers).filter((id) => id !== 'credentials').length > 0 && (
+           {/* OAuth providers — only for login/register */}
+           {(mode === 'login' || mode === 'register') && Object.keys(providers).filter((id) => id !== 'credentials').length > 0 && (
              <>
                <div className="relative">
                   <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[var(--border-soft)]"></div></div>
@@ -228,16 +412,29 @@ export default function AuthPage() {
              </>
            )}
 
-           <div className="text-center">
-              <span className="text-sm text-[var(--text-secondary)] font-medium">
-                {mode === 'login' ? "New here?" : "Joined us before?"}
-              </span>
-              <button 
-                onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
-                className="ml-2 text-sm font-bold text-[var(--gold)] hover:text-[var(--gold-hover)] transition-colors underline underline-offset-4 decoration-[var(--gold)]/30"
-              >
-                {mode === 'login' ? 'Create an account' : 'Log in to your account'}
-              </button>
+           {/* Mode switching links */}
+           <div className="text-center space-y-2">
+              {(mode === 'login' || mode === 'register') && (
+                <>
+                  <span className="text-sm text-[var(--text-secondary)] font-medium">
+                    {mode === 'login' ? "New here?" : "Joined us before?"}
+                  </span>
+                  <button 
+                    onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
+                    className="ml-2 text-sm font-bold text-[var(--gold)] hover:text-[var(--gold-hover)] transition-colors underline underline-offset-4 decoration-[var(--gold)]/30"
+                  >
+                    {mode === 'login' ? 'Create an account' : 'Log in to your account'}
+                  </button>
+                </>
+              )}
+              {(mode === 'verify' || mode === 'forgot' || mode === 'reset') && (
+                <button 
+                  onClick={() => setMode('login')}
+                  className="text-sm font-bold text-[var(--gold)] hover:text-[var(--gold-hover)] transition-colors underline underline-offset-4 decoration-[var(--gold)]/30"
+                >
+                  Back to sign in
+                </button>
+              )}
            </div>
         </div>
 

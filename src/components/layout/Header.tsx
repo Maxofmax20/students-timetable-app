@@ -96,13 +96,13 @@ export function Header({ title, subtitle, onMenuClick, actions }: HeaderProps) {
         {session?.user && (
            <DropdownMenu
              trigger={
-                <button className="group flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] pl-3 pr-1 py-1.5 shadow-[var(--shadow-sm)] transition-all hover:border-[var(--text-muted)] hover:shadow-[var(--shadow-md)]">
-                   <div className="flex flex-col items-end hidden sm:flex">
+                <button className="group flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] pl-3.5 pr-2 py-2 shadow-[var(--shadow-sm)] transition-all hover:border-[var(--text-muted)] hover:shadow-[var(--shadow-md)]">
+                   <div className="hidden sm:flex flex-col items-end mr-0.5">
                      <span className="text-xs font-bold text-white leading-none">{session.user.name}</span>
                      <span className="text-[10px] text-[var(--text-muted)] font-medium">Free Plan</span>
                    </div>
                    <Avatar name={session.user.name || 'User'} size="sm" className="border border-[var(--border)]" />
-                   <span className="material-symbols-outlined text-[var(--text-muted)] text-lg mr-1 group-hover:text-white transition-colors">expand_more</span>
+                   <span className="material-symbols-outlined text-[var(--text-muted)] text-base group-hover:text-white transition-colors">expand_more</span>
                 </button>
              }
              align="right"

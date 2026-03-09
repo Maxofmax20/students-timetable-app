@@ -65,6 +65,10 @@ providers.push(
           throw new Error("Invalid credentials");
         }
 
+        if (!user.emailVerifiedAt) {
+          throw new Error("EMAIL_NOT_VERIFIED");
+        }
+
         return {
           id: user.id,
           email: user.email,
