@@ -20,8 +20,8 @@ export function DashboardView({
   onAction,
   isLoading
 }: DashboardViewProps) {
-  // Get upcoming classes (mocking "today" logic for preview)
-  const upcomingToday = rows.slice(0, 3);
+  // Show first 3 courses as a quick preview
+  const previewCourses = rows.slice(0, 3);
 
   if (isLoading) {
     return (
@@ -160,9 +160,9 @@ export function DashboardView({
         <div className="flex flex-col gap-4">
           <h3 className="text-sm font-bold text-[var(--text-secondary)] uppercase tracking-[0.1em] ml-1">Schedule Preview</h3>
           <div className="flex-1 p-6 rounded-[var(--radius-lg)] bg-[var(--surface)] border border-[var(--border)] flex flex-col gap-4">
-            {upcomingToday.length > 0 ? (
+            {previewCourses.length > 0 ? (
               <div className="space-y-3">
-                {upcomingToday.map((row, i) => (
+                {previewCourses.map((row, i) => (
                   <div key={i} className="group p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border-soft)] hover:border-[var(--text-muted)] transition-all flex items-center gap-3">
                     <div className="w-1.5 h-10 rounded-full bg-[var(--gold)]"></div>
                     <div className="flex-1 min-w-0">

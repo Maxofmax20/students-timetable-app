@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { ToastProvider } from "@/components/ui/Toast";
+import { useSession } from "next-auth/react";
 
 export interface AppShellProps {
   children: React.ReactNode;
@@ -14,6 +15,7 @@ export interface AppShellProps {
 }
 
 export function AppShell({ children, title, subtitle, actions }: AppShellProps) {
+  const { data: session } = useSession();
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState(() => {
     if (typeof window !== 'undefined') {
@@ -52,7 +54,8 @@ export function AppShell({ children, title, subtitle, actions }: AppShellProps) 
         {/* Sidebar Navigation */}
         <React.Suspense fallback={<div className="w-[240px] hidden lg:block bg-[var(--bg-raised)] border-r border-[var(--border)]" />}>
           <Sidebar 
-            isOpen={sidebarOpen} 
+            isOpen={sidebarOpen}
+            userName={session?.user?.name || undefined} 
             isCollapsed={sidebarCollapsed}
             onToggleCollapse={toggleCollapse}
             onClose={() => setSidebarOpen(false)} 

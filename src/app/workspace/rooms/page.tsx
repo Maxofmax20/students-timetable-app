@@ -132,12 +132,12 @@ export default function RoomsPage() {
                 <p className="text-[var(--text-secondary)] text-sm">Assign physical spaces to scheduled courses.</p>
              </div>
              
-             <div className="flex items-center gap-3">
+             <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 <SearchInput 
                   placeholder="Search rooms or buildings..." 
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-[280px]"
+                  className="w-full sm:w-[280px]"
                 />
                 <Button onClick={openCreate} variant="primary" className="gap-2">
                   <span className="material-symbols-outlined text-[20px]">meeting_room</span>
@@ -183,7 +183,7 @@ export default function RoomsPage() {
                              </span>
                           </td>
                           <td className="px-6 py-4 text-right">
-                             <div className="flex items-center justify-end gap-1 opacity-0 group-hover/row:opacity-100 transition-all">
+                             <div className="flex items-center justify-end gap-1 opacity-100 lg:opacity-0 lg:group-hover/row:opacity-100 transition-all">
                                <Button variant="ghost" size="sm" onClick={() => openEdit(r)} className="h-8 w-8 p-0 rounded-lg">
                                  <span className="material-symbols-outlined text-[18px]">edit_square</span>
                                </Button>

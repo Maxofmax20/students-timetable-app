@@ -120,12 +120,12 @@ export default function InstructorsPage() {
                 <p className="text-[var(--text-secondary)] text-sm">Assign faculty members to courses and groups.</p>
              </div>
              
-             <div className="flex items-center gap-3">
+             <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-3">
                 <SearchInput 
                   placeholder="Search instructors..." 
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-[280px]"
+                  className="w-full sm:w-[280px]"
                 />
                 <Button onClick={openCreate} variant="primary" className="gap-2">
                   <span className="material-symbols-outlined text-[20px]">person_add</span>
@@ -153,7 +153,7 @@ export default function InstructorsPage() {
                       {filteredInstructors.map(i => (
                         <tr key={i.id} className="group/row hover:bg-[var(--surface-2)]/30 transition-all">
                           <td className="px-6 py-4">
-                             <div className="flex items-center gap-3">
+                             <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-3">
                                 <Avatar name={i.name} size="sm" />
                                 <span className="text-white font-bold text-sm tracking-tight">{i.name}</span>
                              </div>
@@ -165,7 +165,7 @@ export default function InstructorsPage() {
                              </div>
                           </td>
                           <td className="px-6 py-4 text-right">
-                             <div className="flex items-center justify-end gap-1 opacity-0 group-hover/row:opacity-100 transition-all">
+                             <div className="flex items-center justify-end gap-1 opacity-100 lg:opacity-0 lg:group-hover/row:opacity-100 transition-all">
                                <Button variant="ghost" size="sm" onClick={() => openEdit(i)} className="h-8 w-8 p-0 rounded-lg">
                                  <span className="material-symbols-outlined text-[18px]">edit_square</span>
                                </Button>

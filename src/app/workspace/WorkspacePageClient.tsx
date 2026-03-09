@@ -297,7 +297,7 @@ export default function WorkspacePage() {
   const [denseRows, setDenseRows] = useState(true);
 
   const [toast, setToast] = useState<string | null>(null);
-  const [rows, setRows] = useState<Row[]>(placeholderRows);
+  const [rows, setRows] = useState<Row[]>([]);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [authState, setAuthState] = useState<"unknown" | "authed" | "guest">("unknown");
   const [loadingRows, setLoadingRows] = useState(false);
@@ -351,7 +351,7 @@ export default function WorkspacePage() {
     courseRoomId: ""
   });
 
-  const rowsRef = useRef<Row[]>(placeholderRows);
+  const rowsRef = useRef<Row[]>([]);
 
   useEffect(() => {
     rowsRef.current = rows;

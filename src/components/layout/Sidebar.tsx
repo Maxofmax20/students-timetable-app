@@ -11,6 +11,7 @@ interface SidebarProps {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   onClose: () => void;
+  userName?: string;
 }
 
 const navSections = [
@@ -38,7 +39,7 @@ const navSections = [
   }
 ];
 
-export function Sidebar({ isOpen, isCollapsed, onToggleCollapse, onClose }: SidebarProps) {
+export function Sidebar({ isOpen, isCollapsed, onToggleCollapse, onClose, userName }: SidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentTab = searchParams?.get("tab");
@@ -134,7 +135,7 @@ export function Sidebar({ isOpen, isCollapsed, onToggleCollapse, onClose }: Side
           </div>
           {!isCollapsed && (
             <div className="flex flex-col min-w-0 animate-fade-in">
-              <span className="text-xs font-bold text-white truncate">Admin Account</span>
+              <span className="text-xs font-bold text-white truncate">{userName || "Account"}</span>
               <span className="text-[10px] text-[var(--text-muted)] truncate">View Profile</span>
             </div>
           )}
