@@ -199,36 +199,46 @@ export default function InstructorsPage() {
          open={isModalOpen} 
          onClose={() => setIsModalOpen(false)} 
          title={modalMode === 'create' ? 'Add New Instructor' : 'Edit Instructor'} 
+         subtitle={modalMode === 'create' ? 'Create a faculty record with the contact details you want available during assignment.' : 'Update the instructor profile without leaving the resource page.'}
          actions={
            <div className="flex gap-3">
-             <Button variant="ghost" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
              <Button variant="primary" onClick={handleSave} disabled={actionLoading}>
                {actionLoading ? 'Saving...' : modalMode === 'create' ? 'Add Instructor' : 'Save Changes'}
              </Button>
            </div>
          }
        >
-         <div className="space-y-4 py-2">
-            <Input 
-              label="Full Name" 
-              value={formData.name} 
-              onChange={e => setFormData({...formData, name: e.target.value})} 
-              placeholder="e.g. Prof. Alan Turing" 
-            />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+         <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] p-4 md:p-5">
+            <div className="mb-4">
+              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Instructor details</div>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">Capture the name first, then add optional contact details for scheduling coordination.</p>
+            </div>
+            <div className="space-y-4 py-1">
               <Input 
-                label="Email" 
-                type="email"
-                value={formData.email} 
-                onChange={e => setFormData({...formData, email: e.target.value})} 
-                placeholder="alan@university.edu" 
+                label="Full Name" 
+                value={formData.name} 
+                onChange={e => setFormData({...formData, name: e.target.value})} 
+                placeholder="e.g. Prof. Alan Turing" 
+                helperText="This is the primary label shown in course assignment selectors."
               />
-              <Input 
-                label="Phone" 
-                value={formData.phone} 
-                onChange={e => setFormData({...formData, phone: e.target.value})} 
-                placeholder="+1 234..." 
-              />
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Input 
+                  label="Email" 
+                  type="email"
+                  value={formData.email} 
+                  onChange={e => setFormData({...formData, email: e.target.value})} 
+                  placeholder="alan@university.edu" 
+                  helperText="Optional"
+                />
+                <Input 
+                  label="Phone" 
+                  value={formData.phone} 
+                  onChange={e => setFormData({...formData, phone: e.target.value})} 
+                  placeholder="+1 234..." 
+                  helperText="Optional"
+                />
+              </div>
             </div>
          </div>
        </Modal>
@@ -238,9 +248,10 @@ export default function InstructorsPage() {
          open={isDeleteOpen} 
          onClose={() => setIsDeleteOpen(false)} 
          title="Remove Instructor" 
+         subtitle="This removes the instructor record and clears current assignments."
          actions={
            <div className="flex gap-3">
-             <Button variant="ghost" onClick={() => setIsDeleteOpen(false)}>Cancel</Button>
+             <Button variant="secondary" onClick={() => setIsDeleteOpen(false)}>Cancel</Button>
              <Button variant="danger" onClick={handleDelete} disabled={actionLoading}>
                {actionLoading ? 'Removing...' : 'Remove Instructor'}
              </Button>

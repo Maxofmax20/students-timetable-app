@@ -1,5 +1,8 @@
 "use client";
-import React, { useState, useRef, useEffect, ReactNode } from 'react';
+
+import React, { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { cn } from '@/lib/utils';
 
 interface DropdownMenuProps {
   trigger: ReactNode;
@@ -9,32 +12,76 @@ interface DropdownMenuProps {
 
 export function DropdownMenu({ trigger, children, align = 'right' }: DropdownMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [style, setStyle] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    setMounted(true);
   }, []);
 
+  useEffect(() => {
+    if (!isOpen || !triggerRef.current) return;
+
+    const updatePosition = () => {
+      if (!triggerRef.current) return;
+      const rect = triggerRef.current.getBoundingClientRect();
+      const width = 248;
+      const margin = 12;
+      const left = align === 'right' ? rect.right - width : rect.left;
+      setStyle({
+        top: rect.bottom + 10,
+        left: Math.max(margin, Math.min(left, window.innerWidth - width - margin))
+      });
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (menuRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      setIsOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
+    updatePosition();
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [align, isOpen]);
+
   return (
-    <div className="relative inline-block text-left" ref={menuRef}>
-      <div onClick={() => setIsOpen(!isOpen)} className="cursor-pointer">
+    <>
+      <div ref={triggerRef} className="inline-flex" onClick={() => setIsOpen((current) => !current)}>
         {trigger}
       </div>
 
-      {isOpen && (
-        <div className={`absolute z-50 mt-2 w-56 rounded-xl shadow-lg bg-[linear-gradient(180deg,var(--surface-2),var(--surface))] ring-1 ring-[#ffffff15] overflow-hidden transition-all origin-top-right ${align === 'right' ? 'right-0' : 'left-0'}`}>
-          <div className="py-1" role="menu" aria-orientation="vertical" onClick={() => setIsOpen(false)}>
-            {children}
-          </div>
-        </div>
-      )}
-    </div>
+      {mounted && isOpen && style
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="fixed z-[145] w-[248px] overflow-hidden rounded-[24px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--bg-raised),var(--surface))] shadow-[var(--shadow-lg)]"
+              style={style}
+              role="menu"
+              aria-orientation="vertical"
+              onClick={() => setIsOpen(false)}
+            >
+              <div className="py-2">{children}</div>
+            </div>,
+            document.body
+          )
+        : null}
+    </>
   );
 }
 
@@ -42,7 +89,10 @@ export function DropdownItem({ children, onClick, icon, danger }: { children: Re
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left px-4 py-2.5 text-sm flex items-center gap-2 hover:bg-[#ffffff10] transition-colors ${danger ? 'text-[var(--danger)] hover:bg-[var(--danger)]/10' : 'text-[var(--text)]'}`}
+      className={cn(
+        'mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-2xl px-3 py-2.5 text-left text-sm font-semibold transition-all',
+        danger ? 'text-[var(--danger)] hover:bg-[var(--danger)]/10' : 'text-[var(--text)] hover:bg-[var(--surface-2)]'
+      )}
       role="menuitem"
     >
       {icon && <span className="material-symbols-outlined text-[18px] opacity-70">{icon}</span>}

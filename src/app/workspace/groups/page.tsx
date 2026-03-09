@@ -188,28 +188,37 @@ export default function GroupsPage() {
          open={isModalOpen} 
          onClose={() => setIsModalOpen(false)} 
          title={modalMode === 'create' ? 'Create New Group' : 'Edit Group'} 
+         subtitle={modalMode === 'create' ? 'Create a clean group record students and courses can attach to immediately.' : 'Update the group identity without leaving the current flow.'}
          actions={
            <div className="flex gap-3">
-             <Button variant="ghost" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
              <Button variant="primary" onClick={handleSave} disabled={actionLoading}>
                {actionLoading ? 'Saving...' : modalMode === 'create' ? 'Create Group' : 'Save Changes'}
              </Button>
            </div>
          }
        >
-         <div className="space-y-4 py-2">
-            <Input 
-              label="Group Code" 
-              value={formData.code} 
-              onChange={e => setFormData({...formData, code: e.target.value})} 
-              placeholder="e.g. CS-2024" 
-            />
-            <Input 
-              label="Group Name" 
-              value={formData.name} 
-              onChange={e => setFormData({...formData, name: e.target.value})} 
-              placeholder="e.g. Computer Science Freshman" 
-            />
+         <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] p-4 md:p-5">
+            <div className="mb-4">
+              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Group details</div>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">Use a short recognizable code and a descriptive cohort name.</p>
+            </div>
+            <div className="space-y-4 py-1">
+              <Input 
+                label="Group Code" 
+                value={formData.code} 
+                onChange={e => setFormData({...formData, code: e.target.value})} 
+                placeholder="e.g. CS-2024" 
+                helperText="Short academic identifier used across the workspace."
+              />
+              <Input 
+                label="Group Name" 
+                value={formData.name} 
+                onChange={e => setFormData({...formData, name: e.target.value})} 
+                placeholder="e.g. Computer Science Freshman" 
+                helperText="A clearer title makes course assignment faster later on."
+              />
+            </div>
          </div>
        </Modal>
 
@@ -218,9 +227,10 @@ export default function GroupsPage() {
          open={isDeleteOpen} 
          onClose={() => setIsDeleteOpen(false)} 
          title="Delete Group" 
+         subtitle="This removes the group record and unassigns linked courses."
          actions={
            <div className="flex gap-3">
-             <Button variant="ghost" onClick={() => setIsDeleteOpen(false)}>Cancel</Button>
+             <Button variant="secondary" onClick={() => setIsDeleteOpen(false)}>Cancel</Button>
              <Button variant="danger" onClick={handleDelete} disabled={actionLoading}>
                {actionLoading ? 'Deleting...' : 'Delete Group'}
              </Button>

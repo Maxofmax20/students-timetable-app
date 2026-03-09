@@ -252,7 +252,7 @@ export default function AccountPage() {
                 containerClassName="max-w-md"
               />
               <div className="pt-2">
-                <Button variant="secondary" onClick={saveProfile} disabled={profileSaving}>
+                <Button variant="primary" onClick={saveProfile} disabled={profileSaving}>
                   {profileSaving ? 'Saving...' : 'Save Changes'}
                 </Button>
               </div>
@@ -345,7 +345,7 @@ export default function AccountPage() {
         subtitle={profile.hasPassword ? 'Enter your current password to confirm the change.' : 'Create a password for direct sign-in.'}
         actions={
           <>
-            <Button variant="ghost" onClick={() => setPasswordOpen(false)}>Cancel</Button>
+            <Button variant="secondary" onClick={() => setPasswordOpen(false)}>Cancel</Button>
             <Button variant="primary" onClick={() => void savePassword()} disabled={passwordSaving}>
               {passwordSaving ? 'Saving...' : profile.hasPassword ? 'Update Password' : 'Save Password'}
             </Button>
@@ -383,7 +383,7 @@ export default function AccountPage() {
         subtitle="Type DELETE below to confirm permanent account removal."
         actions={
           <>
-            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button variant="secondary" onClick={() => setDeleteOpen(false)}>Cancel</Button>
             <Button variant="danger" onClick={() => void deleteAccount()} disabled={deleteSaving}>
               {deleteSaving ? 'Deleting...' : 'Delete Account'}
             </Button>

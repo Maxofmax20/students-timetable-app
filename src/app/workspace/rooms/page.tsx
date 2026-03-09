@@ -217,46 +217,57 @@ export default function RoomsPage() {
          open={isModalOpen} 
          onClose={() => setIsModalOpen(false)} 
          title={modalMode === 'create' ? 'Add New Room' : 'Edit Room'} 
+         subtitle={modalMode === 'create' ? 'Create a room record the scheduler can assign immediately.' : 'Update room metadata without leaving the current resource page.'}
          actions={
            <div className="flex gap-3">
-             <Button variant="ghost" onClick={() => setIsModalOpen(false)}>Cancel</Button>
+             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>Cancel</Button>
              <Button variant="primary" onClick={handleSave} disabled={actionLoading}>
                {actionLoading ? 'Saving...' : modalMode === 'create' ? 'Add Room' : 'Save Changes'}
              </Button>
            </div>
          }
        >
-         <div className="space-y-4 py-2">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-               <Input 
-                 label="Room Code" 
-                 value={formData.code} 
-                 onChange={e => setFormData({...formData, code: e.target.value})} 
-                 placeholder="E412" 
-               />
-               <div className="md:col-span-2">
-                 <Input 
-                   label="Room Name" 
-                   value={formData.name} 
-                   onChange={e => setFormData({...formData, name: e.target.value})} 
-                   placeholder="Main Lecture Hall" 
-                 />
-               </div>
+         <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] p-4 md:p-5">
+            <div className="mb-4">
+              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Room details</div>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">Keep the room code short, then add optional building and capacity details for planning clarity.</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input 
-                label="Building" 
-                value={formData.building} 
-                onChange={e => setFormData({...formData, building: e.target.value})} 
-                placeholder="Engineering Block" 
-              />
-              <Input 
-                label="Capacity" 
-                type="number"
-                value={formData.capacity} 
-                onChange={e => setFormData({...formData, capacity: e.target.value})} 
-                placeholder="Number of seats" 
-              />
+            <div className="space-y-4 py-1">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                 <Input 
+                   label="Room Code" 
+                   value={formData.code} 
+                   onChange={e => setFormData({...formData, code: e.target.value})} 
+                   placeholder="E412" 
+                   helperText="Short identifier shown in course cards and tables."
+                 />
+                 <div className="md:col-span-2">
+                   <Input 
+                     label="Room Name" 
+                     value={formData.name} 
+                     onChange={e => setFormData({...formData, name: e.target.value})} 
+                     placeholder="Main Lecture Hall" 
+                     helperText="Use the human-readable name staff recognize fastest."
+                   />
+                 </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Input 
+                  label="Building" 
+                  value={formData.building} 
+                  onChange={e => setFormData({...formData, building: e.target.value})} 
+                  placeholder="Engineering Block" 
+                  helperText="Optional"
+                />
+                <Input 
+                  label="Capacity" 
+                  type="number"
+                  value={formData.capacity} 
+                  onChange={e => setFormData({...formData, capacity: e.target.value})} 
+                  placeholder="Number of seats" 
+                  helperText="Optional"
+                />
+              </div>
             </div>
          </div>
        </Modal>
@@ -266,9 +277,10 @@ export default function RoomsPage() {
          open={isDeleteOpen} 
          onClose={() => setIsDeleteOpen(false)} 
          title="Delete Room" 
+         subtitle="This removes the room record and clears any active room assignments."
          actions={
            <div className="flex gap-3">
-             <Button variant="ghost" onClick={() => setIsDeleteOpen(false)}>Cancel</Button>
+             <Button variant="secondary" onClick={() => setIsDeleteOpen(false)}>Cancel</Button>
              <Button variant="danger" onClick={handleDelete} disabled={actionLoading}>
                {actionLoading ? 'Deleting...' : 'Delete Room'}
              </Button>

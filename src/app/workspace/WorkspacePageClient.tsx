@@ -42,6 +42,7 @@ import {
 import { useSession, signOut as nextAuthSignOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Toggle } from "@/components/ui/Toggle";
+import { Button } from "@/components/ui/Button";
 import { ActionCenter, RowActionCenter } from "@/components/workspace/ActionCenter";
 import { DataTable } from "@/components/workspace/DataTable";
 import { AppShell } from "@/components/layout/AppShell";
@@ -1781,15 +1782,23 @@ export default function WorkspacePage() {
         }}
       />
 
-      <Modal open={confirmModal.open} onClose={() => setConfirmModal(prev => ({...prev, open: false}))} title={confirmModal.title} actions={
-        <>
-          <button onClick={() => setConfirmModal(prev => ({...prev, open: false}))} className="px-4 py-2 rounded-lg text-sm font-medium text-[var(--muted)] hover:text-white transition-colors">Cancel</button>
-          <button onClick={confirmModal.onConfirm} className={`px-4 py-2 rounded-lg text-sm font-medium text-white transition-opacity ${confirmModal.danger ? 'bg-[var(--danger)] hover:opacity-90' : 'bg-[var(--gold)] text-[#111] hover:opacity-90'}`}>
-            {confirmModal.actionLabel}
-          </button>
-        </>
-      }>
-        <p className="text-[var(--muted)] text-sm">{confirmModal.message}</p>
+      <Modal
+        open={confirmModal.open}
+        onClose={() => setConfirmModal(prev => ({ ...prev, open: false }))}
+        title={confirmModal.title}
+        subtitle={confirmModal.danger ? 'This action is permanent, so double-check before continuing.' : undefined}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}>
+              Cancel
+            </Button>
+            <Button variant={confirmModal.danger ? 'danger' : 'primary'} onClick={confirmModal.onConfirm}>
+              {confirmModal.actionLabel}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-[var(--text-secondary)]">{confirmModal.message}</p>
       </Modal>
 
     </div>
