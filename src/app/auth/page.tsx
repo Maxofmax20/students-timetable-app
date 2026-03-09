@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { signIn } from 'next-auth/react';
@@ -12,6 +12,14 @@ type Mode = 'login' | 'register' | 'verify' | 'forgot' | 'reset';
 type ProviderMap = Record<string, { id: string; name: string }>;
 
 export default function AuthPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen w-full flex items-center justify-center bg-[var(--bg)]"><span className="text-[var(--text-muted)]">Loading...</span></div>}>
+      <AuthPageInner />
+    </Suspense>
+  );
+}
+
+function AuthPageInner() {
   const searchParams = useSearchParams();
   const initialMode = (searchParams?.get('mode') as Mode) || 'login';
   const resetToken = searchParams?.get('token') || '';
