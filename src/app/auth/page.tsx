@@ -23,7 +23,7 @@ export default function AuthPage() {
 /* ------------------------------------------------------------------ */
 function OtpInput({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
-  const digits = value.padEnd(6, '').split('').slice(0, 6);
+  const digits = value.padEnd(6, ' ').split('').slice(0, 6);
 
   const handleKey = useCallback((i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && !digits[i] && i > 0) {
@@ -50,7 +50,7 @@ function OtpInput({ value, onChange, disabled }: { value: string; onChange: (v: 
   }, [onChange]);
 
   return (
-    <div className="flex gap-2.5 justify-center" onPaste={handlePaste}>
+    <div className="flex justify-center gap-2 sm:gap-3 my-6" onPaste={handlePaste}>
       {digits.map((d, i) => (
         <input
           key={i}
@@ -62,11 +62,12 @@ function OtpInput({ value, onChange, disabled }: { value: string; onChange: (v: 
           disabled={disabled}
           onChange={e => handleChange(i, e.target.value)}
           onKeyDown={e => handleKey(i, e)}
-          className="w-12 h-14 rounded-xl border-2 bg-[var(--surface)] text-center text-xl font-bold text-white
-                     border-[var(--border)] focus:border-[var(--gold)] focus:ring-4 focus:ring-[var(--focus-ring)]
-                     transition-all outline-none disabled:opacity-40
-                     sm:w-14 sm:h-16 sm:text-2xl"
+          className="w-12 h-14 rounded-xl border-2 bg-white/5 text-center text-2xl font-black text-white
+                     border-[var(--border)] focus:border-[var(--gold)] focus:ring-4 focus:ring-[var(--gold)]/20 focus:bg-white/10
+                     transition-all outline-none disabled:opacity-40 shadow-inner
+                     sm:w-14 sm:h-16 sm:text-3xl placeholder:text-white/20"
           aria-label={`Digit ${i + 1}`}
+          placeholder="·"
         />
       ))}
     </div>
@@ -277,16 +278,16 @@ function AuthPageInner() {
 
             {/* Verify: OTP split input */}
             {mode === 'verify' && (
-              <div className="space-y-5 py-2">
+              <div className="flex flex-col mb-4">
                 <OtpInput value={verifyCode} onChange={setVerifyCode} disabled={loading} />
-                <div className="flex items-center justify-between px-1">
+                <div className="flex items-center justify-between px-2 mt-2">
                   <button type="button" onClick={() => void handleResend()} disabled={loading}
-                    className="text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--gold)] transition-colors">
-                    <span className="material-symbols-outlined text-sm align-middle mr-1">refresh</span>
+                    className="flex items-center text-sm font-semibold text-[var(--text-secondary)] hover:text-[var(--gold)] transition-colors gap-1.5 px-2 py-1 rounded-md hover:bg-[var(--surface-2)]">
+                    <span className="material-symbols-outlined text-base">refresh</span>
                     Resend code
                   </button>
                   <button type="button" onClick={() => setMode('login')}
-                    className="text-xs font-semibold text-[var(--text-muted)] hover:text-white transition-colors">
+                    className="text-sm font-semibold text-[var(--text-secondary)] hover:text-white transition-colors px-2 py-1">
                     Back to sign in
                   </button>
                 </div>

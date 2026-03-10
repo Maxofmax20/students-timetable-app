@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh:*)",
+      "WebFetch(domain:3.81.219.167)",
+      "WebFetch(domain:demostb.duckdns.org)",
+      "Bash(scp:*)",
+      "Bash(ls /tmp/e2e-*.png)",
+      "Read(//c/Users/xsmsm/AppData/Local/Temp/**)",
+      "Bash(ls D:/ClaudeProjects/Timetable/e2e-*.png)",
+      "Bash(nslookup:*)",
+      "Bash(ls:*)",
+      "Bash(rm:*)"
+    ]
+  }
+}
