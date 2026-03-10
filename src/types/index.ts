@@ -72,6 +72,9 @@ export type GroupApiItem = {
   name: string;
   yearLabel?: string | null;
   color?: string | null;
+  parentGroupId?: string | null;
+  parentGroup?: { id?: string; code?: string | null; name?: string | null } | null;
+  childCount?: number;
 };
 
 export type InstructorApiItem = {
@@ -87,6 +90,9 @@ export type RoomApiItem = {
   name: string;
   capacity?: number | null;
   building?: string | null;
+  buildingCode?: string | null;
+  roomNumber?: string | null;
+  level?: number | null;
 };
 
 export type ListPayload<T> = {

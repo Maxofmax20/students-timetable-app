@@ -8,13 +8,16 @@ import {
   requireSession,
   requireWorkspaceRole
 } from "@/lib/workspace-v1";
+import { normalizeRoomFields } from "@/lib/group-room-model";
 
 const createSchema = z.object({
   workspaceId: z.string().cuid().optional(),
-  code: z.string().min(1).max(32),
-  name: z.string().min(2).max(120),
+  code: z.string().min(1).max(32).optional(),
+  name: z.string().min(1).max(120),
   capacity: z.number().int().positive().max(2000).nullable().optional(),
   building: z.string().max(80).nullable().optional(),
+  buildingCode: z.string().max(16).nullable().optional(),
+  roomNumber: z.string().max(16).nullable().optional(),
   color: z.string().max(32).optional()
 });
 
@@ -40,7 +43,7 @@ export async function GET(request: NextRequest) {
 
     const items = await prisma.room.findMany({
       where: { workspaceId: workspace.id },
-      orderBy: [{ code: "asc" }, { name: "asc" }]
+      orderBy: [{ buildingCode: "asc" }, { roomNumber: "asc" }, { code: "asc" }, { name: "asc" }]
     });
 
     return NextResponse.json({ ok: true, data: { workspaceId: workspace.id, items } });
@@ -60,13 +63,24 @@ export async function POST(request: NextRequest) {
 
     await requireWorkspaceRole(session.userId, workspace.id, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
 
+    const normalized = normalizeRoomFields({
+      code: body.code,
+      buildingCode: body.buildingCode,
+      roomNumber: body.roomNumber
+    });
+
+    if (!normalized.code) throw new ApiError(400, "ROOM_CODE_REQUIRED");
+
     const created = await prisma.room.create({
       data: {
         workspaceId: workspace.id,
-        code: body.code,
-        name: body.name,
+        code: normalized.code,
+        name: body.name.trim(),
         capacity: body.capacity ?? null,
-        building: body.building ?? null,
+        building: body.building?.trim() || null,
+        buildingCode: normalized.buildingCode,
+        roomNumber: normalized.roomNumber,
+        level: normalized.level,
         color: body.color ?? "#22c55e"
       }
     });

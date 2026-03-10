@@ -14,6 +14,7 @@ import {
   sessionSupportsRoom,
   stripLegacySessionSuffix
 } from '@/lib/course-sessions';
+import { groupHierarchyPath, groupKindLabel, roomDisplaySummary, sortGroupsForDisplay } from '@/lib/group-room-model';
 import type {
   CourseSessionWritePayload,
   GroupApiItem,
@@ -275,11 +276,11 @@ export function EditCourseModal({ open, onClose, mode, initialData, groups, inst
 
   const groupOptions = useMemo(
     () =>
-      optionOrNone(groups, (group) => ({
+      optionOrNone(sortGroupsForDisplay(groups), (group) => ({
         value: group.id,
-        label: group.code || group.name || 'Group',
-        description: group.name || undefined,
-        keywords: `${group.code || ''} ${group.name || ''}`
+        label: group.parentGroupId ? `${group.code} — ${groupKindLabel(group)}` : `${group.code} — Main group`,
+        description: `${groupHierarchyPath(group)} • ${group.name}`,
+        keywords: `${group.code || ''} ${group.name || ''} ${group.parentGroup?.code || ''} ${group.parentGroup?.name || ''}`
       })),
     [groups]
   );
@@ -300,8 +301,8 @@ export function EditCourseModal({ open, onClose, mode, initialData, groups, inst
       optionOrNone(rooms, (room) => ({
         value: room.id,
         label: room.code || room.name || 'Room',
-        description: [room.name, room.building].filter(Boolean).join(' • ') || undefined,
-        keywords: `${room.code || ''} ${room.name || ''} ${room.building || ''}`
+        description: roomDisplaySummary(room),
+        keywords: `${room.code || ''} ${room.name || ''} ${room.building || ''} ${room.buildingCode || ''} ${room.roomNumber || ''} ${room.level ?? ''}`
       })),
     [rooms]
   );

@@ -3,12 +3,15 @@ import { Prisma, WorkspaceRole } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { ApiError, requireSession, requireWorkspaceRole } from "@/lib/workspace-v1";
+import { normalizeRoomFields } from "@/lib/group-room-model";
 
 const patchSchema = z.object({
   code: z.string().min(1).max(32).optional(),
-  name: z.string().min(2).max(120).optional(),
+  name: z.string().min(1).max(120).optional(),
   capacity: z.number().int().positive().max(2000).nullable().optional(),
   building: z.string().max(80).nullable().optional(),
+  buildingCode: z.string().max(16).nullable().optional(),
+  roomNumber: z.string().max(16).nullable().optional(),
   color: z.string().max(32).nullable().optional()
 });
 
@@ -27,13 +30,23 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const current = await getRoomOrThrow(id);
     await requireWorkspaceRole(session.userId, current.workspaceId, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
 
+    const normalized = normalizeRoomFields({
+      code: body.code ?? current.code,
+      buildingCode: body.buildingCode === undefined ? current.buildingCode : body.buildingCode,
+      roomNumber: body.roomNumber === undefined ? current.roomNumber : body.roomNumber,
+      level: current.level
+    });
+
     const updated = await prisma.room.update({
       where: { id },
       data: {
-        code: body.code,
-        name: body.name,
+        code: normalized.code || undefined,
+        name: body.name?.trim(),
         capacity: body.capacity,
-        building: body.building,
+        building: body.building === undefined ? undefined : body.building?.trim() || null,
+        buildingCode: normalized.buildingCode,
+        roomNumber: normalized.roomNumber,
+        level: normalized.level,
         color: body.color
       }
     });

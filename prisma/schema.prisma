@@ -248,20 +248,24 @@ model WorkspaceMember {
 }
 
 model AcademicGroup {
-  id          String         @id @default(cuid())
-  workspaceId String
-  code        String
-  name        String
-  yearLabel   String?
-  color       String?        @default("#2563eb")
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  courses     Course[]
-  sessions    SessionEntry[]
+  id            String          @id @default(cuid())
+  workspaceId   String
+  parentGroupId String?
+  code          String
+  name          String
+  yearLabel     String?
+  color         String?         @default("#2563eb")
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parentGroup   AcademicGroup?  @relation("AcademicGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: SetNull)
+  childGroups   AcademicGroup[] @relation("AcademicGroupHierarchy")
+  courses       Course[]
+  sessions      SessionEntry[]
 
   @@unique([workspaceId, code])
   @@index([workspaceId, name])
+  @@index([workspaceId, parentGroupId])
 }
 
 model Instructor {
@@ -281,21 +285,25 @@ model Instructor {
 }
 
 model Room {
-  id          String         @id @default(cuid())
-  workspaceId String
-  code        String
-  name        String
-  capacity    Int?
-  building    String?
-  color       String?        @default("#22c55e")
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  courses     Course[]
-  sessions    SessionEntry[]
+  id           String         @id @default(cuid())
+  workspaceId  String
+  code         String
+  name         String
+  capacity     Int?
+  building     String?
+  buildingCode String?
+  roomNumber   String?
+  level        Int?
+  color        String?        @default("#22c55e")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  courses      Course[]
+  sessions     SessionEntry[]
 
   @@unique([workspaceId, code])
   @@index([workspaceId, name])
+  @@index([workspaceId, buildingCode, roomNumber])
 }
 
 model Course {

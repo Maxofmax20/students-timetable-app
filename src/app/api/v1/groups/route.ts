@@ -12,10 +12,16 @@ import {
 const createSchema = z.object({
   workspaceId: z.string().cuid().optional(),
   code: z.string().min(1).max(32),
-  name: z.string().min(2).max(120),
+  name: z.string().min(1).max(120),
   yearLabel: z.string().max(32).optional(),
-  color: z.string().max(32).optional()
+  color: z.string().max(32).optional(),
+  parentGroupId: z.string().cuid().nullable().optional()
 });
+
+const groupInclude = {
+  parentGroup: { select: { id: true, code: true, name: true } },
+  _count: { select: { childGroups: true } }
+} satisfies Prisma.AcademicGroupInclude;
 
 async function resolveWorkspace(userId: string, workspaceId?: string) {
   if (!workspaceId) {
@@ -34,6 +40,24 @@ async function resolveWorkspace(userId: string, workspaceId?: string) {
   return workspace;
 }
 
+async function validateParentGroup(workspaceId: string, parentGroupId?: string | null) {
+  if (!parentGroupId) return null;
+  const parent = await prisma.academicGroup.findFirst({
+    where: { id: parentGroupId, workspaceId },
+    select: { id: true, parentGroupId: true }
+  });
+  if (!parent) throw new ApiError(400, "INVALID_PARENT_GROUP");
+  if (parent.parentGroupId) throw new ApiError(400, "PARENT_GROUP_MUST_BE_MAIN_GROUP");
+  return parent.id;
+}
+
+function mapGroup(item: Prisma.AcademicGroupGetPayload<{ include: typeof groupInclude }>) {
+  return {
+    ...item,
+    childCount: item._count.childGroups
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = await requireSession(request);
@@ -42,10 +66,11 @@ export async function GET(request: NextRequest) {
 
     const items = await prisma.academicGroup.findMany({
       where: { workspaceId: workspace.id },
-      orderBy: [{ code: "asc" }, { name: "asc" }]
+      orderBy: [{ parentGroupId: "asc" }, { code: "asc" }, { name: "asc" }],
+      include: groupInclude
     });
 
-    return NextResponse.json({ ok: true, data: { workspaceId: workspace.id, items } });
+    return NextResponse.json({ ok: true, data: { workspaceId: workspace.id, items: items.map(mapGroup) } });
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json({ ok: false, message: error.message }, { status: error.status });
@@ -61,18 +86,21 @@ export async function POST(request: NextRequest) {
     const workspace = await resolveWorkspace(session.userId, body.workspaceId);
 
     await requireWorkspaceRole(session.userId, workspace.id, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
+    const parentGroupId = await validateParentGroup(workspace.id, body.parentGroupId ?? null);
 
     const created = await prisma.academicGroup.create({
       data: {
         workspaceId: workspace.id,
-        code: body.code,
-        name: body.name,
-        yearLabel: body.yearLabel ?? null,
-        color: body.color ?? "#2563eb"
-      }
+        code: body.code.trim().toUpperCase(),
+        name: body.name.trim(),
+        yearLabel: body.yearLabel?.trim() || null,
+        color: body.color ?? "#2563eb",
+        parentGroupId
+      },
+      include: groupInclude
     });
 
-    return NextResponse.json({ ok: true, data: created }, { status: 201 });
+    return NextResponse.json({ ok: true, data: mapGroup(created) }, { status: 201 });
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ ok: false, message: error.issues[0]?.message }, { status: 400 });
