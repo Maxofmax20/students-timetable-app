@@ -65,7 +65,12 @@ providers.push(
           throw new Error("Invalid credentials");
         }
 
-        if (!user.emailVerifiedAt) {
+        // Existing-user safety: users created before email verification was deployed
+        // are automatically trusted. Only new registrations require verification.
+        const VERIFICATION_GATE_DATE = new Date('2026-03-10T00:00:00Z');
+        const isPreGateUser = user.createdAt < VERIFICATION_GATE_DATE;
+
+        if (!user.emailVerifiedAt && !isPreGateUser) {
           throw new Error("EMAIL_NOT_VERIFIED");
         }
 

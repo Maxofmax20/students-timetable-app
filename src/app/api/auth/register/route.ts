@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 import { DEFAULT_TIMETABLE } from '@/lib/constants';
 import { consumeRateLimit, getClientIp, withRateLimitHeaders } from '@/lib/rate-limit';
+import { sendVerificationEmail } from '@/lib/mailer';
 import crypto from 'crypto';
 
 const schema = z.object({
@@ -78,11 +79,11 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      // TODO: Send via SMTP when configured
-      console.log(`[REGISTER_VERIFY] Code for ${email}: ${code}`);
-
-      return { user };
+      return { user, code };
     });
+
+    // Send verification email (logs to console if SMTP is not configured)
+    await sendVerificationEmail(email, result.code);
 
     const response = NextResponse.json({
       ok: true,

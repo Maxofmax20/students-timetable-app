@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { consumeRateLimit, getClientIp, withRateLimitHeaders } from '@/lib/rate-limit';
+import { sendPasswordResetEmail } from '@/lib/mailer';
 import crypto from 'crypto';
 
 const schema = z.object({
@@ -57,8 +58,8 @@ export async function POST(request: NextRequest) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const resetUrl = `${appUrl}/auth?mode=reset&token=${token}`;
 
-    // TODO: Send via SMTP when configured
-    console.log(`[PASSWORD_RESET] Reset link for ${email}: ${resetUrl}`);
+    // Send reset email (logs to console if SMTP is not configured)
+    await sendPasswordResetEmail(email, resetUrl);
 
     return successResponse();
   } catch (error) {

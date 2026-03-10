@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { consumeRateLimit, getClientIp, withRateLimitHeaders } from '@/lib/rate-limit';
+import { sendVerificationEmail } from '@/lib/mailer';
 import crypto from 'crypto';
 
 const schema = z.object({
@@ -57,8 +58,8 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // TODO: Send via SMTP when configured
-    console.log(`[REGISTER_VERIFY] Code for ${email}: ${code}`);
+    // Send verification email (logs to console if SMTP is not configured)
+    await sendVerificationEmail(email, code);
 
     return withRateLimitHeaders(
       NextResponse.json({ ok: true, message: 'If an unverified account exists, a new code has been sent.' }),
