@@ -25,6 +25,20 @@ function OtpInput({ value, onChange, disabled }: { value: string; onChange: (v: 
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const digits = Array.from({ length: 6 }, (_, i) => value[i] ?? '');
 
+  const applyDigits = useCallback((startIndex: number, rawValue: string) => {
+    const sanitized = rawValue.replace(/\D/g, '');
+    if (!sanitized) return 0;
+
+    const next = [...digits];
+    const chunk = sanitized.slice(0, 6 - startIndex).split('');
+    chunk.forEach((digit, offset) => {
+      next[startIndex + offset] = digit;
+    });
+
+    onChange(next.join(''));
+    return chunk.length;
+  }, [digits, onChange]);
+
   const handleKey = useCallback((i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && !digits[i] && i > 0) {
       const next = [...digits];
@@ -34,34 +48,49 @@ function OtpInput({ value, onChange, disabled }: { value: string; onChange: (v: 
     }
   }, [digits, onChange]);
 
-  const handleChange = useCallback((i: number, char: string) => {
-    if (!/^\d?$/.test(char)) return;
-    const next = [...digits];
-    next[i] = char;
-    onChange(next.join(''));
-    if (char && i < 5) refs.current[i + 1]?.focus();
-  }, [digits, onChange]);
+  const handleChange = useCallback((i: number, rawValue: string) => {
+    const sanitized = rawValue.replace(/\D/g, '');
 
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    if (!sanitized) {
+      const next = [...digits];
+      next[i] = '';
+      onChange(next.join(''));
+      return;
+    }
+
+    if (sanitized.length === 1) {
+      const next = [...digits];
+      next[i] = sanitized;
+      onChange(next.join(''));
+      if (i < 5) refs.current[i + 1]?.focus();
+      return;
+    }
+
+    const inserted = applyDigits(i, sanitized);
+    if (inserted > 0) refs.current[Math.min(i + inserted - 1, 5)]?.focus();
+  }, [applyDigits, digits, onChange]);
+
+  const handlePaste = useCallback((i: number, e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    onChange(pasted);
-    refs.current[Math.min(pasted.length, 5)]?.focus();
-  }, [onChange]);
+    const inserted = applyDigits(i, e.clipboardData.getData('text'));
+    if (inserted > 0) refs.current[Math.min(i + inserted - 1, 5)]?.focus();
+  }, [applyDigits]);
 
   return (
-    <div className="flex justify-center gap-2 sm:gap-3 my-6" onPaste={handlePaste}>
+    <div className="flex justify-center gap-2 sm:gap-3 my-6">
       {digits.map((d, i) => (
         <input
           key={i}
           ref={el => { refs.current[i] = el; }}
           type="text"
           inputMode="numeric"
-          maxLength={1}
+          maxLength={6}
           value={d}
           disabled={disabled}
           onChange={e => handleChange(i, e.target.value)}
           onKeyDown={e => handleKey(i, e)}
+          onPaste={e => handlePaste(i, e)}
+          onFocus={e => e.currentTarget.select()}
           className="w-12 h-14 rounded-xl border-2 bg-white/5 text-center text-2xl font-black text-white
                      border-[var(--border)] focus:border-[var(--gold)] focus:ring-4 focus:ring-[var(--gold)]/20 focus:bg-white/10
                      transition-all outline-none disabled:opacity-40 shadow-inner
@@ -272,7 +301,7 @@ function AuthPageInner() {
                   )}
                 </div>
                 <Input type="password" placeholder="••••••••" value={password}
-                  onChange={e => setPassword(e.target.value)} required icon="lock" hideLabel />
+                  onChange={e => setPassword(e.target.value)} required icon="lock" hideLabel passwordToggle />
               </div>
             )}
 
@@ -297,7 +326,7 @@ function AuthPageInner() {
             {/* Reset: New password */}
             {mode === 'reset' && (
               <Input label="New Password" type="password" placeholder="••••••••" value={password}
-                onChange={e => setPassword(e.target.value)} required icon="lock" />
+                onChange={e => setPassword(e.target.value)} required icon="lock" passwordToggle />
             )}
 
             {/* Messages */}
