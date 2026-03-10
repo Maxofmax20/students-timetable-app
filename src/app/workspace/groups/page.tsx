@@ -68,7 +68,7 @@ export default function GroupsPage() {
     if (search.trim()) return;
     setCollapsedSections((current) => ({
       ...current,
-      [key]: !(current[key] ?? false)
+      [key]: !(current[key] ?? true)
     }));
   };
 
@@ -199,7 +199,7 @@ export default function GroupsPage() {
             groupedSections.map((section) => {
               const root = section.root || section.items.find((item) => !item.parentGroupId) || section.items[0];
               const subgroups = section.items.filter((item) => item.id !== root.id);
-              const isCollapsed = search.trim() ? false : (collapsedSections[section.rootCode] ?? false);
+              const isCollapsed = search.trim() ? false : (collapsedSections[section.rootCode] ?? true);
 
               return (
                 <section key={section.rootCode} className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">

@@ -75,7 +75,7 @@ export default function RoomsPage() {
     if (search.trim()) return;
     setCollapsedSections((current) => ({
       ...current,
-      [key]: !(current[key] ?? false)
+      [key]: !(current[key] ?? true)
     }));
   };
 
@@ -224,7 +224,7 @@ export default function RoomsPage() {
             <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] p-6 shadow-[var(--shadow-lg)] space-y-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}</div>
           ) : filteredRooms.length > 0 ? (
             groupedRooms.map((section) => {
-              const isCollapsed = search.trim() ? false : (collapsedSections[section.buildingCode] ?? false);
+              const isCollapsed = search.trim() ? false : (collapsedSections[section.buildingCode] ?? true);
 
               return (
                 <section key={section.buildingCode} className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">
