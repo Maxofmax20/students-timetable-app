@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
         limit
       );
     }
+    console.error('[RESEND_CODE_ERROR]', error);
     return withRateLimitHeaders(
       NextResponse.json({ ok: false, message: 'Failed to resend code' }, { status: 500 }),
       limit

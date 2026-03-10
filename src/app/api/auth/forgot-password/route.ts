@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
         limit
       );
     }
+    console.error('[FORGOT_PASSWORD_ERROR]', error);
     return withRateLimitHeaders(
       NextResponse.json({ ok: false, message: 'Request failed' }, { status: 500 }),
       limit

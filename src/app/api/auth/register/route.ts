@@ -101,8 +101,8 @@ export async function POST(request: NextRequest) {
       const response = NextResponse.json({ ok: false, message: error.issues[0]?.message }, { status: 400 });
       return withRateLimitHeaders(response, limit);
     }
-
-    const response = NextResponse.json({ ok: false, message: 'Account creation failed' }, { status: 500 });
+    console.error('[REGISTER_ERROR]', error);
+    const response = NextResponse.json({ ok: false, message: 'Registration failed' }, { status: 500 });
     return withRateLimitHeaders(response, limit);
   }
 }
