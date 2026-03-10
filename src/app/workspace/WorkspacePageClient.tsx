@@ -50,9 +50,10 @@ import { DashboardView } from "@/components/workspace/DashboardView";
 import { TimetableView } from "@/components/workspace/TimetableView";
 import { CoursesView } from "@/components/workspace/CoursesView";
 import { SettingsView } from "@/components/workspace/SettingsView";
-import { EditCourseModal, type EditCourseMode } from "@/components/workspace/EditCourseModal";
+import { EditCourseModal, type EditCourseInitialData, type EditCourseMode } from "@/components/workspace/EditCourseModal";
 import { Modal } from "@/components/ui/Modal";
 import { downloadIcsFile } from "@/lib/ics";
+import { stripLegacySessionSuffix } from "@/lib/course-sessions";
 
 const placeholderRows: Row[] = [
   {
@@ -143,12 +144,15 @@ function courseToRow(item: CourseApiItem, fallback?: Row): Row {
   const sessionGroup = session?.group;
   const sessionInstructor = session?.instructor;
   const sessionRoom = session?.room;
+  const baseTitle = stripLegacySessionSuffix(item.title);
+  const courseLabel = (item.sessions?.length || 0) > 1 ? `${baseTitle} (${item.sessions?.length} sessions)` : baseTitle;
 
   return {
     id: item.id,
     code: item.code,
     source: "real",
-    course: item.title,
+    course: courseLabel,
+    courseName: baseTitle,
     group: sessionGroup?.code || item.group?.code || fallback?.group || "-",
     instructor: sessionInstructor?.name || item.instructor?.name || fallback?.instructor || "-",
     room: sessionRoom?.code || item.room?.code || fallback?.room || "-",
@@ -161,6 +165,30 @@ function courseToRow(item: CourseApiItem, fallback?: Row): Row {
   };
 }
 
+function courseToEditorData(item: CourseApiItem): EditCourseInitialData {
+  return {
+    id: item.id,
+    code: item.code,
+    course: stripLegacySessionSuffix(item.title),
+    status: toUiStatus(item.status),
+    groupId: item.groupId ?? null,
+    instructorId: item.instructorId ?? null,
+    roomId: item.roomId ?? null,
+    sessions: (item.sessions || []).map((session) => ({
+      id: session.id,
+      type: session.type || undefined,
+      day: session.day,
+      startTime: minutesToLabel(session.startMinute),
+      endTime: minutesToLabel(session.endMinute),
+      groupId: session.groupId ?? null,
+      instructorId: session.instructorId ?? null,
+      roomId: session.roomId ?? null,
+      onlinePlatform: session.onlinePlatform ?? null,
+      onlineLink: session.onlineLink ?? null,
+      note: session.note ?? null
+    }))
+  };
+}
 
 
 function formatIcsDate(date: Date): string {
@@ -317,7 +345,7 @@ export default function WorkspacePage() {
 
   const [courseModalOpen, setCourseModalOpen] = useState(false);
   const [courseModalMode, setCourseModalMode] = useState<EditCourseMode>('full');
-  const [courseModalData, setCourseModalData] = useState<Partial<Row>>({});
+  const [courseModalData, setCourseModalData] = useState<EditCourseInitialData>({});
   const [confirmModal, setConfirmModal] = useState<{
     open: boolean;
     title: string;
@@ -653,6 +681,25 @@ export default function WorkspacePage() {
     }
   };
 
+  const fetchCourseEditorData = async (courseId: string): Promise<EditCourseInitialData | null> => {
+    const query = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : "";
+    const response = await fetch(`/api/v1/courses${query}`, { credentials: "include" });
+    const payload = await parseJson<ListPayload<CourseApiItem>>(response);
+
+    if (!response.ok || !payload?.ok) {
+      showToast(payload?.message || "Failed to load course details");
+      return null;
+    }
+
+    const item = (payload.data?.items || []).find((course) => course.id === courseId);
+    if (!item) {
+      showToast("Course details not found");
+      return null;
+    }
+
+    return courseToEditorData(item);
+  };
+
   const createGroupApi = async (code: string, name: string): Promise<GroupApiItem | null> => {
     if (!ensureCanWrite("create a group")) return null;
 
@@ -809,6 +856,7 @@ export default function WorkspacePage() {
       roomId?: string | null;
       day?: string | null;
       time?: string | null;
+      sessions?: CourseWritePayload['sessions'];
     },
     silent = false
   ): Promise<boolean> => {
@@ -827,7 +875,8 @@ export default function WorkspacePage() {
         instructorId: payload.instructorId ?? null,
         roomId: payload.roomId ?? null,
         day: payload.day ?? null,
-        time: payload.time ?? null
+        time: payload.time ?? null,
+        sessions: payload.sessions ?? undefined
       })
     });
 
@@ -912,7 +961,10 @@ export default function WorkspacePage() {
       return;
     }
 
-    setCourseModalData(row);
+    const details = await fetchCourseEditorData(row.id);
+    if (!details) return;
+
+    setCourseModalData(details);
     setCourseModalMode('title');
     setCourseModalOpen(true);
   };
@@ -920,7 +972,10 @@ export default function WorkspacePage() {
   const editCourseTime = async (row: Row) => {
     if (!ensureCanWrite("edit schedule details")) return;
 
-    setCourseModalData(row);
+    const details = await fetchCourseEditorData(row.id);
+    if (!details) return;
+
+    setCourseModalData(details);
     setCourseModalMode('time');
     setCourseModalOpen(true);
   };
@@ -941,7 +996,10 @@ export default function WorkspacePage() {
       return;
     }
 
-    setCourseModalData(row);
+    const details = await fetchCourseEditorData(row.id);
+    if (!details) return;
+
+    setCourseModalData(details);
     setCourseModalMode('room');
     setCourseModalOpen(true);
   };
@@ -954,7 +1012,10 @@ export default function WorkspacePage() {
       return;
     }
 
-    setCourseModalData(row);
+    const details = await fetchCourseEditorData(row.id);
+    if (!details) return;
+
+    setCourseModalData(details);
     setCourseModalMode('full');
     setCourseModalOpen(true);
   };
@@ -1051,7 +1112,15 @@ export default function WorkspacePage() {
       return;
     }
 
-    setCourseModalData(row);
+    const details = await fetchCourseEditorData(row.id);
+    if (!details) return;
+
+    setCourseModalData({
+      ...details,
+      id: undefined,
+      code: `${details.code ?? normalizeCode(details.course || row.course)}-COPY-${randomInt(10, 99)}`,
+      sessions: details.sessions?.map((session) => ({ ...session, id: undefined }))
+    });
     setCourseModalMode('duplicate');
     setCourseModalOpen(true);
   };
@@ -1733,14 +1802,13 @@ export default function WorkspacePage() {
         rooms={rooms}
         onSave={async (data, id) => {
           if (courseModalMode === 'title') {
-            const updated = await patchCourseApi(id!, { title: data.course });
+            const updated = await patchCourseApi(id!, { title: data.course, sessions: data.sessions });
             if (updated) { showToast("Course updated"); await fetchCourses(); }
           } else if (courseModalMode === 'time') {
-            if (!data.time || !parseTimeRange(data.time)) throw new Error("Invalid time format");
-            const updated = await patchCourseApi(id!, { day: data.day || 'Mon', time: data.time });
+            const updated = await patchCourseApi(id!, { sessions: data.sessions });
             if (updated) { showToast("Schedule updated"); await fetchCourses(); }
           } else if (courseModalMode === 'room') {
-            const updated = await patchCourseApi(id!, { roomId: data.roomId });
+            const updated = await patchCourseApi(id!, { roomId: data.roomId, sessions: data.sessions });
             if (updated) { showToast("Room updated"); await fetchCourses(); }
           } else if (courseModalMode === 'full') {
             const updated = await patchCourseApi(id!, {
@@ -1751,7 +1819,8 @@ export default function WorkspacePage() {
               instructorId: data.instructorId,
               roomId: data.roomId,
               day: data.day,
-              time: data.time
+              time: data.time,
+              sessions: data.sessions
             });
             if (updated) { showToast("Full edit saved"); await fetchCourses(); }
           } else if (courseModalMode === 'duplicate') {
@@ -1763,7 +1832,8 @@ export default function WorkspacePage() {
               instructorId: data.instructorId,
               roomId: data.roomId,
               day: data.day,
-              time: data.time
+              time: data.time,
+              sessions: data.sessions
             });
             if (created) { showToast("Duplicate created"); await fetchCourses(); }
           } else if (courseModalMode === 'create') {
@@ -1775,7 +1845,8 @@ export default function WorkspacePage() {
               instructorId: data.instructorId,
               roomId: data.roomId,
               day: data.day,
-              time: data.time
+              time: data.time,
+              sessions: data.sessions
             });
             if (created) { showToast("Course created"); await fetchCourses(); }
           }

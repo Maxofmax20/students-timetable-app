@@ -7,16 +7,12 @@ import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
-import { EditCourseModal } from '@/components/workspace/EditCourseModal';
 import { CoursesView } from '@/components/workspace/CoursesView';
+import { EditCourseModal, type EditCourseInitialData, type EditCourseSubmitData } from '@/components/workspace/EditCourseModal';
+import { formatSessionType, stripLegacySessionSuffix } from '@/lib/course-sessions';
 import { formatMinute } from '@/lib/schedule';
 import { toUiStatus } from '@/lib/utils';
-import type { ActionLabel, CourseApiItem, GroupApiItem, InstructorApiItem, RoomApiItem, Row, RowAction } from '@/types';
-
-function splitCourseTitle(title: string) {
-  const [course, type] = title.split(' — ');
-  return { course: course || title, type: type || 'Session' };
-}
+import type { CourseApiItem, GroupApiItem, InstructorApiItem, RoomApiItem, Row } from '@/types';
 
 function toApiStatus(status: Row['status'] | string | undefined) {
   if (status === 'Draft') return 'DRAFT';
@@ -24,24 +20,57 @@ function toApiStatus(status: Row['status'] | string | undefined) {
   return 'ACTIVE';
 }
 
+function courseDisplayName(course: CourseApiItem) {
+  const base = stripLegacySessionSuffix(course.title);
+  const count = course.sessions?.length || 0;
+  return count > 1 ? `${base} (${count} sessions)` : base;
+}
+
 function courseToRow(course: CourseApiItem): Row {
-  const titleBits = splitCourseTitle(course.title);
   const firstSession = course.sessions?.[0];
 
   return {
     id: course.id,
     source: 'real',
     code: course.code,
-    course: titleBits.course,
-    group: firstSession?.group?.code || course.group?.code || '-',
-    groupId: firstSession?.groupId ?? course.groupId ?? null,
-    instructor: firstSession?.instructor?.name || course.instructor?.name || '-',
-    instructorId: firstSession?.instructorId ?? course.instructorId ?? null,
-    room: firstSession?.room?.code || course.room?.code || '-',
-    roomId: firstSession?.roomId ?? course.roomId ?? null,
-    day: firstSession?.day || 'Mon',
-    time: firstSession ? `${formatMinute(firstSession.startMinute)}-${formatMinute(firstSession.endMinute)}` : '09:00-10:00',
+    course: courseDisplayName(course),
+    courseName: stripLegacySessionSuffix(course.title),
+    group: course.group?.code || firstSession?.group?.code || '-',
+    groupId: course.groupId ?? firstSession?.groupId ?? null,
+    instructor: course.instructor?.name || firstSession?.instructor?.name || '-',
+    instructorId: course.instructorId ?? firstSession?.instructorId ?? null,
+    room: course.room?.code || firstSession?.room?.code || '-',
+    roomId: course.roomId ?? firstSession?.roomId ?? null,
+    day: firstSession?.day || '--',
+    time: firstSession ? `${formatMinute(firstSession.startMinute)}-${formatMinute(firstSession.endMinute)}` : '--',
     status: toUiStatus(course.status)
+  };
+}
+
+function courseToEditorData(course: CourseApiItem): EditCourseInitialData {
+  const sessions = (course.sessions || []).map((session) => ({
+    id: session.id,
+    type: session.type || undefined,
+    day: session.day,
+    startTime: formatMinute(session.startMinute),
+    endTime: formatMinute(session.endMinute),
+    groupId: session.groupId ?? null,
+    instructorId: session.instructorId ?? null,
+    roomId: session.roomId ?? null,
+    onlinePlatform: session.onlinePlatform ?? null,
+    onlineLink: session.onlineLink ?? null,
+    note: session.note ?? null
+  }));
+
+  return {
+    id: course.id,
+    code: course.code,
+    course: stripLegacySessionSuffix(course.title),
+    status: toUiStatus(course.status),
+    groupId: course.groupId ?? null,
+    instructorId: course.instructorId ?? null,
+    roomId: course.roomId ?? null,
+    sessions
   };
 }
 
@@ -62,8 +91,8 @@ export default function WorkspaceCoursesPage() {
   const [instructors, setInstructors] = useState<InstructorApiItem[]>([]);
   const [rooms, setRooms] = useState<RoomApiItem[]>([]);
   const [courseModalOpen, setCourseModalOpen] = useState(false);
-  const [courseModalMode, setCourseModalMode] = useState<'create' | 'full'>('create');
-  const [courseModalData, setCourseModalData] = useState<Partial<Row>>({});
+  const [courseModalMode, setCourseModalMode] = useState<'create' | 'full' | 'duplicate'>('create');
+  const [courseModalData, setCourseModalData] = useState<EditCourseInitialData>({ sessions: [] });
   const [deleteTarget, setDeleteTarget] = useState<CourseApiItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [createHandled, setCreateHandled] = useState(false);
@@ -108,7 +137,7 @@ export default function WorkspaceCoursesPage() {
 
   useEffect(() => {
     if (!loading && shouldOpenCreate && !createHandled) {
-      setCourseModalData({});
+      setCourseModalData({ sessions: [] });
       setCourseModalMode('create');
       setCourseModalOpen(true);
       setCreateHandled(true);
@@ -118,18 +147,30 @@ export default function WorkspaceCoursesPage() {
   const rows = useMemo(() => courses.map(courseToRow), [courses]);
 
   const openCreate = () => {
-    setCourseModalData({});
+    setCourseModalData({ sessions: [] });
     setCourseModalMode('create');
     setCourseModalOpen(true);
   };
 
   const openEdit = (course: CourseApiItem) => {
-    setCourseModalData(courseToRow(course));
+    setCourseModalData(courseToEditorData(course));
     setCourseModalMode('full');
     setCourseModalOpen(true);
   };
 
-  const saveCourse = async (data: Partial<Row>, originalId?: string) => {
+  const openDuplicate = (course: CourseApiItem) => {
+    const duplicateData = courseToEditorData(course);
+    setCourseModalData({
+      ...duplicateData,
+      id: undefined,
+      code: course.code ? `${course.code}-COPY` : undefined,
+      sessions: duplicateData.sessions?.map((session) => ({ ...session, id: undefined }))
+    });
+    setCourseModalMode('duplicate');
+    setCourseModalOpen(true);
+  };
+
+  const saveCourse = async (data: EditCourseSubmitData, originalId?: string) => {
     setSaving(true);
     try {
       const payload = {
@@ -139,8 +180,7 @@ export default function WorkspaceCoursesPage() {
         groupId: data.groupId ?? null,
         instructorId: data.instructorId ?? null,
         roomId: data.roomId ?? null,
-        day: data.day ?? null,
-        time: data.time ?? null
+        sessions: data.sessions
       };
 
       const response = await fetch(originalId ? `/api/v1/courses/${originalId}` : '/api/v1/courses', {
@@ -190,13 +230,11 @@ export default function WorkspaceCoursesPage() {
     }
   };
 
-  const handleAction = (action: ActionLabel) => {
-    if (action === 'New') {
-      openCreate();
-    }
+  const handleAction = () => {
+    openCreate();
   };
 
-  const handleRowAction = (action: RowAction, row: Row) => {
+  const handleRowAction = (action: 'Edit' | 'Duplicate' | 'Delete', row: Row) => {
     const course = courses.find((item) => item.id === row.id);
     if (!course) return;
 
@@ -211,12 +249,7 @@ export default function WorkspaceCoursesPage() {
     }
 
     if (action === 'Duplicate') {
-      setCourseModalData({
-        ...courseToRow(course),
-        code: course.code ? `${course.code}-COPY` : undefined
-      });
-      setCourseModalMode('create');
-      setCourseModalOpen(true);
+      openDuplicate(course);
     }
   };
 
@@ -246,7 +279,7 @@ export default function WorkspaceCoursesPage() {
         open={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
         title="Delete Course"
-        subtitle="This removes the course and its scheduled sessions from the workspace."
+        subtitle="This removes the course and all of its attached sessions from the workspace."
         actions={
           <>
             <Button variant="ghost" onClick={() => setDeleteTarget(null)} disabled={saving}>Cancel</Button>

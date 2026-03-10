@@ -1,5 +1,6 @@
 import type { CourseApiItem } from '@/types';
 import { downloadIcsFile, type IcsRow } from '@/lib/ics';
+import { formatSessionType, inferLegacySessionType, stripLegacySessionSuffix } from '@/lib/course-sessions';
 
 export const scheduleDayOrder = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'] as const;
 
@@ -34,14 +35,6 @@ export type ScheduleConflict = {
   items: ScheduleItem[];
 };
 
-function splitCourseTitle(title: string) {
-  const [course, type] = title.split(' — ');
-  return {
-    course: course?.trim() || title,
-    type: type?.trim() || 'Session'
-  };
-}
-
 export function formatMinute(total: number) {
   const hours = Math.floor(total / 60);
   const minutes = total % 60;
@@ -50,19 +43,21 @@ export function formatMinute(total: number) {
 
 export function buildScheduleItems(courses: CourseApiItem[]) {
   const items: ScheduleItem[] = courses.flatMap((course) => {
-    const titleBits = splitCourseTitle(course.title);
+    const normalizedCourseTitle = stripLegacySessionSuffix(course.title);
 
     return (course.sessions || []).flatMap((session) => {
       if (!session.day || session.startMinute == null || session.endMinute == null || session.endMinute <= session.startMinute) {
         return [];
       }
 
+      const sessionType = formatSessionType(session.type || inferLegacySessionType(course.title, course.code));
+
       return [{
         id: `${course.id}:${session.id}`,
         courseId: course.id,
         code: course.code,
-        course: titleBits.course,
-        type: titleBits.type,
+        course: normalizedCourseTitle,
+        type: sessionType,
         status: course.status,
         group: session.group?.code || course.group?.code || '-',
         groupId: session.groupId ?? course.groupId ?? null,

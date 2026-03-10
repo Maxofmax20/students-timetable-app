@@ -33,14 +33,20 @@ export type RowData = Row;
 
 export type RowUpdatePayload = Partial<Omit<Row, 'id' | 'source'>>;
 
+export type SessionTypeValue = 'LECTURE' | 'SECTION' | 'LAB' | 'ONLINE' | 'HYBRID';
+
 export type SessionApiItem = {
   id: string;
+  type?: SessionTypeValue | null;
   day: string;
   startMinute: number;
   endMinute: number;
   groupId?: string | null;
   instructorId?: string | null;
   roomId?: string | null;
+  onlinePlatform?: string | null;
+  onlineLink?: string | null;
+  note?: string | null;
   group?: { id?: string; code?: string | null; name?: string | null } | null;
   instructor?: { id?: string; name?: string | null } | null;
   room?: { id?: string; code?: string | null; name?: string | null } | null;
@@ -98,6 +104,20 @@ export type SinglePayload<T> = {
   data?: T;
 };
 
+export type CourseSessionWritePayload = {
+  id?: string;
+  type?: SessionTypeValue;
+  day?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  groupId?: string | null;
+  instructorId?: string | null;
+  roomId?: string | null;
+  onlinePlatform?: string | null;
+  onlineLink?: string | null;
+  note?: string | null;
+};
+
 export type CourseWritePayload = {
   code?: string;
   title?: string;
@@ -107,4 +127,5 @@ export type CourseWritePayload = {
   roomId?: string | null;
   day?: string | null;
   time?: string | null;
+  sessions?: CourseSessionWritePayload[];
 };

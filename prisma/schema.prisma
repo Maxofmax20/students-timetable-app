@@ -195,6 +195,14 @@ enum WorkspaceShareVisibility {
   PRIVATE
 }
 
+enum SessionType {
+  LECTURE
+  SECTION
+  LAB
+  ONLINE
+  HYBRID
+}
+
 model Workspace {
   id           String               @id @default(cuid())
   ownerId      String
@@ -314,18 +322,21 @@ model Course {
 }
 
 model SessionEntry {
-  id           String         @id @default(cuid())
-  workspaceId  String
-  courseId     String
-  groupId      String?
-  instructorId String?
-  roomId       String?
-  day          String
-  startMinute  Int
-  endMinute    Int
-  note         String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  workspaceId    String
+  courseId       String
+  groupId        String?
+  instructorId   String?
+  roomId         String?
+  type           SessionType    @default(LECTURE)
+  day            String
+  startMinute    Int
+  endMinute      Int
+  onlinePlatform String?
+  onlineLink     String?
+  note           String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
   workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   course       Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
   group        AcademicGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
