@@ -23,7 +23,7 @@ export default function AuthPage() {
 /* ------------------------------------------------------------------ */
 function OtpInput({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
-  const digits = value.padEnd(6, ' ').split('').slice(0, 6);
+  const digits = Array.from({ length: 6 }, (_, i) => value[i] ?? '');
 
   const handleKey = useCallback((i: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && !digits[i] && i > 0) {
@@ -38,7 +38,7 @@ function OtpInput({ value, onChange, disabled }: { value: string; onChange: (v: 
     if (!/^\d?$/.test(char)) return;
     const next = [...digits];
     next[i] = char;
-    onChange(next.join('').replace(/\s/g, ''));
+    onChange(next.join(''));
     if (char && i < 5) refs.current[i + 1]?.focus();
   }, [digits, onChange]);
 
@@ -58,7 +58,7 @@ function OtpInput({ value, onChange, disabled }: { value: string; onChange: (v: 
           type="text"
           inputMode="numeric"
           maxLength={1}
-          value={d || ''}
+          value={d}
           disabled={disabled}
           onChange={e => handleChange(i, e.target.value)}
           onKeyDown={e => handleKey(i, e)}
