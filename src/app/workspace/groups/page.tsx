@@ -27,6 +27,7 @@ export default function GroupsPage() {
   const [selectedGroup, setSelectedGroup] = useState<GroupApiItem | null>(null);
   const [formData, setFormData] = useState({ code: '', name: '', parentGroupId: '__none__' });
   const [actionLoading, setActionLoading] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
   const fetchGroups = async () => {
     try {
@@ -62,6 +63,14 @@ export default function GroupsPage() {
   }, [search, sortedGroups]);
 
   const groupedSections = useMemo(() => groupGroupsByRoot(filteredGroups), [filteredGroups]);
+
+  const toggleSection = (key: string) => {
+    if (search.trim()) return;
+    setCollapsedSections((current) => ({
+      ...current,
+      [key]: !(current[key] ?? false)
+    }));
+  };
 
   const mainGroupOptions = useMemo(() => [
     { value: '__none__', label: 'Main group', description: 'Top-level group with no parent' },
@@ -190,10 +199,16 @@ export default function GroupsPage() {
             groupedSections.map((section) => {
               const root = section.root || section.items.find((item) => !item.parentGroupId) || section.items[0];
               const subgroups = section.items.filter((item) => item.id !== root.id);
+              const isCollapsed = search.trim() ? false : (collapsedSections[section.rootCode] ?? false);
 
               return (
                 <section key={section.rootCode} className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">
-                  <div className="flex flex-col gap-3 border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] px-4 py-4 md:px-6">
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(section.rootCode)}
+                    aria-expanded={!isCollapsed}
+                    className="flex w-full flex-col gap-3 border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] px-4 py-4 text-left transition-colors hover:bg-[linear-gradient(135deg,var(--surface-2),var(--surface-3))] md:px-6"
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Main group section</div>
@@ -202,70 +217,81 @@ export default function GroupsPage() {
                           {root.parentGroupId ? `Grouped around inferred root ${section.rootCode}` : 'Parent row first, then all subgroup children underneath.'}
                         </p>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
                           {subgroups.length} subgroup{subgroups.length === 1 ? '' : 's'}
                         </span>
                         <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
                           {section.items.length} total row{section.items.length === 1 ? '' : 's'}
                         </span>
+                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]">
+                          <span className={`material-symbols-outlined text-[20px] transition-transform ${isCollapsed ? '' : 'rotate-180'}`}>expand_more</span>
+                        </span>
                       </div>
                     </div>
-                  </div>
+                  </button>
 
-                  <div className="p-4 md:p-6 space-y-3">
-                    <div className="rounded-[24px] border border-[var(--gold)]/25 bg-[linear-gradient(135deg,var(--gold-muted),transparent)] p-4 shadow-[var(--shadow-sm)]">
-                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[var(--gold)] font-bold font-mono text-sm">{root.code}</span>
-                            <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--surface)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">Main group</span>
+                  {!isCollapsed ? (
+                    <div className="p-4 md:p-6 space-y-3">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection(section.rootCode)}
+                        aria-expanded={!isCollapsed}
+                        className="w-full rounded-[24px] border border-[var(--gold)]/25 bg-[linear-gradient(135deg,var(--gold-muted),transparent)] p-4 text-left shadow-[var(--shadow-sm)] transition-transform hover:-translate-y-0.5"
+                      >
+                        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-[var(--gold)] font-bold font-mono text-sm">{root.code}</span>
+                              <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--surface)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">Main group</span>
+                              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">Tap to collapse</span>
+                            </div>
+                            <div className="mt-2 text-white font-semibold">{root.name}</div>
+                            <div className="mt-1 text-sm text-[var(--text-secondary)]">{groupHierarchyPath(root)} • Top-level group that can receive full-cohort sessions</div>
                           </div>
-                          <div className="mt-2 text-white font-semibold">{root.name}</div>
-                          <div className="mt-1 text-sm text-[var(--text-secondary)]">{groupHierarchyPath(root)} • Top-level group that can receive full-cohort sessions</div>
+                          <div className="flex items-center gap-2 self-end md:self-start">
+                            <Button variant="ghost" size="sm" onClick={(event) => { event.stopPropagation(); openEdit(root); }} className="h-9 w-9 p-0 rounded-lg">
+                              <span className="material-symbols-outlined text-[18px]">edit_square</span>
+                            </Button>
+                            <Button variant="ghost-danger" size="sm" onClick={(event) => { event.stopPropagation(); setSelectedGroup(root); setIsDeleteOpen(true); }} className="h-9 w-9 p-0 rounded-lg">
+                              <span className="material-symbols-outlined text-[18px]">delete</span>
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 self-end md:self-start">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(root)} className="h-9 w-9 p-0 rounded-lg">
-                            <span className="material-symbols-outlined text-[18px]">edit_square</span>
-                          </Button>
-                          <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedGroup(root); setIsDeleteOpen(true); }} className="h-9 w-9 p-0 rounded-lg">
-                            <span className="material-symbols-outlined text-[18px]">delete</span>
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
+                      </button>
 
-                    {subgroups.length ? (
-                      <div className="grid gap-3">
-                        {subgroups.map((group) => (
-                          <div key={group.id} className="rounded-[22px] border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
-                            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="text-[var(--gold)] font-bold font-mono text-sm">{group.code}</span>
-                                  <span className="rounded-full border border-[var(--info)]/30 bg-[var(--info-muted)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--info)]">{groupKindLabel(group)}</span>
+                      {subgroups.length ? (
+                        <div className="grid gap-3">
+                          {subgroups.map((group) => (
+                            <div key={group.id} className="rounded-[22px] border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
+                              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-[var(--gold)] font-bold font-mono text-sm">{group.code}</span>
+                                    <span className="rounded-full border border-[var(--info)]/30 bg-[var(--info-muted)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--info)]">{groupKindLabel(group)}</span>
+                                  </div>
+                                  <div className="mt-2 text-white font-semibold">{group.name}</div>
+                                  <div className="mt-1 text-sm text-[var(--text-secondary)]">{groupHierarchyPath(group)} • Child of {group.parentGroup?.name || section.rootCode}</div>
                                 </div>
-                                <div className="mt-2 text-white font-semibold">{group.name}</div>
-                                <div className="mt-1 text-sm text-[var(--text-secondary)]">{groupHierarchyPath(group)} • Child of {group.parentGroup?.name || section.rootCode}</div>
-                              </div>
-                              <div className="flex items-center gap-2 self-end md:self-start">
-                                <Button variant="ghost" size="sm" onClick={() => openEdit(group)} className="h-9 w-9 p-0 rounded-lg">
-                                  <span className="material-symbols-outlined text-[18px]">edit_square</span>
-                                </Button>
-                                <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedGroup(group); setIsDeleteOpen(true); }} className="h-9 w-9 p-0 rounded-lg">
-                                  <span className="material-symbols-outlined text-[18px]">delete</span>
-                                </Button>
+                                <div className="flex items-center gap-2 self-end md:self-start">
+                                  <Button variant="ghost" size="sm" onClick={() => openEdit(group)} className="h-9 w-9 p-0 rounded-lg">
+                                    <span className="material-symbols-outlined text-[18px]">edit_square</span>
+                                  </Button>
+                                  <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedGroup(group); setIsDeleteOpen(true); }} className="h-9 w-9 p-0 rounded-lg">
+                                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                                  </Button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="rounded-[22px] border border-dashed border-[var(--border)] bg-[var(--bg-raised)] p-4 text-sm text-[var(--text-secondary)]">
-                        No subgroup rows inside this section yet.
-                      </div>
-                    )}
-                  </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-[22px] border border-dashed border-[var(--border)] bg-[var(--bg-raised)] p-4 text-sm text-[var(--text-secondary)]">
+                          No subgroup rows inside this section yet.
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                 </section>
               );
             })

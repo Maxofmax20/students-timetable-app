@@ -26,6 +26,7 @@ export default function RoomsPage() {
   const [selectedRoom, setSelectedRoom] = useState<RoomApiItem | null>(null);
   const [formData, setFormData] = useState({ code: '', name: '', capacity: '', building: '', buildingCode: '', roomNumber: '' });
   const [actionLoading, setActionLoading] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
   const fetchRooms = async () => {
     try {
@@ -69,6 +70,14 @@ export default function RoomsPage() {
   }, [rooms, search]);
 
   const groupedRooms = useMemo(() => groupRoomsByBuilding(filteredRooms), [filteredRooms]);
+
+  const toggleSection = (key: string) => {
+    if (search.trim()) return;
+    setCollapsedSections((current) => ({
+      ...current,
+      [key]: !(current[key] ?? false)
+    }));
+  };
 
   const handleCodeChange = (value: string) => {
     const normalized = normalizeRoomFields({ code: value });
@@ -214,59 +223,73 @@ export default function RoomsPage() {
           {loading ? (
             <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] p-6 shadow-[var(--shadow-lg)] space-y-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}</div>
           ) : filteredRooms.length > 0 ? (
-            groupedRooms.map((section) => (
-              <section key={section.buildingCode} className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">
-                <div className="flex flex-col gap-3 border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] px-4 py-4 md:px-6">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Building section</div>
-                      <h3 className="mt-1 text-xl font-black tracking-tight text-white">{section.buildingCode === '—' ? 'Unstructured rooms' : `Building ${section.buildingCode}`}</h3>
-                      <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                        {section.buildingName ? `${section.buildingName} • ` : ''}Rooms are grouped under the same building letter for faster scanning.
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
-                        {section.rooms.length} room{section.rooms.length === 1 ? '' : 's'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+            groupedRooms.map((section) => {
+              const isCollapsed = search.trim() ? false : (collapsedSections[section.buildingCode] ?? false);
 
-                <div className="p-4 md:p-6 grid gap-3">
-                  {section.rooms.map((room) => (
-                    <div key={room.id} className="rounded-[22px] border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
-                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="inline-flex items-center gap-2 bg-[var(--surface-3)] px-3 py-1.5 rounded-lg border border-[var(--border)] shadow-sm">
-                              <span className="material-symbols-outlined text-[var(--gold)] text-lg">door_open</span>
-                              <span className="text-white font-bold font-mono text-sm">{room.code}</span>
-                            </div>
-                            {room.buildingCode ? <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">Building {room.buildingCode}</span> : null}
-                          </div>
-                          <div className="mt-2 text-white font-semibold">{room.name}</div>
-                          <div className="mt-1 text-sm text-[var(--text-secondary)]">{roomDisplaySummary(room)}</div>
-                          <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">
-                            {room.roomNumber ? <span className="rounded-full border border-[var(--border)] px-2.5 py-1">Room {room.roomNumber}</span> : null}
-                            <span className="rounded-full border border-[var(--border)] px-2.5 py-1">{formatRoomLevel(room.level)}</span>
-                            <span className="rounded-full border border-[var(--border)] px-2.5 py-1">{room.capacity ? `${room.capacity} seats` : 'Capacity not set'}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 self-end md:self-start">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(room)} className="h-9 w-9 p-0 rounded-lg">
-                            <span className="material-symbols-outlined text-[18px]">edit_square</span>
-                          </Button>
-                          <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedRoom(room); setIsDeleteOpen(true); }} className="h-9 w-9 p-0 rounded-lg">
-                            <span className="material-symbols-outlined text-[18px]">delete</span>
-                          </Button>
-                        </div>
+              return (
+                <section key={section.buildingCode} className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(section.buildingCode)}
+                    aria-expanded={!isCollapsed}
+                    className="flex w-full flex-col gap-3 border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] px-4 py-4 text-left transition-colors hover:bg-[linear-gradient(135deg,var(--surface-2),var(--surface-3))] md:px-6"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Building section</div>
+                        <h3 className="mt-1 text-xl font-black tracking-tight text-white">{section.buildingCode === '—' ? 'Unstructured rooms' : `Building ${section.buildingCode}`}</h3>
+                        <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                          {section.buildingName ? `${section.buildingName} • ` : ''}Rooms are grouped under the same building letter for faster scanning.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
+                          {section.rooms.length} room{section.rooms.length === 1 ? '' : 's'}
+                        </span>
+                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]">
+                          <span className={`material-symbols-outlined text-[20px] transition-transform ${isCollapsed ? '' : 'rotate-180'}`}>expand_more</span>
+                        </span>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </section>
-            ))
+                  </button>
+
+                  {!isCollapsed ? (
+                    <div className="p-4 md:p-6 grid gap-3">
+                      {section.rooms.map((room) => (
+                        <div key={room.id} className="rounded-[22px] border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
+                          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="inline-flex items-center gap-2 bg-[var(--surface-3)] px-3 py-1.5 rounded-lg border border-[var(--border)] shadow-sm">
+                                  <span className="material-symbols-outlined text-[var(--gold)] text-lg">door_open</span>
+                                  <span className="text-white font-bold font-mono text-sm">{room.code}</span>
+                                </div>
+                                {room.buildingCode ? <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">Building {room.buildingCode}</span> : null}
+                              </div>
+                              <div className="mt-2 text-white font-semibold">{room.name}</div>
+                              <div className="mt-1 text-sm text-[var(--text-secondary)]">{roomDisplaySummary(room)}</div>
+                              <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                                {room.roomNumber ? <span className="rounded-full border border-[var(--border)] px-2.5 py-1">Room {room.roomNumber}</span> : null}
+                                <span className="rounded-full border border-[var(--border)] px-2.5 py-1">{formatRoomLevel(room.level)}</span>
+                                <span className="rounded-full border border-[var(--border)] px-2.5 py-1">{room.capacity ? `${room.capacity} seats` : 'Capacity not set'}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 self-end md:self-start">
+                              <Button variant="ghost" size="sm" onClick={() => openEdit(room)} className="h-9 w-9 p-0 rounded-lg">
+                                <span className="material-symbols-outlined text-[18px]">edit_square</span>
+                              </Button>
+                              <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedRoom(room); setIsDeleteOpen(true); }} className="h-9 w-9 p-0 rounded-lg">
+                                <span className="material-symbols-outlined text-[18px]">delete</span>
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })
           ) : (
             <EmptyState
               icon={search ? 'search_off' : 'add_location_alt'}
@@ -297,7 +320,7 @@ export default function RoomsPage() {
         <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] p-4 md:p-5">
           <div className="mb-4">
             <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Room details</div>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">Example: E412 means Building E, Room 412, Level 4. The full code updates automatically when the structured fields are present.</p>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">Example: E412 means Building E, Room 412, Level 3. The full code updates automatically when the structured fields are present.</p>
           </div>
           <div className="space-y-4 py-1">
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
