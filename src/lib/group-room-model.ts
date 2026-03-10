@@ -105,3 +105,46 @@ export function roomDisplaySummary(room?: Pick<RoomApiItem, 'code' | 'building' 
   ].filter(Boolean);
   return parts.length ? parts.join(' • ') : room.code;
 }
+
+export function groupGroupsByRoot(groups: GroupApiItem[]) {
+  const sorted = sortGroupsForDisplay(groups);
+  const sections = new Map<string, { rootCode: string; root: GroupApiItem | null; items: GroupApiItem[] }>();
+
+  for (const group of sorted) {
+    const rootCode = group.parentGroup?.code || inferParentGroupCode(group.code) || group.code;
+    const existing = sections.get(rootCode) || { rootCode, root: null, items: [] };
+    existing.items.push(group);
+    if (!group.parentGroupId && normalizeGroupCode(group.code) === normalizeGroupCode(rootCode)) {
+      existing.root = group;
+    }
+    sections.set(rootCode, existing);
+  }
+
+  return [...sections.values()].sort((left, right) => left.rootCode.localeCompare(right.rootCode, undefined, { numeric: true }));
+}
+
+export function groupRoomsByBuilding(rooms: RoomApiItem[]) {
+  const sections = new Map<string, { buildingCode: string; rooms: RoomApiItem[]; buildingName: string | null }>();
+  const sorted = [...rooms].sort((left, right) => {
+    const leftBuilding = left.buildingCode || parseRoomCode(left.code)?.buildingCode || '—';
+    const rightBuilding = right.buildingCode || parseRoomCode(right.code)?.buildingCode || '—';
+    const buildingCompare = leftBuilding.localeCompare(rightBuilding, undefined, { numeric: true });
+    if (buildingCompare !== 0) return buildingCompare;
+    const leftNumber = left.roomNumber || parseRoomCode(left.code)?.roomNumber || left.code;
+    const rightNumber = right.roomNumber || parseRoomCode(right.code)?.roomNumber || right.code;
+    const roomCompare = leftNumber.localeCompare(rightNumber, undefined, { numeric: true });
+    if (roomCompare !== 0) return roomCompare;
+    return left.code.localeCompare(right.code, undefined, { numeric: true });
+  });
+
+  for (const room of sorted) {
+    const parsed = parseRoomCode(room.code);
+    const buildingCode = room.buildingCode || parsed?.buildingCode || '—';
+    const existing = sections.get(buildingCode) || { buildingCode, rooms: [], buildingName: room.building || null };
+    existing.rooms.push(room);
+    existing.buildingName = existing.buildingName || room.building || null;
+    sections.set(buildingCode, existing);
+  }
+
+  return [...sections.values()].sort((left, right) => left.buildingCode.localeCompare(right.buildingCode, undefined, { numeric: true }));
+}

@@ -10,7 +10,7 @@ import { SearchInput } from '@/components/ui/SearchInput';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
-import { formatRoomLevel, normalizeRoomFields, roomDisplaySummary } from '@/lib/group-room-model';
+import { formatRoomLevel, groupRoomsByBuilding, normalizeRoomFields, roomDisplaySummary } from '@/lib/group-room-model';
 import type { RoomApiItem } from '@/types';
 
 export default function RoomsPage() {
@@ -67,6 +67,8 @@ export default function RoomsPage() {
       return haystack.includes(q);
     });
   }, [rooms, search]);
+
+  const groupedRooms = useMemo(() => groupRoomsByBuilding(filteredRooms), [filteredRooms]);
 
   const handleCodeChange = (value: string) => {
     const normalized = normalizeRoomFields({ code: value });
@@ -203,58 +205,68 @@ export default function RoomsPage() {
               {new Set(rooms.map((room) => room.buildingCode).filter(Boolean)).size} buildings represented
             </span>
             <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--gold)]">
-              {search ? `${filteredRooms.length} matching search` : 'Examples: E119 → Building E, Room 119, Level 1'}
+              {search ? `${filteredRooms.length} matching rooms across ${groupedRooms.length} buildings` : 'Example: E119 → Building E, Room 119, Level 0'}
             </span>
           </div>
         </div>
 
-        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">
+        <div className="space-y-5">
           {loading ? (
-            <div className="p-6 space-y-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}</div>
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] p-6 shadow-[var(--shadow-lg)] space-y-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}</div>
           ) : filteredRooms.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[var(--bg-raised)]/50 text-[var(--text-secondary)] border-b border-[var(--border)]">
-                    <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Code</th>
-                    <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Structure</th>
-                    <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Capacity</th>
-                    <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px] text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border-soft)]">
-                  {filteredRooms.map((room) => (
-                    <tr key={room.id} className="group/row hover:bg-[var(--surface-2)]/30 transition-all">
-                      <td className="px-6 py-4">
-                        <div className="inline-flex items-center gap-2 bg-[var(--surface-3)] px-3 py-1.5 rounded-lg border border-[var(--border)] shadow-sm">
-                          <span className="material-symbols-outlined text-[var(--gold)] text-lg">door_open</span>
-                          <span className="text-white font-bold font-mono text-sm">{room.code}</span>
+            groupedRooms.map((section) => (
+              <section key={section.buildingCode} className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">
+                <div className="flex flex-col gap-3 border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] px-4 py-4 md:px-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Building section</div>
+                      <h3 className="mt-1 text-xl font-black tracking-tight text-white">{section.buildingCode === '—' ? 'Unstructured rooms' : `Building ${section.buildingCode}`}</h3>
+                      <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                        {section.buildingName ? `${section.buildingName} • ` : ''}Rooms are grouped under the same building letter for faster scanning.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
+                        {section.rooms.length} room{section.rooms.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 md:p-6 grid gap-3">
+                  {section.rooms.map((room) => (
+                    <div key={room.id} className="rounded-[22px] border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="inline-flex items-center gap-2 bg-[var(--surface-3)] px-3 py-1.5 rounded-lg border border-[var(--border)] shadow-sm">
+                              <span className="material-symbols-outlined text-[var(--gold)] text-lg">door_open</span>
+                              <span className="text-white font-bold font-mono text-sm">{room.code}</span>
+                            </div>
+                            {room.buildingCode ? <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">Building {room.buildingCode}</span> : null}
+                          </div>
+                          <div className="mt-2 text-white font-semibold">{room.name}</div>
+                          <div className="mt-1 text-sm text-[var(--text-secondary)]">{roomDisplaySummary(room)}</div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                            {room.roomNumber ? <span className="rounded-full border border-[var(--border)] px-2.5 py-1">Room {room.roomNumber}</span> : null}
+                            <span className="rounded-full border border-[var(--border)] px-2.5 py-1">{formatRoomLevel(room.level)}</span>
+                            <span className="rounded-full border border-[var(--border)] px-2.5 py-1">{room.capacity ? `${room.capacity} seats` : 'Capacity not set'}</span>
+                          </div>
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-white font-semibold text-sm">{room.name}</span>
-                          <span className="text-[var(--text-secondary)] text-xs">{roomDisplaySummary(room)}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-[var(--text-secondary)] text-sm font-medium">{room.capacity ? `${room.capacity} seats` : 'Not specified'}</span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1 opacity-100 lg:opacity-0 lg:group-hover/row:opacity-100 transition-all">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(room)} className="h-8 w-8 p-0 rounded-lg">
+                        <div className="flex items-center gap-2 self-end md:self-start">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(room)} className="h-9 w-9 p-0 rounded-lg">
                             <span className="material-symbols-outlined text-[18px]">edit_square</span>
                           </Button>
-                          <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedRoom(room); setIsDeleteOpen(true); }} className="h-8 w-8 p-0 rounded-lg">
+                          <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedRoom(room); setIsDeleteOpen(true); }} className="h-9 w-9 p-0 rounded-lg">
                             <span className="material-symbols-outlined text-[18px]">delete</span>
                           </Button>
                         </div>
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              </section>
+            ))
           ) : (
             <EmptyState
               icon={search ? 'search_off' : 'add_location_alt'}
