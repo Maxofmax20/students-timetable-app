@@ -1,9 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
-import { getOrderedScheduleDays } from '@/lib/schedule';
+import { Modal } from '@/components/ui/Modal';
+import { getOrderedScheduleDays, layoutDayItems, type TimetableLayoutItem } from '@/lib/schedule';
+import { cn } from '@/lib/utils';
 import type { Row, RowAction, WeekStartOption } from '@/types';
 
 export type TimetableItem = {
@@ -39,13 +41,30 @@ type TimetableViewProps = {
   showConflictLayer?: boolean;
 };
 
+type CardPreset = 'rich' | 'comfortable' | 'compact' | 'micro';
+
 const DEFAULT_DAY_ORDER = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'] as const;
-const TYPE_COLORS: Record<string, string> = {
-  Lecture: 'border-[var(--gold)]/30 bg-[linear-gradient(135deg,var(--gold-muted),transparent)]',
-  Section: 'border-[var(--info)]/30 bg-[linear-gradient(135deg,var(--info-muted),transparent)]',
-  Lab: 'border-[var(--success)]/30 bg-[linear-gradient(135deg,var(--success-muted),transparent)]',
-  Online: 'border-[var(--accent)]/30 bg-[linear-gradient(135deg,var(--accent-muted),transparent)]',
-  Hybrid: 'border-[var(--warning)]/30 bg-[linear-gradient(135deg,var(--warning-muted),transparent)]'
+const TYPE_META: Record<string, { tone: string; short: string }> = {
+  Lecture: {
+    tone: 'border-[var(--gold)]/30 bg-[linear-gradient(135deg,var(--gold-muted),transparent)]',
+    short: 'Lec'
+  },
+  Section: {
+    tone: 'border-[var(--info)]/30 bg-[linear-gradient(135deg,var(--info-muted),transparent)]',
+    short: 'Sec'
+  },
+  Lab: {
+    tone: 'border-[var(--success)]/30 bg-[linear-gradient(135deg,var(--success-muted),transparent)]',
+    short: 'Lab'
+  },
+  Online: {
+    tone: 'border-[var(--accent)]/30 bg-[linear-gradient(135deg,var(--accent-muted),transparent)]',
+    short: 'Online'
+  },
+  Hybrid: {
+    tone: 'border-[var(--warning)]/30 bg-[linear-gradient(135deg,var(--warning-muted),transparent)]',
+    short: 'Hybrid'
+  }
 };
 
 function formatMinute(total: number) {
@@ -54,8 +73,8 @@ function formatMinute(total: number) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
-function timeRange(start: number, end: number) {
-  return `${formatMinute(start)} → ${formatMinute(end)}`;
+function compactTimeRange(start: number, end: number) {
+  return `${formatMinute(start)}–${formatMinute(end)}`;
 }
 
 function parseRowTime(value: string) {
@@ -102,29 +121,248 @@ function rowToTimetableItem(row: Row): TimetableItem | null {
   };
 }
 
-function buildLanes(items: TimetableItem[]) {
-  const sorted = [...items].sort((left, right) => left.startMinute - right.startMinute || left.endMinute - right.endMinute);
-  const lanes: number[] = [];
-  const assigned = new Map<string, { lane: number; lanes: number }>();
+function getCardPreset({
+  height,
+  lanes,
+  density,
+  isMobile
+}: {
+  height: number;
+  lanes: number;
+  density: 'normal' | 'compact';
+  isMobile: boolean;
+}): CardPreset {
+  if (height <= 72 || lanes >= 4 || (isMobile && lanes >= 3)) return 'micro';
+  if (height <= 96 || lanes >= 3 || (density === 'compact' && height <= 116) || (isMobile && lanes >= 2)) return 'compact';
+  if (height <= 144 || density === 'compact' || isMobile) return 'comfortable';
+  return 'rich';
+}
 
-  for (const item of sorted) {
-    let lane = lanes.findIndex((endMinute) => endMinute <= item.startMinute);
-    if (lane === -1) {
-      lanes.push(item.endMinute);
-      lane = lanes.length - 1;
-    } else {
-      lanes[lane] = item.endMinute;
-    }
-    assigned.set(item.id, { lane, lanes: lanes.length });
-  }
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
 
-  const totalLanes = Math.max(lanes.length, 1);
-  for (const item of sorted) {
-    const current = assigned.get(item.id);
-    if (current) assigned.set(item.id, { lane: current.lane, lanes: totalLanes });
-  }
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(max-width: 767px)');
+    const update = () => setIsMobile(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
-  return assigned;
+  return isMobile;
+}
+
+function SessionCard({
+  item,
+  placement,
+  top,
+  height,
+  density,
+  isMobile,
+  showConflictLayer,
+  onOpen
+}: {
+  item: TimetableItem;
+  placement: TimetableLayoutItem;
+  top: number;
+  height: number;
+  density: 'normal' | 'compact';
+  isMobile: boolean;
+  showConflictLayer: boolean;
+  onOpen: (item: TimetableItem) => void;
+}) {
+  const gap = isMobile ? 6 : 8;
+  const width = `calc((100% - ${(placement.lanes - 1) * gap}px) / ${placement.lanes})`;
+  const left = `calc(${placement.lane} * (${width} + ${gap}px))`;
+  const preset = getCardPreset({ height, lanes: placement.lanes, density, isMobile });
+  const typeMeta = TYPE_META[item.type] || { tone: 'border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))]', short: item.type.slice(0, 3) };
+  const showConflict = Boolean(showConflictLayer && item.conflictTypes?.length);
+  const compactTime = compactTimeRange(item.startMinute, item.endMinute);
+  const primaryMeta = [item.group !== '-' ? `G ${item.group}` : null, item.room !== '-' ? item.room : null].filter(Boolean).join(' • ');
+  const showCourse = preset === 'rich' || preset === 'comfortable';
+  const showPrimaryMeta = preset === 'rich' || preset === 'comfortable';
+  const showInstructor = preset === 'rich';
+  const showConflictChips = showConflict && preset === 'rich';
+  const showConflictBadge = showConflict && preset !== 'rich';
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(item)}
+      className={cn(
+        'absolute overflow-hidden rounded-[18px] border text-left shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]',
+        typeMeta.tone,
+        preset === 'micro' ? 'px-2 py-1.5' : preset === 'compact' ? 'px-2.5 py-2' : 'px-3 py-2.5',
+        showConflict ? 'ring-1 ring-[var(--danger)]/30' : ''
+      )}
+      style={{ top: `${top + 3}px`, left, width, height: `${height}px` }}
+      aria-label={`${item.code} ${item.type} ${item.timeLabel}`}
+      title={`${item.code} • ${item.type} • ${item.timeLabel}`}
+    >
+      <div className="flex h-full flex-col justify-between gap-1.5 overflow-hidden">
+        <div className="flex items-start justify-between gap-1.5">
+          <span className={cn(
+            'max-w-full rounded-full border border-[var(--border)] bg-[var(--surface)] font-black uppercase tracking-[0.12em] text-[var(--gold)]',
+            preset === 'micro' ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]'
+          )}>
+            {preset === 'micro' || preset === 'compact' ? typeMeta.short : item.type}
+          </span>
+          {showConflictBadge ? (
+            <span className="shrink-0 rounded-full border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.1em] text-[var(--danger)]">
+              {item.conflictCount}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="min-w-0 space-y-1 overflow-hidden">
+          <div className={cn(
+            'truncate font-black text-white',
+            preset === 'micro' ? 'text-[11px]' : preset === 'compact' ? 'text-xs' : 'text-sm'
+          )}>
+            {item.code}
+          </div>
+          {showCourse ? (
+            <div className={cn(
+              'text-white/88',
+              preset === 'rich' ? 'line-clamp-2 text-[12px] font-medium leading-4' : 'line-clamp-1 text-[11px] font-medium leading-4'
+            )}>
+              {item.course}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-auto min-w-0 space-y-1 overflow-hidden">
+          <div className={cn(
+            'truncate font-semibold text-[var(--text-secondary)]',
+            preset === 'micro' ? 'text-[10px]' : 'text-[11px]'
+          )}>
+            {compactTime}
+          </div>
+          {showPrimaryMeta && primaryMeta ? (
+            <div className="truncate text-[10px] font-medium text-[var(--text-secondary)]">{primaryMeta}</div>
+          ) : null}
+          {showInstructor && item.instructor !== '-' ? (
+            <div className="truncate text-[10px] font-medium text-[var(--text-secondary)]">{item.instructor}</div>
+          ) : null}
+          {showConflictChips ? (
+            <div className="flex flex-wrap gap-1">
+              {item.conflictTypes?.map((conflict) => (
+                <span key={`${item.id}-${conflict}`} className="rounded-full border border-[var(--danger)]/25 bg-[var(--surface)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--danger)]">
+                  {conflict}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function SessionDetailsModal({
+  item,
+  open,
+  onClose
+}: {
+  item: TimetableItem | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  if (!item) return null;
+
+  return (
+    <Modal open={open} onClose={onClose} size="sm" title={`${item.code} • ${item.type}`} subtitle={item.course}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Time</div>
+          <div className="mt-1 text-sm font-semibold text-white">{item.timeLabel}</div>
+        </div>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Day</div>
+          <div className="mt-1 text-sm font-semibold text-white">{item.day}</div>
+        </div>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Group</div>
+          <div className="mt-1 text-sm font-semibold text-white">{item.group !== '-' ? item.group : 'Unassigned'}</div>
+        </div>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Room</div>
+          <div className="mt-1 text-sm font-semibold text-white">{item.room !== '-' ? item.room : 'Unassigned'}</div>
+        </div>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:col-span-2">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Instructor</div>
+          <div className="mt-1 text-sm font-semibold text-white">{item.instructor !== '-' ? item.instructor : 'Unassigned'}</div>
+        </div>
+        {item.conflictTypes?.length ? (
+          <div className="rounded-2xl border border-[var(--danger)]/30 bg-[var(--danger)]/10 p-4 sm:col-span-2">
+            <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--danger)]">Conflict visibility</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {item.conflictTypes.map((conflict) => (
+                <span key={conflict} className="rounded-full border border-[var(--danger)]/30 bg-[var(--surface)] px-2.5 py-1 text-[11px] font-bold text-[var(--danger)]">
+                  {conflict}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </Modal>
+  );
+}
+
+function DayBoard({
+  day,
+  placements,
+  minStart,
+  totalHours,
+  hourHeight,
+  slots,
+  density,
+  isMobile,
+  showConflictLayer,
+  onOpen
+}: {
+  day: string;
+  placements: TimetableLayoutItem[];
+  minStart: number;
+  totalHours: number;
+  hourHeight: number;
+  slots: number[];
+  density: 'normal' | 'compact';
+  isMobile: boolean;
+  showConflictLayer: boolean;
+  onOpen: (item: TimetableItem) => void;
+}) {
+  return (
+    <div className={cn(
+      'relative rounded-[28px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--bg-raised),var(--surface-2))] shadow-[var(--shadow-sm)]',
+      isMobile ? 'min-w-0' : ''
+    )} style={{ height: `${totalHours * hourHeight}px` }}>
+      {slots.slice(0, -1).map((slot, index) => (
+        <div key={`${day}-${slot}`} className="absolute left-0 right-0 border-t border-dashed border-[var(--border-soft)]" style={{ top: `${index * hourHeight}px` }} />
+      ))}
+      {placements.map((placement) => {
+        const durationHeight = ((placement.item.endMinute - placement.item.startMinute) / 60) * hourHeight - 8;
+        const minimumHeight = isMobile ? 34 : density === 'compact' ? 32 : 36;
+        const height = Math.max(minimumHeight, durationHeight);
+        const top = ((placement.item.startMinute - minStart) / 60) * hourHeight;
+        return (
+          <SessionCard
+            key={placement.item.id}
+            item={placement.item as TimetableItem}
+            placement={placement}
+            top={top}
+            height={height}
+            density={density}
+            isMobile={isMobile}
+            showConflictLayer={showConflictLayer}
+            onOpen={onOpen}
+          />
+        );
+      })}
+    </div>
+  );
 }
 
 export function TimetableView({
@@ -136,7 +374,10 @@ export function TimetableView({
   isLoading = false,
   showConflictLayer = true
 }: TimetableViewProps) {
+  const isMobile = useIsMobile();
   const [density, setDensity] = useState<'normal' | 'compact'>('normal');
+  const [selectedItem, setSelectedItem] = useState<TimetableItem | null>(null);
+  const [mobileDay, setMobileDay] = useState('');
 
   const sourceItems = useMemo(() => {
     if (items?.length) return items;
@@ -148,25 +389,39 @@ export function TimetableView({
     return days.length ? days : [...DEFAULT_DAY_ORDER];
   }, [focusDay, weekStart]);
 
-  const dayBuckets = useMemo(() => {
+  useEffect(() => {
+    const preferredDay = focusDay?.trim().substring(0, 3);
+    if (preferredDay && orderedDays.includes(preferredDay as (typeof orderedDays)[number])) {
+      setMobileDay(preferredDay);
+      return;
+    }
+
+    const firstDayWithItems = orderedDays.find((day) => sourceItems.some((item) => item.day === day));
+    setMobileDay((current) => (current && orderedDays.includes(current as (typeof orderedDays)[number]) ? current : firstDayWithItems || orderedDays[0] || ''));
+  }, [focusDay, orderedDays, sourceItems]);
+
+  const boardMetrics = useMemo(() => {
     const minStart = sourceItems.length ? Math.max(360, Math.floor(Math.min(...sourceItems.map((item) => item.startMinute)) / 60) * 60 - 60) : 420;
     const maxEnd = sourceItems.length ? Math.min(1320, Math.ceil(Math.max(...sourceItems.map((item) => item.endMinute)) / 60) * 60 + 60) : 1080;
-    const hourHeight = density === 'compact' ? 72 : 92;
+    const hourHeight = isMobile ? (density === 'compact' ? 58 : 66) : density === 'compact' ? 68 : 92;
     const totalHours = Math.max(1, (maxEnd - minStart) / 60);
     const slots = Array.from({ length: totalHours + 1 }, (_, index) => minStart + index * 60);
+    return { minStart, maxEnd, hourHeight, totalHours, slots };
+  }, [density, isMobile, sourceItems]);
 
-    const buckets = orderedDays.map((day) => {
-      const dayItems = sourceItems.filter((item) => item.day === day);
-      return {
-        day,
-        laneMap: buildLanes(dayItems),
-        items: dayItems,
-        total: dayItems.length
-      };
-    });
+  const dayBuckets = useMemo(() => orderedDays.map((day) => {
+    const dayItems = sourceItems.filter((item) => item.day === day);
+    return {
+      day,
+      items: dayItems,
+      total: dayItems.length,
+      placements: layoutDayItems(dayItems)
+    };
+  }), [orderedDays, sourceItems]);
 
-    return { minStart, maxEnd, hourHeight, totalHours, slots, buckets };
-  }, [density, orderedDays, sourceItems]);
+  const activeMobileDay = orderedDays.includes(mobileDay as (typeof orderedDays)[number]) ? mobileDay : orderedDays[0] || '';
+  const mobileIndex = Math.max(orderedDays.indexOf(activeMobileDay as (typeof orderedDays)[number]), 0);
+  const mobileBucket = dayBuckets.find((bucket) => bucket.day === activeMobileDay) || dayBuckets[0];
 
   if (isLoading) {
     return (
@@ -216,107 +471,151 @@ export function TimetableView({
   }
 
   return (
-    <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
-      <div className="flex flex-col gap-3 border-b border-[var(--border)] px-4 py-4 md:flex-row md:items-center md:justify-between md:px-6">
-        <div>
-          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Timetable intelligence</div>
-          <h3 className="mt-1 text-xl font-black tracking-tight text-white">Weekly board</h3>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">Inspect sessions by type, group, delivery mode, and visible clash cues without leaving the timetable.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {onExportCalendar ? (
-            <Button variant="secondary" onClick={() => void onExportCalendar()} className="gap-2">
-              <span className="material-symbols-outlined text-[18px]">calendar_month</span>
-              Export calendar
-            </Button>
-          ) : null}
-          <Button variant={density === 'compact' ? 'primary' : 'secondary'} onClick={() => setDensity((current) => current === 'compact' ? 'normal' : 'compact')} className="gap-2">
-            <span className="material-symbols-outlined text-[18px]">{density === 'compact' ? 'density_small' : 'unfold_more'}</span>
-            {density === 'compact' ? 'Compact on' : 'Compact off'}
-          </Button>
-          <span className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
-            {sourceItems.length} session{sourceItems.length === 1 ? '' : 's'} visible
-          </span>
-        </div>
-      </div>
-
-      <div className="overflow-x-auto">
-        <div className="min-w-[980px] px-4 py-4 md:px-6">
-          <div className="grid grid-cols-[76px_repeat(7,minmax(0,1fr))] gap-3 text-center text-[11px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">
-            <div className="rounded-2xl border border-transparent px-2 py-3 text-left">Time</div>
-            {dayBuckets.buckets.map((bucket) => (
-              <div key={bucket.day} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-3">
-                <div className="text-white text-sm font-black normal-case tracking-normal">{bucket.day}</div>
-                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">{bucket.total} session{bucket.total === 1 ? '' : 's'}</div>
-              </div>
-            ))}
+    <>
+      <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
+        <div className="flex flex-col gap-3 border-b border-[var(--border)] px-4 py-4 md:flex-row md:items-center md:justify-between md:px-6">
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Timetable intelligence</div>
+            <h3 className="mt-1 text-xl font-black tracking-tight text-white">Weekly board</h3>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              {isMobile
+                ? 'Mobile shows one focused day at a time so dense schedules stay readable. Tap any session for full details.'
+                : 'The weekly board now adapts card density so busy days stay readable without losing the intelligence controls.'}
+            </p>
           </div>
+          <div className="flex flex-wrap gap-2">
+            {onExportCalendar ? (
+              <Button variant="secondary" onClick={() => void onExportCalendar()} className="gap-2">
+                <span className="material-symbols-outlined text-[18px]">calendar_month</span>
+                Export calendar
+              </Button>
+            ) : null}
+            <Button variant={density === 'compact' ? 'primary' : 'secondary'} onClick={() => setDensity((current) => current === 'compact' ? 'normal' : 'compact')} className="gap-2">
+              <span className="material-symbols-outlined text-[18px]">{density === 'compact' ? 'density_small' : 'unfold_more'}</span>
+              {density === 'compact' ? 'Compact on' : 'Compact off'}
+            </Button>
+            <span className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+              {sourceItems.length} session{sourceItems.length === 1 ? '' : 's'} visible
+            </span>
+          </div>
+        </div>
 
-          <div className="mt-3 grid grid-cols-[76px_repeat(7,minmax(0,1fr))] gap-3">
-            <div className="relative">
-              <div style={{ height: `${dayBuckets.totalHours * dayBuckets.hourHeight}px` }} className="relative">
-                {dayBuckets.slots.slice(0, -1).map((slot, index) => (
-                  <div key={slot} className="absolute left-0 right-0" style={{ top: `${index * dayBuckets.hourHeight}px` }}>
-                    <div className="pr-2 text-right text-[11px] font-semibold text-[var(--text-secondary)]">{formatMinute(slot)}</div>
+        {isMobile ? (
+          <div className="space-y-4 px-4 py-4 md:px-6">
+            <div className="flex items-center justify-between gap-3 rounded-[24px] border border-[var(--border)] bg-[var(--bg-raised)] p-3 shadow-[var(--shadow-sm)]">
+              <Button
+                variant="secondary"
+                onClick={() => setMobileDay(orderedDays[Math.max(mobileIndex - 1, 0)])}
+                disabled={mobileIndex === 0}
+                className="h-11 w-11 min-w-11 justify-center rounded-2xl px-0"
+              >
+                <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+              </Button>
+              <div className="min-w-0 flex-1 overflow-x-auto">
+                <div className="flex min-w-max gap-2 pr-1">
+                  {dayBuckets.map((bucket) => {
+                    const active = bucket.day === activeMobileDay;
+                    return (
+                      <button
+                        key={bucket.day}
+                        type="button"
+                        onClick={() => setMobileDay(bucket.day)}
+                        className={cn(
+                          'rounded-2xl border px-3 py-2 text-left transition-all',
+                          active
+                            ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-white shadow-[var(--shadow-sm)]'
+                            : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]'
+                        )}
+                      >
+                        <div className="text-xs font-black uppercase tracking-[0.12em]">{bucket.day}</div>
+                        <div className="mt-0.5 text-[10px] font-semibold">{bucket.total} session{bucket.total === 1 ? '' : 's'}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={() => setMobileDay(orderedDays[Math.min(mobileIndex + 1, orderedDays.length - 1)])}
+                disabled={mobileIndex === orderedDays.length - 1}
+                className="h-11 w-11 min-w-11 justify-center rounded-2xl px-0"
+              >
+                <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-[58px_minmax(0,1fr)] gap-3">
+              <div className="relative">
+                <div style={{ height: `${boardMetrics.totalHours * boardMetrics.hourHeight}px` }} className="relative">
+                  {boardMetrics.slots.slice(0, -1).map((slot, index) => (
+                    <div key={slot} className="absolute left-0 right-0" style={{ top: `${index * boardMetrics.hourHeight}px` }}>
+                      <div className="pr-2 text-right text-[10px] font-semibold text-[var(--text-secondary)]">{formatMinute(slot)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {mobileBucket ? (
+                <DayBoard
+                  day={mobileBucket.day}
+                  placements={mobileBucket.placements}
+                  minStart={boardMetrics.minStart}
+                  totalHours={boardMetrics.totalHours}
+                  hourHeight={boardMetrics.hourHeight}
+                  slots={boardMetrics.slots}
+                  density={density}
+                  isMobile
+                  showConflictLayer={showConflictLayer}
+                  onOpen={setSelectedItem}
+                />
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <div className="min-w-[1080px] px-4 py-4 md:px-6 xl:min-w-[1180px]">
+              <div className="grid grid-cols-[76px_repeat(7,minmax(132px,1fr))] gap-3 text-center text-[11px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                <div className="rounded-2xl border border-transparent px-2 py-3 text-left">Time</div>
+                {dayBuckets.map((bucket) => (
+                  <div key={bucket.day} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-3">
+                    <div className="text-sm font-black tracking-normal text-white">{bucket.day}</div>
+                    <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">{bucket.total} session{bucket.total === 1 ? '' : 's'}</div>
                   </div>
                 ))}
               </div>
-            </div>
 
-            {dayBuckets.buckets.map((bucket) => (
-              <div key={bucket.day} className="relative rounded-[28px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--bg-raised),var(--surface-2))] shadow-[var(--shadow-sm)]" style={{ height: `${dayBuckets.totalHours * dayBuckets.hourHeight}px` }}>
-                {dayBuckets.slots.slice(0, -1).map((slot, index) => (
-                  <div key={slot} className="absolute left-0 right-0 border-t border-dashed border-[var(--border-soft)]" style={{ top: `${index * dayBuckets.hourHeight}px` }} />
+              <div className="mt-3 grid grid-cols-[76px_repeat(7,minmax(132px,1fr))] gap-3">
+                <div className="relative">
+                  <div style={{ height: `${boardMetrics.totalHours * boardMetrics.hourHeight}px` }} className="relative">
+                    {boardMetrics.slots.slice(0, -1).map((slot, index) => (
+                      <div key={slot} className="absolute left-0 right-0" style={{ top: `${index * boardMetrics.hourHeight}px` }}>
+                        <div className="pr-2 text-right text-[11px] font-semibold text-[var(--text-secondary)]">{formatMinute(slot)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {dayBuckets.map((bucket) => (
+                  <DayBoard
+                    key={bucket.day}
+                    day={bucket.day}
+                    placements={bucket.placements}
+                    minStart={boardMetrics.minStart}
+                    totalHours={boardMetrics.totalHours}
+                    hourHeight={boardMetrics.hourHeight}
+                    slots={boardMetrics.slots}
+                    density={density}
+                    isMobile={false}
+                    showConflictLayer={showConflictLayer}
+                    onOpen={setSelectedItem}
+                  />
                 ))}
-                {bucket.items.map((item) => {
-                  const laneInfo = bucket.laneMap.get(item.id) || { lane: 0, lanes: 1 };
-                  const gap = 8;
-                  const width = `calc((100% - ${(laneInfo.lanes - 1) * gap}px) / ${laneInfo.lanes})`;
-                  const left = `calc(${laneInfo.lane} * (${width} + ${gap}px))`;
-                  const top = ((item.startMinute - dayBuckets.minStart) / 60) * dayBuckets.hourHeight;
-                  const height = Math.max(64, ((item.endMinute - item.startMinute) / 60) * dayBuckets.hourHeight - 6);
-                  const typeColor = TYPE_COLORS[item.type] || 'border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))]';
-                  const conflictVisible = Boolean(showConflictLayer && item.conflictTypes?.length);
-
-                  return (
-                    <article
-                      key={item.id}
-                      className={`absolute rounded-[22px] border p-3 shadow-[var(--shadow-md)] transition-transform hover:-translate-y-0.5 ${typeColor} ${conflictVisible ? 'ring-2 ring-[var(--danger)]/40' : ''}`}
-                      style={{ top: `${top + 3}px`, left, width, height }}
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">{item.type}</span>
-                        {conflictVisible ? (
-                          <span className="rounded-full border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--danger)]">
-                            {item.conflictCount} clash{item.conflictCount === 1 ? '' : 'es'}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="mt-2 text-sm font-black text-white leading-tight">{item.code}</div>
-                      <div className="mt-1 text-xs font-medium text-white/90 line-clamp-2">{item.course}</div>
-                      <div className="mt-2 text-[11px] font-semibold text-[var(--text-secondary)]">{timeRange(item.startMinute, item.endMinute)}</div>
-                      <div className="mt-2 space-y-1 text-[11px] text-[var(--text-secondary)]">
-                        <div>{item.group !== '-' ? `Group ${item.group}` : 'Group unassigned'}</div>
-                        <div>{item.room !== '-' ? `Room ${item.room}` : 'Room unassigned'}</div>
-                        <div>{item.instructor !== '-' ? item.instructor : 'Instructor unassigned'}</div>
-                      </div>
-                      {conflictVisible ? (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {item.conflictTypes?.map((conflict) => (
-                            <span key={`${item.id}-${conflict}`} className="rounded-full border border-[var(--danger)]/30 bg-[var(--surface)] px-2 py-0.5 text-[10px] font-bold text-[var(--danger)]">
-                              {conflict}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </article>
-                  );
-                })}
               </div>
-            ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
-    </div>
+
+      <SessionDetailsModal item={selectedItem} open={Boolean(selectedItem)} onClose={() => setSelectedItem(null)} />
+    </>
   );
 }
