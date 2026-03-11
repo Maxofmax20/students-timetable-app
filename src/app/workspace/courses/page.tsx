@@ -14,7 +14,7 @@ import { CsvImportModal } from '@/components/workspace/CsvImportModal';
 import { EditCourseModal, type EditCourseInitialData, type EditCourseSubmitData } from '@/components/workspace/EditCourseModal';
 import { formatMinute } from '@/lib/schedule';
 import { formatSessionType, inferLegacySessionType, SESSION_TYPE_OPTIONS, stripLegacySessionSuffix } from '@/lib/course-sessions';
-import { toUiStatus } from '@/lib/utils';
+import { csvCell, downloadFile, toUiStatus } from '@/lib/utils';
 import type { CourseApiItem, GroupApiItem, InstructorApiItem, RoomApiItem, Row } from '@/types';
 
 type FilterValue = 'ALL' | string;
@@ -492,6 +492,53 @@ export default function WorkspaceCoursesPage() {
     }
   };
 
+  const scopeLabel = activeFilterSummary.length ? activeFilterSummary.join(' • ') : 'All courses and sessions';
+
+  const exportFilteredCoursesCsv = () => {
+    const rows: string[][] = [];
+    for (const course of filteredCourses) {
+      for (const session of course.sessions || []) {
+        const sessionType = session.type || inferLegacySessionType(course.title, course.code);
+        if (filters.sessionType !== 'ALL' && sessionType !== filters.sessionType) continue;
+        if (filters.day !== 'ALL' && session.day !== filters.day) continue;
+        if (filters.groupId !== 'ALL' && (session.groupId || course.groupId) !== filters.groupId) continue;
+        if (filters.instructorId !== 'ALL' && (session.instructorId || course.instructorId) !== filters.instructorId) continue;
+        if (filters.roomId !== 'ALL' && (session.roomId || course.roomId) !== filters.roomId) continue;
+        if (filters.delivery === 'ONLINE' && sessionType !== 'ONLINE') continue;
+        if (filters.delivery === 'HYBRID' && sessionType !== 'HYBRID') continue;
+        if (filters.delivery === 'PHYSICAL' && !['LECTURE', 'SECTION', 'LAB'].includes(sessionType)) continue;
+
+        rows.push([
+          course.code,
+          stripLegacySessionSuffix(course.title),
+          toUiStatus(course.status),
+          formatSessionType(sessionType),
+          session.day,
+          formatMinute(session.startMinute) + '-' + formatMinute(session.endMinute),
+          session.group?.code || course.group?.code || '-',
+          session.room?.code || course.room?.code || '-',
+          session.room?.name || course.room?.name || '-',
+          session.instructor?.name || course.instructor?.name || '-',
+          session.onlinePlatform || '',
+          session.onlineLink || '',
+          session.note || '',
+          scopeLabel
+        ]);
+      }
+    }
+
+    if (!rows.length) {
+      toast('No session rows match the current course filters for CSV export.', 'error');
+      return;
+    }
+
+    const header = ['course_code', 'course_title', 'status', 'session_type', 'day', 'time', 'group_code', 'room_code', 'room_name', 'instructor', 'online_platform', 'online_link', 'note', 'scope'];
+    const lines = [header.map(csvCell).join(','), ...rows.map((line) => line.map((cell) => csvCell(cell)).join(','))];
+    const dateTag = new Date().toISOString().slice(0, 10);
+    downloadFile('courses-filtered-sessions-' + dateTag + '.csv', lines.join('\n'), 'text/csv;charset=utf-8');
+    toast('Exported filtered courses CSV (' + rows.length + ' session rows). Scope: ' + scopeLabel);
+  };
+
   return (
     <AppShell title="Courses" subtitle="Manage and organize all university courses.">
       <div className="space-y-6">
@@ -620,10 +667,16 @@ export default function WorkspaceCoursesPage() {
           onRowAction={handleRowAction}
           isLoading={status === 'loading' || loading}
           extraActions={
-            <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2 w-full sm:w-auto justify-center">
-              <span className="material-symbols-outlined text-[20px]">upload_file</span>
-              Import CSV
-            </Button>
+            <>
+              <Button onClick={exportFilteredCoursesCsv} variant="secondary" className="gap-2 w-full sm:w-auto justify-center">
+                <span className="material-symbols-outlined text-[20px]">download</span>
+                Export filtered courses (.csv)
+              </Button>
+              <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2 w-full sm:w-auto justify-center">
+                <span className="material-symbols-outlined text-[20px]">upload_file</span>
+                Import CSV
+              </Button>
+            </>
           }
         />
       </div>

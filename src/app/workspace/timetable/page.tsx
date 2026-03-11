@@ -8,8 +8,9 @@ import { Input } from '@/components/ui/Input';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { useToast } from '@/components/ui/Toast';
 import { TimetableView, type TimetableItem } from '@/components/workspace/TimetableView';
-import { buildScheduleConflictReport, buildScheduleItems, getScheduleConflictLabels } from '@/lib/schedule';
+import { buildScheduleConflictReport, buildScheduleItems, downloadScheduleCalendar, getScheduleConflictLabels } from '@/lib/schedule';
 import { groupHierarchyPath, sortGroupsForDisplay } from '@/lib/group-room-model';
+import { csvCell, downloadFile } from '@/lib/utils';
 import type { CourseApiItem, GroupApiItem } from '@/types';
 
 const SESSION_TYPE_OPTIONS = ['Lecture', 'Section', 'Lab', 'Online', 'Hybrid'] as const;
@@ -254,6 +255,93 @@ export default function WorkspaceTimetablePage() {
     setActiveSavedViewId(null);
   };
 
+  const scopeLabel = activeSummary.length ? activeSummary.join(' • ') : 'All timetable sessions';
+  const dateTag = new Date().toISOString().slice(0, 10);
+
+  const exportFilteredIcs = () => {
+    const result = downloadScheduleCalendar(filteredItems, `timetable-filtered-${dateTag}.ics`, 'Students Timetable — Filtered View');
+    if (!result.ok) {
+      toast('No visible sessions to export with the current timetable filters.', 'error');
+      return;
+    }
+    toast(`Exported filtered timetable ICS (${result.count} sessions). Scope: ${scopeLabel}`);
+  };
+
+  const printFilteredView = () => {
+    window.print();
+    toast(`Print dialog opened for current timetable view. Scope: ${scopeLabel}`);
+  };
+
+  const exportRoomUsageSummary = () => {
+    if (!filteredItems.length) {
+      toast('No visible sessions to summarize by room.', 'error');
+      return;
+    }
+
+    const roomMap = new Map<string, { room: string; sessions: number; uniqueCourses: Set<string>; days: Set<string> }>();
+    for (const item of filteredItems) {
+      const roomKey = item.roomId || item.room || 'Unassigned';
+      const bucket = roomMap.get(roomKey) || { room: item.room || 'Unassigned', sessions: 0, uniqueCourses: new Set<string>(), days: new Set<string>() };
+      bucket.sessions += 1;
+      bucket.uniqueCourses.add(item.courseId);
+      bucket.days.add(item.day);
+      roomMap.set(roomKey, bucket);
+    }
+
+    const rows = [...roomMap.values()].sort((a, b) => b.sessions - a.sessions || a.room.localeCompare(b.room));
+    const lines = [
+      ['room', 'sessions_count', 'unique_courses_count', 'days_covered', 'scope'].map(csvCell).join(',')
+    ];
+    for (const row of rows) {
+      lines.push([
+        row.room,
+        `${row.sessions}`,
+        `${row.uniqueCourses.size}`,
+        [...row.days].sort().join(' | '),
+        scopeLabel
+      ].map(csvCell).join(','));
+    }
+
+    downloadFile(`room-usage-summary-filtered-${dateTag}.csv`, lines.join('\n'), 'text/csv;charset=utf-8');
+    toast(`Exported room usage summary CSV (${rows.length} rows). Scope: ${scopeLabel}`);
+  };
+
+  const exportInstructorAssignmentSummary = () => {
+    if (!filteredItems.length) {
+      toast('No visible sessions to summarize by instructor.', 'error');
+      return;
+    }
+
+    const instructorMap = new Map<string, { instructor: string; sessions: number; minutes: number; uniqueCourses: Set<string>; groups: Set<string> }>();
+    for (const item of filteredItems) {
+      const key = item.instructorId || item.instructor || 'Unassigned';
+      const bucket = instructorMap.get(key) || { instructor: item.instructor || 'Unassigned', sessions: 0, minutes: 0, uniqueCourses: new Set<string>(), groups: new Set<string>() };
+      bucket.sessions += 1;
+      bucket.minutes += Math.max(0, item.endMinute - item.startMinute);
+      bucket.uniqueCourses.add(item.courseId);
+      if (item.group && item.group !== '-') bucket.groups.add(item.group);
+      instructorMap.set(key, bucket);
+    }
+
+    const rows = [...instructorMap.values()].sort((a, b) => b.sessions - a.sessions || a.instructor.localeCompare(b.instructor));
+    const lines = [
+      ['instructor', 'sessions_count', 'unique_courses_count', 'teaching_hours', 'groups', 'scope'].map(csvCell).join(',')
+    ];
+    for (const row of rows) {
+      lines.push([
+        row.instructor,
+        `${row.sessions}`,
+        `${row.uniqueCourses.size}`,
+        `${(row.minutes / 60).toFixed(2)}`,
+        [...row.groups].sort().join(' | '),
+        scopeLabel
+      ].map(csvCell).join(','));
+    }
+
+    downloadFile(`instructor-assignment-summary-filtered-${dateTag}.csv`, lines.join('\n'), 'text/csv;charset=utf-8');
+    toast(`Exported instructor summary CSV (${rows.length} rows). Scope: ${scopeLabel}`);
+  };
+
   return (
     <AppShell title="Timetable" subtitle="Inspect the weekly schedule with smarter controls and clash visibility.">
       <div className="space-y-6">
@@ -386,6 +474,29 @@ export default function WorkspaceTimetablePage() {
                       </div>
                     );
                   }) : <div className="text-sm text-[var(--text-secondary)]">No saved views yet — save your current timetable filters.</div>}
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--text-muted)]">Reports & export</div>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">All actions below use the currently visible timetable filters and saved-view state.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button variant="primary" onClick={exportFilteredIcs} className="gap-2">
+                    <span className="material-symbols-outlined text-[18px]">calendar_month</span>
+                    Export filtered timetable (.ics)
+                  </Button>
+                  <Button variant="secondary" onClick={printFilteredView} className="gap-2">
+                    <span className="material-symbols-outlined text-[18px]">print</span>
+                    Print current filtered view
+                  </Button>
+                  <Button variant="secondary" onClick={exportRoomUsageSummary} className="gap-2">
+                    <span className="material-symbols-outlined text-[18px]">meeting_room</span>
+                    Export room usage summary (.csv)
+                  </Button>
+                  <Button variant="secondary" onClick={exportInstructorAssignmentSummary} className="gap-2">
+                    <span className="material-symbols-outlined text-[18px]">co_present</span>
+                    Export instructor summary (.csv)
+                  </Button>
                 </div>
               </div>
 
