@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/Input';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { useToast } from '@/components/ui/Toast';
 import { TimetableView, type TimetableItem } from '@/components/workspace/TimetableView';
-import { buildScheduleItems } from '@/lib/schedule';
+import { buildScheduleConflictReport, buildScheduleItems, getScheduleConflictLabels } from '@/lib/schedule';
 import { groupHierarchyPath, sortGroupsForDisplay } from '@/lib/group-room-model';
 import type { CourseApiItem, GroupApiItem } from '@/types';
 
@@ -37,35 +37,6 @@ function matchesDelivery(item: TimetableItem, filter: DeliveryFilter) {
   return item.type === 'Lecture' || item.type === 'Section' || item.type === 'Lab';
 }
 
-function computeConflictMap(items: TimetableItem[]) {
-  const map = new Map<string, Set<string>>();
-  for (const item of items) map.set(item.id, new Set());
-
-  for (let i = 0; i < items.length; i += 1) {
-    for (let j = i + 1; j < items.length; j += 1) {
-      const left = items[i];
-      const right = items[j];
-      if (left.day !== right.day) continue;
-      const overlaps = left.startMinute < right.endMinute && right.startMinute < left.endMinute;
-      if (!overlaps) continue;
-
-      if (left.groupId && right.groupId && left.groupId === right.groupId) {
-        map.get(left.id)?.add('Group clash');
-        map.get(right.id)?.add('Group clash');
-      }
-      if (left.roomId && right.roomId && left.roomId === right.roomId) {
-        map.get(left.id)?.add('Room clash');
-        map.get(right.id)?.add('Room clash');
-      }
-      if (left.instructorId && right.instructorId && left.instructorId === right.instructorId) {
-        map.get(left.id)?.add('Instructor clash');
-        map.get(right.id)?.add('Instructor clash');
-      }
-    }
-  }
-
-  return map;
-}
 
 export default function WorkspaceTimetablePage() {
   const { status } = useSession({
@@ -170,15 +141,16 @@ export default function WorkspaceTimetablePage() {
     });
   }, [deliveryFilter, groupDescendants, scheduleItems, selectedGroupId, selectedTypes, sortedGroups]);
 
-  const conflictMap = useMemo(() => computeConflictMap(filteredItems), [filteredItems]);
+  const conflictReport = useMemo(() => buildScheduleConflictReport(filteredItems), [filteredItems]);
   const displayItems = useMemo(() => filteredItems.map((item) => {
-    const conflicts = [...(conflictMap.get(item.id) || new Set<string>())];
+    const conflictKinds = conflictReport.conflictMap.get(item.id) || new Set<'room' | 'instructor' | 'group'>();
+    const conflictTypes = getScheduleConflictLabels(conflictKinds);
     return {
       ...item,
-      conflictTypes: conflicts,
-      conflictCount: conflicts.length
+      conflictTypes,
+      conflictCount: conflictTypes.length
     };
-  }), [conflictMap, filteredItems]);
+  }), [conflictReport.conflictMap, filteredItems]);
 
   const activeSummary = useMemo(() => {
     const labels: string[] = [];

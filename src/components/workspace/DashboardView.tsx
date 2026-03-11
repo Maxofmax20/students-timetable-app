@@ -24,6 +24,10 @@ export interface DashboardViewModel {
   nextSession: ScheduleItem | null;
   quality: {
     conflicts: number;
+    conflictSessions: number;
+    roomConflicts: number;
+    instructorConflicts: number;
+    groupConflicts: number;
     missingRoomCount: number;
     missingInstructorCount: number;
     missingGroupCount: number;
@@ -75,6 +79,10 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
     nextSession: null,
     quality: {
       conflicts: conflictsCount || 0,
+      conflictSessions: conflictsCount || 0,
+      roomConflicts: 0,
+      instructorConflicts: 0,
+      groupConflicts: 0,
       missingRoomCount: 0,
       missingInstructorCount: 0,
       missingGroupCount: 0,
@@ -199,7 +207,8 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
           <h3 className="text-lg font-black tracking-tight text-white">Quality checks</h3>
           <div className="mt-4 grid grid-cols-2 gap-3">
             {[
-              ['Conflicts', effectiveModel.quality.conflicts],
+              ['Conflict buckets', effectiveModel.quality.conflicts],
+              ['Affected sessions', effectiveModel.quality.conflictSessions],
               ['Missing rooms', effectiveModel.quality.missingRoomCount],
               ['Missing instructors', effectiveModel.quality.missingInstructorCount],
               ['Missing groups', effectiveModel.quality.missingGroupCount]
@@ -211,6 +220,9 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
             ))}
           </div>
           <p className="mt-4 text-sm text-[var(--text-secondary)]">
+            {`Room: ${effectiveModel.quality.roomConflicts}, Instructor: ${effectiveModel.quality.instructorConflicts}, Group: ${effectiveModel.quality.groupConflicts} conflict bucket${effectiveModel.quality.conflicts === 1 ? '' : 's'}.`}
+          </p>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
             {effectiveModel.quality.unresolvedCount > 0
               ? `${effectiveModel.quality.unresolvedCount} unresolved issue${effectiveModel.quality.unresolvedCount === 1 ? '' : 's'} need attention.`
               : 'No unresolved issues detected in current timetable data.'}

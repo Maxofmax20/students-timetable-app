@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import { AppShell } from '@/components/layout/AppShell';
 import { DashboardView, type DashboardLinkItem, type DashboardStatItem } from '@/components/workspace/DashboardView';
 import { useToast } from '@/components/ui/Toast';
-import { buildScheduleConflicts, buildScheduleItems, downloadScheduleCalendar, scheduleDayOrder, type ScheduleItem } from '@/lib/schedule';
+import { buildScheduleConflictReport, buildScheduleItems, downloadScheduleCalendar, scheduleDayOrder, type ScheduleItem } from '@/lib/schedule';
 import { groupGroupsByRoot, groupRoomsByBuilding } from '@/lib/group-room-model';
 import type { ActionLabel, CourseApiItem, GroupApiItem, InstructorApiItem, RoomApiItem } from '@/types';
 
@@ -110,7 +110,7 @@ export default function WorkspaceDashboardPage() {
   }, [status]);
 
   const scheduleItems = useMemo(() => buildScheduleItems(courses), [courses]);
-  const conflicts = useMemo(() => buildScheduleConflicts(scheduleItems), [scheduleItems]);
+  const conflictReport = useMemo(() => buildScheduleConflictReport(scheduleItems), [scheduleItems]);
 
   const dashboardModel = useMemo(() => {
     const totalCourses = courses.length;
@@ -126,7 +126,7 @@ export default function WorkspaceDashboardPage() {
     const missingRoomCount = scheduleItems.filter((item) => !item.roomId && item.room === '-').length;
     const missingInstructorCount = scheduleItems.filter((item) => !item.instructorId && item.instructor === '-').length;
     const missingGroupCount = scheduleItems.filter((item) => !item.groupId && item.group === '-').length;
-    const unresolvedCount = conflicts.length + missingRoomCount + missingInstructorCount + missingGroupCount;
+    const unresolvedCount = conflictReport.conflicts.length + missingRoomCount + missingInstructorCount + missingGroupCount;
 
     const sessionsByType = Array.from(
       scheduleItems.reduce((acc, item) => {
@@ -215,7 +215,11 @@ export default function WorkspaceDashboardPage() {
       todaySessions,
       nextSession,
       quality: {
-        conflicts: conflicts.length,
+        conflicts: conflictReport.conflicts.length,
+        conflictSessions: conflictReport.sessionsWithConflicts,
+        roomConflicts: conflictReport.bucketsByKind.room,
+        instructorConflicts: conflictReport.bucketsByKind.instructor,
+        groupConflicts: conflictReport.bucketsByKind.group,
         missingRoomCount,
         missingInstructorCount,
         missingGroupCount,
@@ -233,7 +237,7 @@ export default function WorkspaceDashboardPage() {
       },
       quickLinks
     };
-  }, [courses, scheduleItems, conflicts, stats]);
+  }, [courses, scheduleItems, conflictReport, stats]);
 
   const exportCalendar = () => {
     const result = downloadScheduleCalendar(scheduleItems, 'students-timetable-calendar.ics', 'Students Timetable');
@@ -251,12 +255,12 @@ export default function WorkspaceDashboardPage() {
       return;
     }
 
-    if (!conflicts.length) {
-      toast('No room or instructor conflicts found.');
+    if (!conflictReport.conflicts.length) {
+      toast('No room, instructor, or group overlaps found.');
       return;
     }
 
-    toast(`Found ${conflicts.length} timetable overlap${conflicts.length === 1 ? '' : 's'}.`, 'error');
+    toast(`Found ${conflictReport.conflicts.length} overlap bucket${conflictReport.conflicts.length === 1 ? '' : 's'} across ${conflictReport.sessionsWithConflicts} session${conflictReport.sessionsWithConflicts === 1 ? '' : 's'}.`, 'error');
   };
 
   const handleAction = (actionName: ActionLabel) => {
