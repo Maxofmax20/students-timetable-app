@@ -230,6 +230,7 @@ export default function WorkspaceCoursesPage() {
   const [access, setAccess] = useState<WorkspaceAccess | null>(null);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const [showSavedViewsPanel, setShowSavedViewsPanel] = useState(false);
+  const [showSecondaryActions, setShowSecondaryActions] = useState(false);
 
   const loadSavedViews = async (resolvedWorkspaceId: string) => {
     const response = await fetch(`/api/v1/saved-views?workspaceId=${resolvedWorkspaceId}&surface=COURSES`, { credentials: 'include' });
@@ -565,13 +566,13 @@ export default function WorkspaceCoursesPage() {
   return (
     <AppShell title="Courses" subtitle="Manage and organize all university courses.">
       <div className="space-y-6">
-        <section className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
-          <div className="flex flex-col gap-4">
+        <section className="rounded-[20px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-2.5 shadow-[var(--shadow-sm)] md:p-3.5">
+          <div className="flex flex-col gap-2.5">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
+              <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
                 Showing {filteredCourses.length} of {courses.length}
               </span>
-              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
                 {activeFilterSummary.length} active filter{activeFilterSummary.length === 1 ? '' : 's'}
               </span>
               <Button variant={showFiltersPanel ? 'primary' : 'secondary'} onClick={() => setShowFiltersPanel((current) => !current)} className="gap-2 ml-auto">
@@ -582,11 +583,30 @@ export default function WorkspaceCoursesPage() {
                 <span className="material-symbols-outlined text-[18px]">bookmark</span>
                 Saved views
               </Button>
+              <div className="relative">
+                <Button variant="ghost" onClick={() => setShowSecondaryActions((current) => !current)} className="gap-1.5 px-3">
+                  <span className="material-symbols-outlined text-[18px]">more_horiz</span>
+                  More
+                </Button>
+                {showSecondaryActions ? (
+                  <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-[190px] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[var(--shadow-md)]">
+                    <Button variant="ghost" onClick={() => { exportFilteredCoursesCsv(); setShowSecondaryActions(false); }} className="w-full justify-start gap-2 px-2 py-2 text-sm">
+                      <span className="material-symbols-outlined text-[18px]">download</span>
+                      Export CSV
+                    </Button>
+                    <Button variant="ghost" onClick={() => { setFilters(DEFAULT_FILTERS); setActiveSavedViewId(null); setShowSecondaryActions(false); }} className="w-full justify-start gap-2 px-2 py-2 text-sm text-[var(--text-secondary)]">
+                      <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                      Reset view
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
-              <AppSelect
-                label="Current saved view"
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-[220px] flex-1 md:max-w-[360px]">
+                <AppSelect
+                label="View"
                 value={activeSavedViewId || 'CUSTOM'}
                 onChange={(value) => {
                   if (value === 'CUSTOM') {
@@ -598,20 +618,17 @@ export default function WorkspaceCoursesPage() {
                 }}
                 options={savedViewOptions}
               />
-              <Button variant="secondary" onClick={exportFilteredCoursesCsv} className="gap-2 md:self-end">
-                <span className="material-symbols-outlined text-[18px]">download</span>
-                Export CSV
-              </Button>
-              <Button variant="secondary" onClick={() => { setFilters(DEFAULT_FILTERS); setActiveSavedViewId(null); }} className="gap-2 md:self-end">
-                <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-                Reset
+              </div>
+              <Button variant="ghost" onClick={() => setShowSavedViewsPanel((current) => !current)} className="gap-2">
+                <span className="material-symbols-outlined text-[18px]">tune</span>
+                Manage saved views
               </Button>
             </div>
 
             {activeFilterSummary.length ? (
               <div className="flex flex-wrap gap-2">
                 {activeFilterSummary.map((label) => (
-                  <span key={label} className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                  <span key={label} className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
                     {label}
                   </span>
                 ))}
@@ -619,7 +636,7 @@ export default function WorkspaceCoursesPage() {
             ) : null}
 
             {showFiltersPanel ? (
-              <div className="grid gap-4 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)] md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-2.5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2.5 shadow-[var(--shadow-sm)] md:grid-cols-2 xl:grid-cols-4">
                 <AppSelect label="Status" value={filters.status} onChange={(value) => setFilters((current) => ({ ...current, status: value }))} options={statusOptions} />
                 <AppSelect label="Session type" value={filters.sessionType} onChange={(value) => setFilters((current) => ({ ...current, sessionType: value }))} options={sessionTypeOptions} />
                 <AppSelect label="Day" value={filters.day} onChange={(value) => setFilters((current) => ({ ...current, day: value }))} options={DAY_OPTIONS} />
@@ -628,7 +645,7 @@ export default function WorkspaceCoursesPage() {
                 <AppSelect label="Instructor" value={filters.instructorId} onChange={(value) => setFilters((current) => ({ ...current, instructorId: value }))} options={instructorOptions} searchable searchPlaceholder="Find instructor" />
                 <AppSelect label="Room" value={filters.roomId} onChange={(value) => setFilters((current) => ({ ...current, roomId: value }))} options={roomOptions} searchable searchPlaceholder="Find room" />
                 <div className="flex items-end">
-                  <Button variant="secondary" onClick={() => { setFilters(DEFAULT_FILTERS); setActiveSavedViewId(null); }} className="w-full gap-2">
+                  <Button variant="ghost" onClick={() => { setFilters(DEFAULT_FILTERS); setActiveSavedViewId(null); }} className="w-full gap-2 text-[var(--text-secondary)]">
                     <span className="material-symbols-outlined text-[18px]">restart_alt</span>
                     Reset Filters
                   </Button>
@@ -637,8 +654,8 @@ export default function WorkspaceCoursesPage() {
             ) : null}
 
             {showSavedViewsPanel ? (
-              <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)]">
-                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2.5 shadow-[var(--shadow-sm)]">
+                <div className="flex flex-col gap-2.5 md:flex-row md:items-end md:justify-between">
                   <div className="w-full md:max-w-sm">
                     <Input
                       label="Saved view name"
@@ -653,7 +670,7 @@ export default function WorkspaceCoursesPage() {
                     Save Current View
                   </Button>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   {savedViews.length ? (
                     savedViews.map((view) => {
                       const isActive = activeSavedViewId === view.id;

@@ -69,6 +69,7 @@ export default function WorkspaceTimetablePage() {
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const [showSavedViewsPanel, setShowSavedViewsPanel] = useState(false);
   const [showReportsPanel, setShowReportsPanel] = useState(false);
+  const [showSecondaryActions, setShowSecondaryActions] = useState(false);
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -367,13 +368,13 @@ export default function WorkspaceTimetablePage() {
           </div>
         ) : null}
 
-        <section className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
-          <div className="flex flex-col gap-4">
+        <section className="rounded-[20px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-2.5 shadow-[var(--shadow-sm)] md:p-3.5">
+          <div className="flex flex-col gap-2.5">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
+              <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
                 {displayItems.length} visible session{displayItems.length === 1 ? '' : 's'}
               </span>
-              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
                 {conflictStats.sessionsWithConflicts} sessions with clashes
               </span>
               <Button variant={showFiltersPanel ? 'primary' : 'secondary'} onClick={() => setShowFiltersPanel((current) => !current)} className="gap-2 ml-auto">
@@ -384,15 +385,34 @@ export default function WorkspaceTimetablePage() {
                 <span className="material-symbols-outlined text-[18px]">bookmark</span>
                 Saved views
               </Button>
-              <Button variant={showReportsPanel ? 'primary' : 'secondary'} onClick={() => setShowReportsPanel((current) => !current)} className="gap-2">
-                <span className="material-symbols-outlined text-[18px]">download</span>
-                Reports & export
-              </Button>
+              <div className="relative">
+                <Button variant="ghost" onClick={() => setShowSecondaryActions((current) => !current)} className="gap-1.5 px-3">
+                  <span className="material-symbols-outlined text-[18px]">more_horiz</span>
+                  More
+                </Button>
+                {showSecondaryActions ? (
+                  <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-[220px] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[var(--shadow-md)]">
+                    <Button variant="ghost" onClick={() => { setShowReportsPanel((current) => !current); setShowSecondaryActions(false); }} className="w-full justify-start gap-2 px-2 py-2 text-sm">
+                      <span className="material-symbols-outlined text-[18px]">download</span>
+                      Reports & export
+                    </Button>
+                    <Button variant="ghost" onClick={() => { resetFilters(); setShowSecondaryActions(false); }} className="w-full justify-start gap-2 px-2 py-2 text-sm text-[var(--text-secondary)]">
+                      <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                      Reset view
+                    </Button>
+                    <Button variant="ghost" onClick={() => { setShowConflictLayer((current) => !current); setShowSecondaryActions(false); }} className="w-full justify-start gap-2 px-2 py-2 text-sm text-[var(--text-secondary)]">
+                      <span className="material-symbols-outlined text-[18px]">warning</span>
+                      {showConflictLayer ? 'Conflict layer on' : 'Conflict layer off'}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-              <AppSelect
-                label="Current saved view"
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="min-w-[220px] flex-1 md:max-w-[360px]">
+                <AppSelect
+                label="View"
                 value={activeSavedViewId || 'CUSTOM'}
                 onChange={(value) => {
                   if (value === 'CUSTOM') {
@@ -404,16 +424,17 @@ export default function WorkspaceTimetablePage() {
                 }}
                 options={savedViewOptions}
               />
-              <Button variant="secondary" onClick={resetFilters} className="gap-2 md:self-end">
-                <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-                Reset view
+              </div>
+              <Button variant="ghost" onClick={() => setShowSavedViewsPanel((current) => !current)} className="gap-2">
+                <span className="material-symbols-outlined text-[18px]">tune</span>
+                Manage saved views
               </Button>
             </div>
 
             {activeSummary.length ? (
               <div className="flex flex-wrap gap-2">
                 {activeSummary.map((label) => (
-                  <span key={label} className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                  <span key={label} className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
                     {label}
                   </span>
                 ))}
@@ -421,7 +442,7 @@ export default function WorkspaceTimetablePage() {
             ) : null}
 
             {showFiltersPanel ? (
-              <div className="grid gap-4 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)] lg:grid-cols-[1.5fr_minmax(0,0.9fr)_minmax(0,0.8fr)_auto]">
+              <div className="grid gap-2.5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2.5 shadow-[var(--shadow-sm)] lg:grid-cols-[1.5fr_minmax(0,0.9fr)_minmax(0,0.8fr)_auto]">
                 <div>
                   <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--text-muted)]">Session type visibility</div>
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -464,7 +485,7 @@ export default function WorkspaceTimetablePage() {
                 />
 
                 <div className="flex flex-col gap-2 lg:items-end lg:justify-end">
-                  <Button variant={showConflictLayer ? 'primary' : 'secondary'} onClick={() => setShowConflictLayer((current) => !current)} className="gap-2">
+                  <Button variant="ghost" onClick={() => setShowConflictLayer((current) => !current)} className="gap-2 text-[var(--text-secondary)]">
                     <span className="material-symbols-outlined text-[18px]">warning</span>
                     {showConflictLayer ? 'Conflict layer on' : 'Conflict layer off'}
                   </Button>
@@ -473,8 +494,8 @@ export default function WorkspaceTimetablePage() {
             ) : null}
 
             {showSavedViewsPanel ? (
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-3">
-                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-2.5">
+                <div className="flex flex-col gap-2.5 md:flex-row md:items-end md:justify-between">
                   <div className="w-full md:max-w-sm">
                     <Input
                       label="Saved view name"
@@ -526,7 +547,7 @@ export default function WorkspaceTimetablePage() {
             ) : null}
 
             {showReportsPanel ? (
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2.5">
                 <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--text-muted)]">Reports & export</div>
                 <p className="mt-1 text-xs text-[var(--text-secondary)]">All actions below use the currently visible timetable filters and saved-view state.</p>
                 <div className="mt-3 flex flex-wrap gap-2">
