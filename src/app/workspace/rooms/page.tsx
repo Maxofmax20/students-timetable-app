@@ -46,6 +46,7 @@ export default function RoomsPage() {
   const [selectedRoom, setSelectedRoom] = useState<RoomApiItem | null>(null);
   const [formData, setFormData] = useState({ code: '', name: '', capacity: '', building: '', buildingCode: '', roomNumber: '' });
   const [actionLoading, setActionLoading] = useState(false);
+  const [deletingRoomId, setDeletingRoomId] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [access, setAccess] = useState<WorkspaceAccess | null>(null);
 
@@ -167,19 +168,23 @@ export default function RoomsPage() {
   const handleDelete = async () => {
     if (!access?.canWrite) return toast('Viewer mode: room deletion is disabled.', 'error');
     if (!selectedRoom) return;
+    const roomToDelete = selectedRoom;
     setActionLoading(true);
+    setDeletingRoomId(roomToDelete.id);
     try {
-      const res = await fetch(`/api/v1/rooms/${selectedRoom.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/v1/rooms/${roomToDelete.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to remove room');
 
-      toast('Room removed successfully');
+      setRooms((current) => current.filter((room) => room.id !== roomToDelete.id));
+      toast('Room deleted');
       setIsDeleteOpen(false);
-      await fetchRooms();
+      setSelectedRoom(null);
     } catch (err: unknown) {
       toast(err instanceof Error ? err.message : 'Request failed', 'error');
     } finally {
       setActionLoading(false);
+      setDeletingRoomId(null);
     }
   };
 
@@ -321,7 +326,13 @@ export default function RoomsPage() {
                                 <Button variant="ghost" size="sm" onClick={() => openEdit(room)} className="h-9 w-9 p-0 rounded-lg">
                                   <span className="material-symbols-outlined text-[18px]">edit_square</span>
                                 </Button>
-                                <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedRoom(room); setIsDeleteOpen(true); }} className="h-9 w-9 p-0 rounded-lg">
+                                <Button
+                                  variant="ghost-danger"
+                                  size="sm"
+                                  onClick={() => { setSelectedRoom(room); setIsDeleteOpen(true); }}
+                                  className="h-9 w-9 p-0 rounded-lg"
+                                  disabled={actionLoading && deletingRoomId === room.id}
+                                >
                                   <span className="material-symbols-outlined text-[18px]">delete</span>
                                 </Button>
                               </div>

@@ -93,6 +93,7 @@ export default function InstructorsPage() {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', phone: '' });
   const [actionLoading, setActionLoading] = useState(false);
+  const [deletingInstructorId, setDeletingInstructorId] = useState<string | null>(null);
   const [access, setAccess] = useState<WorkspaceAccess | null>(null);
 
   const fetchInstructors = async () => {
@@ -173,21 +174,24 @@ export default function InstructorsPage() {
   const handleDelete = async () => {
     if (!access?.canWrite) return toast('Viewer mode: instructor deletion is disabled.', 'error');
     if (!selectedInstructor) return;
+    const instructorToDelete = selectedInstructor;
     setActionLoading(true);
+    setDeletingInstructorId(instructorToDelete.id);
     try {
-      const res = await fetch(`/api/v1/instructors/${selectedInstructor.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/v1/instructors/${instructorToDelete.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to remove instructor');
 
-      toast('Instructor removed successfully');
+      setInstructors((current) => current.filter((instructor) => instructor.id !== instructorToDelete.id));
+      toast('Instructor removed');
       setIsDeleteOpen(false);
       setSelectedInstructor(null);
       setSelectedDetails(null);
-      await fetchInstructors();
     } catch (err: unknown) {
       toast(err instanceof Error ? err.message : 'Request failed', 'error');
     } finally {
       setActionLoading(false);
+      setDeletingInstructorId(null);
     }
   };
 
@@ -307,7 +311,13 @@ export default function InstructorsPage() {
                             <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(i); }} className="h-10 w-10 rounded-xl p-0">
                               <span className="material-symbols-outlined text-[18px]">edit_square</span>
                             </Button>
-                            <Button variant="ghost-danger" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedInstructor(i); setIsDeleteOpen(true); }} className="h-10 w-10 rounded-xl p-0">
+                            <Button
+                              variant="ghost-danger"
+                              size="sm"
+                              onClick={(e) => { e.stopPropagation(); setSelectedInstructor(i); setIsDeleteOpen(true); }}
+                              className="h-10 w-10 rounded-xl p-0"
+                              disabled={actionLoading && deletingInstructorId === i.id}
+                            >
                               <span className="material-symbols-outlined text-[18px]">delete</span>
                             </Button>
                           </div>
@@ -369,7 +379,13 @@ export default function InstructorsPage() {
                                 <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(i); }} className="h-9 w-9 p-0 rounded-lg">
                                   <span className="material-symbols-outlined text-[18px]">edit_square</span>
                                 </Button>
-                                <Button variant="ghost-danger" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedInstructor(i); setIsDeleteOpen(true); }} className="h-9 w-9 p-0 rounded-lg">
+                                <Button
+                                  variant="ghost-danger"
+                                  size="sm"
+                                  onClick={(e) => { e.stopPropagation(); setSelectedInstructor(i); setIsDeleteOpen(true); }}
+                                  className="h-9 w-9 p-0 rounded-lg"
+                                  disabled={actionLoading && deletingInstructorId === i.id}
+                                >
                                   <span className="material-symbols-outlined text-[18px]">delete</span>
                                 </Button>
                               </div>

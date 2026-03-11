@@ -43,6 +43,7 @@ export default function GroupsPage() {
   const [selectedGroup, setSelectedGroup] = useState<GroupApiItem | null>(null);
   const [formData, setFormData] = useState({ code: '', name: '', parentGroupId: '__none__' });
   const [actionLoading, setActionLoading] = useState(false);
+  const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [canWrite, setCanWrite] = useState(true);
   const [canImport, setCanImport] = useState(true);
@@ -147,19 +148,29 @@ export default function GroupsPage() {
       return;
     }
     if (!selectedGroup) return;
+    const groupToDelete = selectedGroup;
     setActionLoading(true);
+    setDeletingGroupId(groupToDelete.id);
     try {
-      const res = await fetch(`/api/v1/groups/${selectedGroup.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/v1/groups/${groupToDelete.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to delete group');
 
-      toast('Group deleted successfully');
+      setGroups((current) => {
+        const next = current.filter((group) => group.id !== groupToDelete.id);
+        if (!groupToDelete.parentGroupId) return next;
+        return next.map((group) => group.id === groupToDelete.parentGroupId
+          ? { ...group, childCount: Math.max(0, (group.childCount || 0) - 1) }
+          : group);
+      });
+      toast('Group deleted');
       setIsDeleteOpen(false);
-      await fetchGroups();
+      setSelectedGroup(null);
     } catch (err: unknown) {
       toast(err instanceof Error ? err.message : 'Request failed', 'error');
     } finally {
       setActionLoading(false);
+      setDeletingGroupId(null);
     }
   };
 
@@ -305,7 +316,13 @@ export default function GroupsPage() {
                             <Button variant="ghost" size="sm" onClick={(event) => { event.stopPropagation(); openEdit(root); }} className="h-9 w-9 p-0 rounded-lg">
                               <span className="material-symbols-outlined text-[18px]">edit_square</span>
                             </Button>
-                            <Button variant="ghost-danger" size="sm" onClick={(event) => { event.stopPropagation(); setSelectedGroup(root); setIsDeleteOpen(true); }} className="h-9 w-9 p-0 rounded-lg">
+                            <Button
+                              variant="ghost-danger"
+                              size="sm"
+                              onClick={(event) => { event.stopPropagation(); setSelectedGroup(root); setIsDeleteOpen(true); }}
+                              className="h-9 w-9 p-0 rounded-lg"
+                              disabled={actionLoading && deletingGroupId === root.id}
+                            >
                               <span className="material-symbols-outlined text-[18px]">delete</span>
                             </Button>
                           </div>
@@ -329,7 +346,13 @@ export default function GroupsPage() {
                                   <Button variant="ghost" size="sm" onClick={() => openEdit(group)} className="h-9 w-9 p-0 rounded-lg">
                                     <span className="material-symbols-outlined text-[18px]">edit_square</span>
                                   </Button>
-                                  <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedGroup(group); setIsDeleteOpen(true); }} className="h-9 w-9 p-0 rounded-lg">
+                                  <Button
+                                    variant="ghost-danger"
+                                    size="sm"
+                                    onClick={() => { setSelectedGroup(group); setIsDeleteOpen(true); }}
+                                    className="h-9 w-9 p-0 rounded-lg"
+                                    disabled={actionLoading && deletingGroupId === group.id}
+                                  >
                                     <span className="material-symbols-outlined text-[18px]">delete</span>
                                   </Button>
                                 </div>
