@@ -1,153 +1,99 @@
 # Students Timetable
 
-Students Timetable is a production-deployed university scheduling workspace for managing courses, sessions, groups, instructors, rooms, and weekly timetable views from one shared product model.
+Students Timetable is a workspace-based academic scheduling platform for managing courses, sessions, groups, instructors, rooms, and timetable views in one structured system. It is designed for institutions that need a reliable operational layer behind a timetable, not just a visual calendar. The product combines resource management, scheduling intelligence, and import workflows so academic data can be created, validated, and maintained consistently.
 
-- **Live site:** <https://demostb.duckdns.org>
-- **Canonical production repo path:** `/home/ubuntu/.openclaw/workspace/students-timetable-app`
-- **Production runtime:** `students-timetable.service` (systemd)
-
-> Safety note: treat `/home/ubuntu/.openclaw/workspace/students-timetable-app` as the source of truth for live production work. Do **not** assume `/home/ubuntu/timetable` is the canonical live repo path.
+**Live:** <https://demostb.duckdns.org>
 
 ---
 
-## What the app does
+## Key Features
 
-Students Timetable helps a university department or teaching team manage the real scheduling objects behind a timetable:
+### Scheduling and timetable management
+- Weekly timetable with **Grid** and **List** views
+- Day-focused mobile timetable behavior for better readability on smaller screens
+- Timetable intelligence controls for:
+  - session type visibility
+  - group and subgroup focus
+  - delivery mode filtering
+  - conflict visibility
+  - reset and active filter state handling
 
-- courses
-- many sessions per course
-- academic groups and subgroups
-- instructors
-- structured rooms
-- weekly timetable rendering
-- account/auth flows
-- CSV bulk import for operational data entry
-
-The app is designed around a workspace model so scheduling data, settings, and resources live together instead of being scattered across separate tools.
-
----
-
-## Main product capabilities
-
-### Auth and account
-- Email/password authentication
-- Email verification flow
-- Forgot/reset password flow
-- OTP verification with visible and usable OTP UI
-- OTP typing and paste handling fixes already shipped
-- Account/profile and account security screens
-
-### Courses and sessions
-- One **Course** can own **many SessionEntry rows**
-- Course create/edit supports multi-session scheduling
-- Session types supported:
+### Course and session management
+- One **Course** can contain **multiple sessions**
+- Session-aware create and edit flows
+- Support for mixed delivery models within the same course structure
+- Session types:
   - `LECTURE`
   - `SECTION`
   - `LAB`
   - `ONLINE`
   - `HYBRID`
-- Course/session import now supports grouped creation from CSV
 
-### Groups
-- Main group + subgroup hierarchy
-- Parent-child academic group model
-- Grouped UI with collapsible sections
-- Groups CSV import with hierarchy-safe validation
+### Academic resource management
+- Hierarchical academic groups with main-group and subgroup relationships
+- Structured rooms with building metadata and derived level information
+- Dedicated management surfaces for:
+  - Courses
+  - Groups
+  - Rooms
+  - Instructors
 
-### Rooms
-- Structured room model using:
-  - `buildingCode`
-  - `roomNumber`
-  - derived `level`
-- Grouped UI by building with collapsible sections
-- Rooms CSV import with structure validation and derived level handling
+### Productivity features
+- Smart filters on course management surfaces
+- Saved views for frequently used course filters
+- Browser-local persistence for saved views
 
-### Timetable
-- Timetable intelligence controls
-- Session-type visibility controls
-- Group/subgroup focused filtering
-- Delivery-mode filtering
-- Visible-session count
-- Conflict visibility layer
-- Grid and List modes
-- Day-focused mobile grid fallback
-- Adaptive timetable card density/readability improvements
+### Bulk import workflows
+- CSV import for **Rooms**
+- CSV import for **Groups**
+- CSV import for **Courses + Sessions**
+- Preview-before-import validation flow
+- Explicit duplicate reporting
+- Create-only import behavior to avoid silent overwrites
 
-### Batch 1 productivity features
-- Smart filters on Courses page
-- Saved views on Courses page
-- Browser-local saved views persistence
-
-### Bulk import (Batch 3)
-- Rooms CSV import
-- Groups CSV import
-- Courses + Sessions CSV import
-- Preview → validation → confirm import flow
-- Create-only safety model with explicit duplicate reporting
+### Authentication and account flows
+- Email/password authentication
+- Email verification flow
+- Forgot/reset password flow
+- OTP-based verification and reset support
+- Account profile and security screens
 
 ---
 
-## Current architecture summary
+## Core Concepts / Data Model
 
-### Stack
-- **Framework:** Next.js 16
-- **UI:** React 19 + TypeScript
-- **Styling:** Tailwind CSS + app design tokens / CSS variables
-- **Database:** PostgreSQL via Prisma ORM
-- **Auth:** NextAuth credentials-based auth
-- **Email/OTP:** SMTP + OTP codes for verification/reset flows
-- **Production runtime:** systemd service running `next start`
-- **Reverse proxy:** Caddy
+Students Timetable is built around a workspace-oriented academic model.
 
-### Product architecture
-The live product uses a workspace-centric model:
+### Workspace
+A workspace is the top-level scheduling boundary. It owns scheduling resources, settings, and timetable data.
 
-- `User`
-- `Workspace`
-- `WorkspaceMember`
-- `AcademicGroup`
-- `Instructor`
-- `Room`
-- `Course`
-- `SessionEntry`
-- `WorkspaceShareLink`
-- `WorkspaceRevision`
-- `OtpCode`
-
-Legacy timetable-era tables still exist in schema for compatibility/data retention, but the canonical live product direction is the workspace/course/group/instructor/room/session system.
-
----
-
-## Core data model summary
-
-### Courses and sessions
-The real product model is:
-
-- **one Course**
-- **many SessionEntry rows**
-
-This means a single course can own multiple scheduled sessions such as lecture + lab + section without duplicating the course itself.
+### Course → multiple sessions
+A course is the academic unit. Each course can contain multiple session rows, which makes it possible to represent combinations such as lecture + lab + section without duplicating the course itself.
 
 ### Session types
-Supported session types:
-
+Sessions are first-class scheduling objects and support these types:
 - `LECTURE`
 - `SECTION`
 - `LAB`
 - `ONLINE`
 - `HYBRID`
 
-Online and hybrid sessions can also store `onlinePlatform` and `onlineLink`.
+Online and hybrid sessions can also store platform and link metadata.
 
-### Group hierarchy
-Groups support hierarchy using `parentGroupId`:
+### Academic group hierarchy
+Groups support a parent-child hierarchy using main groups and subgroups.
 
-- main groups like `A`, `B`
-- subgroups like `A1`, `A2`, `B1`
+Examples:
+- `A`
+- `A1`
+- `A2`
+- `B`
+- `B1`
 
 ### Structured rooms
-Rooms support structured physical identity using:
+Rooms are modeled with structured physical identity rather than freeform names alone.
 
+Core room fields include:
 - `buildingCode`
 - `roomNumber`
 - derived `level`
@@ -155,7 +101,6 @@ Rooms support structured physical identity using:
 - optional capacity
 
 Current level derivation rule:
-
 - `100–199` → Level 0
 - `200–299` → Level 1
 - `300–399` → Level 2
@@ -165,141 +110,100 @@ Current level derivation rule:
 
 ---
 
-## Timetable capabilities
+## Architecture Overview
 
-### Intelligence controls
-The timetable surface now includes:
+Students Timetable uses a modern web application architecture centered around a workspace domain model.
 
-- session-type controls
-- group/subgroup focus
-- delivery-mode filtering
-- active filter state visibility
-- reset behavior
-- conflict visibility toggle
+### Product architecture
+Core domain entities include:
+- `User`
+- `Workspace`
+- `WorkspaceMember`
+- `Course`
+- `SessionEntry`
+- `AcademicGroup`
+- `Instructor`
+- `Room`
+- `WorkspaceShareLink`
+- `WorkspaceRevision`
+- `OtpCode`
 
-### View modes
-- **Grid View** — adaptive weekly/day-focused board
-- **List View** — grouped by day with fuller readable metadata
+### Runtime architecture
+- Web application served by Next.js
+- PostgreSQL as the canonical production database
+- Prisma as the data access layer
+- NextAuth-based credentials authentication
+- SMTP-backed email/OTP flows
+- Caddy as reverse proxy in production
+- systemd-managed application runtime in production
 
-### Mobile behavior
-- Grid uses a **day-focused mobile board** for readability
-- List View serves as the more comfortable full-detail mobile fallback
+### Production source of truth
+The canonical production repository path is:
 
----
+```bash
+/home/ubuntu/.openclaw/workspace/students-timetable-app
+```
 
-## Smart filters and saved views
-
-The Courses page includes:
-
-- smart filters for course discovery and narrowing
-- browser-local saved views for common filter sets
-- filter combinations for status, session type, day, group, instructor, room, and delivery mode
-
----
-
-## Bulk import support
-
-Students Timetable now supports real CSV bulk import flows directly inside the product.
-
-### Rooms import
-- supports structured room fields
-- validates room/building structure
-- derives level automatically
-- reports duplicates explicitly
-- skips duplicates safely
-- never overwrites existing rooms
-
-### Groups import
-- supports main groups and subgroups
-- can infer subgroup parent from codes like `A1 -> A`
-- rejects orphan subgroup rows
-- reports duplicates explicitly
-- never overwrites existing groups
-
-### Courses + Sessions import
-- uses one CSV row per session
-- groups shared `courseCode` rows into one course with many sessions
-- resolves linked groups/rooms/instructors safely
-- reports duplicates explicitly
-- never overwrites existing courses
-
-For format details and examples, see [`docs/import-csv.md`](docs/import-csv.md).
+If multiple local copies exist, treat that path as the source of truth for production deployment and maintenance.
 
 ---
 
-## Local development setup
+## Technology Stack
+
+- **Framework:** Next.js 16
+- **UI:** React 19 + TypeScript
+- **Styling:** Tailwind CSS + design-token based CSS variables
+- **Database:** PostgreSQL
+- **ORM:** Prisma
+- **Authentication:** NextAuth
+- **Email delivery:** Nodemailer / SMTP
+- **Validation:** Zod
+- **State management:** Zustand
+- **Deployment model:** Caddy + systemd + Next.js production server
+
+---
+
+## Getting Started (Local Dev)
 
 ### Prerequisites
 - Node.js 22+
 - npm
-- PostgreSQL database
-- project `.env`
+- PostgreSQL
+- a configured `.env` file
 
-### Install
+### Install dependencies
 ```bash
-cd /home/ubuntu/.openclaw/workspace/students-timetable-app
+git clone <your-fork-or-repo-url>
+cd students-timetable-app
 npm install
 npx prisma generate
 ```
 
-### Run migrations
+### Apply database migrations
 ```bash
 npx prisma migrate deploy
 ```
 
-### Start development server
+### Start the development server
 ```bash
 npm run dev
 ```
 
-### Production build test
+### Run a production build locally
 ```bash
 npm run build
 ```
 
 ---
 
-## Production deployment notes
+## Environment Variables
 
-### Canonical production path
-```bash
-cd /home/ubuntu/.openclaw/workspace/students-timetable-app
-```
+A starter template is available in [`.env.example`](.env.example).
 
-### Standard deploy/update flow
-```bash
-git pull
-npm install
-npx prisma generate
-npx prisma migrate deploy
-npm run build
-sudo systemctl restart students-timetable.service
-```
-
-### Runtime health checks
-```bash
-sudo systemctl status students-timetable.service --no-pager
-curl https://demostb.duckdns.org/api/health
-curl -I https://demostb.duckdns.org/auth
-curl -I https://demostb.duckdns.org/workspace
-```
-
-### Reverse proxy / runtime
-- Reverse proxy: Caddy
-- App server: Next.js production server via systemd
-- Service: `students-timetable.service`
-
----
-
-## Environment variable expectations
-
-A starter template is provided in [`.env.example`](.env.example).
-
-Common variables used by the app include:
-
-### Required baseline
+### Core application
 - `DATABASE_URL`
-- `AUTH_SECRET` or `NEXTAUTH_SECRET`
+- `AUTH_SECRET`
+- `NEXTAUTH_SECRET`
 - `NEXTAUTH_URL`
 - `NEXT_PUBLIC_APP_URL`
 
@@ -311,7 +215,7 @@ Common variables used by the app include:
 - `SMTP_PASS`
 - `SMTP_FROM`
 
-### Optional OAuth toggles (currently disabled in live path)
+### Optional OAuth toggles
 - `AUTH_ENABLE_GOOGLE`
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
@@ -319,60 +223,72 @@ Common variables used by the app include:
 - `GITHUB_ID`
 - `GITHUB_SECRET`
 
----
-
-## Migration / upgrade notes
-
-### PostgreSQL is the canonical production database
-The production datasource is PostgreSQL.
-
-### Legacy data structures still exist
-Legacy timetable-era tables remain in schema for compatibility/data retention. Do not remove them casually during routine feature work.
-
-### Course model migration note
-The current live product model uses **one course with many sessions**. Any migration or import work must preserve that model rather than recreating duplicate course rows.
-
-### Bulk import safety note
-Current import flows are intentionally **create-only**. They preview data first, report duplicates/conflicts explicitly, and do not overwrite existing records.
+OAuth flags are available in configuration, but the live product is currently operated with credentials-based auth.
 
 ---
 
-## Supporting docs
+## Deployment
 
-- [docs/import-csv.md](docs/import-csv.md) — CSV import formats, examples, and safety rules
-- [docs/operations.md](docs/operations.md) — production operations / deployment notes
-- [docs/release-phase-summary-2026-03.md](docs/release-phase-summary-2026-03.md) — release summary for the current completed phase
-- [docs/realtime-decision.md](docs/realtime-decision.md) — why realtime is deferred from the live path
-- [docs/postgres-cutover-plan.md](docs/postgres-cutover-plan.md) — executed database cutover background
+### Production path
+```bash
+cd /home/ubuntu/.openclaw/workspace/students-timetable-app
+```
+
+### Standard deployment flow
+```bash
+git pull
+npm install
+npx prisma generate
+npx prisma migrate deploy
+npm run build
+sudo systemctl restart students-timetable.service
+```
+
+### Health checks
+```bash
+sudo systemctl status students-timetable.service --no-pager
+curl https://demostb.duckdns.org/api/health
+curl -I https://demostb.duckdns.org/auth
+curl -I https://demostb.duckdns.org/workspace
+```
+
+### Production notes
+- Reverse proxy: Caddy
+- App runtime: `students-timetable.service`
+- Database: PostgreSQL
 
 ---
 
-## Known limitations
+## Documentation Links
 
-- Import mode is currently **create-only**; there is no update/merge/replace import mode yet.
-- Instructor resolution during Courses import is intentionally strict:
-  - email first
-  - exact unique name fallback only
-- OAuth providers remain intentionally disabled in the current live path.
-- Legacy timetable-era tables remain in schema and should only be removed in a deliberate later cleanup phase.
-
----
-
-## Future ideas
-
-- import update/merge workflows with explicit user confirmation rules
-- bulk import for instructors
-- stronger automated regression coverage for auth, CRUD, timetable, and import flows
-- richer admin/export tooling
-- deeper release automation around build + health + browser smoke checks
+- [CSV Import Guide](docs/import-csv.md)
+- [Operations Guide](docs/operations.md)
+- [Release Summary](docs/release-phase-summary-2026-03.md)
+- [Realtime Decision](docs/realtime-decision.md)
+- [PostgreSQL Cutover Plan](docs/postgres-cutover-plan.md)
 
 ---
 
-## Release status for this phase
+## Limitations
 
-This repo now includes the completed scope for:
+- Bulk import is currently **create-only**. Update, merge, and replace-style imports are not implemented.
+- Instructor resolution in course import is intentionally strict for safety.
+- OAuth providers are configured as optional but are not the primary live authentication path.
+- Legacy timetable-era tables remain in schema for compatibility and data retention and should only be removed deliberately.
 
-- Batch 1 — smart filters + saved views
-- Batch 2 — timetable intelligence + rendering/readability fixes + list view restoration
-- Batch 3 — Rooms / Groups / Courses+Sessions CSV bulk import
-- Final phase — docs, polish, QA closure, and release sync
+---
+
+## Roadmap
+
+High-level areas for future development include:
+- richer import and synchronization workflows
+- bulk instructor import
+- broader automated regression coverage
+- operational/admin tooling improvements
+- long-term schema cleanup of legacy timetable-era structures once compatibility requirements are fully retired
+
+---
+
+## License
+
+License information has not been finalized yet.
