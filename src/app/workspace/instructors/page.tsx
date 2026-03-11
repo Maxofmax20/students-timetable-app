@@ -236,7 +236,7 @@ export default function InstructorsPage() {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-col gap-1">
                 <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Faculty directory</div>
-                <h2 className="text-2xl font-bold text-white tracking-tight sm:text-3xl">Instructors</h2>
+                <h2 className="text-2xl font-bold text-white tracking-tight">Instructors</h2>
                 <p className="text-[var(--text-secondary)] text-sm">Scan assignment impact quickly, then inspect schedules/workload before editing or removing instructors.</p>
               </div>
 

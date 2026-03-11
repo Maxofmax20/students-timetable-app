@@ -267,7 +267,7 @@ export default function GroupsPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-col gap-1">
               <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Academic structure</div>
-              <h2 className="text-3xl font-bold text-white tracking-tight">Groups</h2>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Groups</h2>
               <p className="text-[var(--text-secondary)] text-sm">Support whole main groups like A or targeted subgroups like A1 without losing the hierarchy.</p>
             </div>
 
@@ -353,7 +353,7 @@ export default function GroupsPage() {
                         {canWrite ? (
                           <Button
                             type="button"
-                            variant="ghost-danger"
+                            variant="ghost"
                             size="sm"
                             onClick={(event) => {
                               event.stopPropagation();
@@ -363,7 +363,7 @@ export default function GroupsPage() {
                             disabled={sectionDeleteLoadingKey === section.rootCode}
                           >
                             <span className="material-symbols-outlined text-[17px]">delete_sweep</span>
-                            <span className="text-[11px] font-black uppercase tracking-[0.1em]">Delete section</span>
+                            <span className="text-[11px] font-black uppercase tracking-[0.1em]">Remove section</span>
                           </Button>
                         ) : null}
                         <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
@@ -402,7 +402,7 @@ export default function GroupsPage() {
                               <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--surface)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">Main group</span>
                               <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">Tap to collapse</span>
                             </div>
-                            <div className="mt-2 text-white font-semibold">{root.name}</div>
+                            <div className="mt-2 truncate text-white font-semibold" title={root.name}>{root.name}</div>
                             <div className="mt-1 text-sm text-[var(--text-secondary)]">{groupHierarchyPath(root)} • Top-level group that can receive full-cohort sessions</div>
                           </div>
                           <div className="flex items-center gap-2 self-end md:self-start">
@@ -432,7 +432,7 @@ export default function GroupsPage() {
                                     <span className="text-[var(--gold)] font-bold font-mono text-sm">{group.code}</span>
                                     <span className="rounded-full border border-[var(--info)]/30 bg-[var(--info-muted)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--info)]">{groupKindLabel(group)}</span>
                                   </div>
-                                  <div className="mt-2 text-white font-semibold">{group.name}</div>
+                                  <div className="mt-2 truncate text-white font-semibold" title={group.name}>{group.name}</div>
                                   <div className="mt-1 text-sm text-[var(--text-secondary)]">{groupHierarchyPath(group)} • Child of {group.parentGroup?.name || section.rootCode}</div>
                                 </div>
                                 <div className="flex items-center gap-2 self-end md:self-start">

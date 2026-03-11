@@ -495,7 +495,7 @@ export default function WorkspaceTimetablePage() {
                 <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--text-muted)]">Reports & export</div>
                 <p className="mt-1 text-xs text-[var(--text-secondary)]">All actions below use the currently visible timetable filters and saved-view state.</p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button variant="primary" onClick={exportFilteredIcs} className="gap-2">
+                  <Button variant="secondary" onClick={exportFilteredIcs} className="gap-2">
                     <span className="material-symbols-outlined text-[18px]">calendar_month</span>
                     Export filtered timetable (.ics)
                   </Button>

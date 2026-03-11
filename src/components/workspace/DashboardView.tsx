@@ -120,7 +120,7 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
   const inProgressNow = effectiveModel.todaySessions.find((session) => session.startMinute <= effectiveModel.now.minute && effectiveModel.now.minute < session.endMinute) || null;
 
   return (
-    <div className="animate-panel-pop flex flex-col gap-6 pb-16">
+    <div className="animate-panel-pop flex flex-col gap-4 md:gap-6 pb-12 md:pb-16">
       <section className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
         <div className="mb-3 text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Workspace overview</div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">

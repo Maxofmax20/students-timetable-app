@@ -282,7 +282,7 @@ export default function RoomsPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-col gap-1">
               <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Facility structure</div>
-              <h2 className="text-3xl font-bold text-white tracking-tight">Rooms</h2>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Rooms</h2>
               <p className="text-[var(--text-secondary)] text-sm">Track building letter, room number, and derived level so scheduling uses real campus structure instead of flat codes only.</p>
             </div>
 
@@ -360,7 +360,7 @@ export default function RoomsPage() {
                         {access?.canWrite ? (
                           <Button
                             type="button"
-                            variant="ghost-danger"
+                            variant="ghost"
                             size="sm"
                             onClick={(event) => {
                               event.stopPropagation();
@@ -370,7 +370,7 @@ export default function RoomsPage() {
                             disabled={sectionDeleteLoadingKey === section.buildingCode}
                           >
                             <span className="material-symbols-outlined text-[17px]">delete_sweep</span>
-                            <span className="text-[11px] font-black uppercase tracking-[0.1em]">Delete section</span>
+                            <span className="text-[11px] font-black uppercase tracking-[0.1em]">Remove section</span>
                           </Button>
                         ) : null}
                         <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
@@ -404,7 +404,7 @@ export default function RoomsPage() {
                                 </div>
                                 {room.buildingCode ? <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">Building {room.buildingCode}</span> : null}
                               </div>
-                              <div className="mt-2 text-white font-semibold">{room.name}</div>
+                              <div className="mt-2 truncate text-white font-semibold" title={room.name}>{room.name}</div>
                               <div className="mt-1 text-sm text-[var(--text-secondary)]">{roomDisplaySummary(room)}</div>
                               <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--text-muted)]">
                                 {room.roomNumber ? <span className="rounded-full border border-[var(--border)] px-2.5 py-1">Room {room.roomNumber}</span> : null}

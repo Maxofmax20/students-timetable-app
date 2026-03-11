@@ -454,7 +454,7 @@ function ListSection({
                       </span>
                     ) : null}
                   </div>
-                  <div className="mt-2 text-base font-black leading-snug text-white md:text-lg">{item.course}</div>
+                  <div className="mt-2 line-clamp-2 text-base font-black leading-snug text-white md:text-lg" title={item.course}>{item.course}</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {metaChips.map((chip) => (
                       <span key={`${item.id}-${chip}`} className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-secondary)]">
@@ -543,7 +543,7 @@ export function TimetableView({
   const boardMetrics = useMemo(() => {
     const minStart = sourceItems.length ? Math.max(360, Math.floor(Math.min(...sourceItems.map((item) => item.startMinute)) / 60) * 60 - 60) : 420;
     const maxEnd = sourceItems.length ? Math.min(1320, Math.ceil(Math.max(...sourceItems.map((item) => item.endMinute)) / 60) * 60 + 60) : 1080;
-    const hourHeight = isMobile ? (density === 'compact' ? 58 : 66) : density === 'compact' ? 68 : 92;
+    const hourHeight = isMobile ? (density === 'compact' ? 52 : 60) : density === 'compact' ? 68 : 92;
     const totalHours = Math.max(1, (maxEnd - minStart) / 60);
     const slots = Array.from({ length: totalHours + 1 }, (_, index) => minStart + index * 60);
     return { minStart, maxEnd, hourHeight, totalHours, slots };

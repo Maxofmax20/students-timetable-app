@@ -47,7 +47,7 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction }: DataTa
           <div key={row.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h3 className="text-sm font-bold text-white truncate">{row.course}</h3>
+                <h3 className="text-sm font-bold text-white truncate" title={row.course}>{row.course}</h3>
                 <p className="mt-1 text-[11px] text-[var(--text-secondary)]">{row.group} • {row.instructor}</p>
               </div>
               <div className={cn(
@@ -90,7 +90,7 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction }: DataTa
                 <span className="material-symbols-outlined text-[18px]">content_copy</span>
                 Duplicate
               </Button>
-              <Button variant="ghost-danger" size="sm" onClick={() => onRowAction("Delete", row)} className="flex-1 justify-center rounded-xl">
+              <Button variant="ghost" size="sm" onClick={() => onRowAction("Delete", row)} className="flex-1 justify-center rounded-xl">
                 <span className="material-symbols-outlined text-[18px]">delete</span>
                 Delete
               </Button>
@@ -130,13 +130,13 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction }: DataTa
             {sortedRows.map((row) => (
               <tr key={row.id} className="group/row hover:bg-[var(--surface-2)]/30 transition-all">
                 <td className={cn("px-6 font-semibold text-white", dense ? "py-2 text-xs" : "py-4 text-sm")}>
-                  {row.course}
+                  <span className="block max-w-[260px] truncate" title={row.course}>{row.course}</span>
                 </td>
                 <td className={cn("px-6 text-[var(--text-secondary)]", dense ? "py-2 text-xs" : "py-4 text-sm")}>
-                  {row.group}
+                  <span className="block max-w-[110px] truncate" title={row.group}>{row.group}</span>
                 </td>
                 <td className={cn("px-6 text-[var(--text-secondary)]", dense ? "py-2 text-xs" : "py-4 text-sm")}>
-                  {row.instructor}
+                  <span className="block max-w-[170px] truncate" title={row.instructor}>{row.instructor}</span>
                 </td>
                 <td className={cn("px-6 text-[var(--text-secondary)]", dense ? "py-2 text-xs" : "py-4 text-sm")}>
                   <span className="bg-[var(--surface-3)] px-2 py-0.5 rounded text-[10px] font-bold border border-[var(--border)]">{row.room}</span>
