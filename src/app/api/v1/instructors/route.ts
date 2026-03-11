@@ -31,18 +31,44 @@ async function resolveWorkspace(userId: string, workspaceId?: string) {
   return workspace;
 }
 
+function normalizeEmail(email?: string | null) {
+  return email?.trim().toLowerCase() || null;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = await requireSession(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId") ?? undefined;
     const workspace = await resolveWorkspace(session.userId, workspaceId);
 
-    const items = await prisma.instructor.findMany({
-      where: { workspaceId: workspace.id },
-      orderBy: { name: "asc" }
-    });
+    const [items, courseCounts, sessionCounts] = await Promise.all([
+      prisma.instructor.findMany({
+        where: { workspaceId: workspace.id },
+        orderBy: { name: "asc" }
+      }),
+      prisma.course.groupBy({
+        by: ["instructorId"],
+        where: { workspaceId: workspace.id, instructorId: { not: null } },
+        _count: { _all: true }
+      }),
+      prisma.sessionEntry.groupBy({
+        by: ["instructorId"],
+        where: { workspaceId: workspace.id, instructorId: { not: null } },
+        _count: { _all: true }
+      })
+    ]);
 
-    return NextResponse.json({ ok: true, data: { workspaceId: workspace.id, items } });
+    const courseCountMap = new Map(courseCounts.map((entry) => [entry.instructorId, entry._count._all]));
+    const sessionCountMap = new Map(sessionCounts.map((entry) => [entry.instructorId, entry._count._all]));
+
+    const enriched = items.map((item) => ({
+      ...item,
+      courseCount: courseCountMap.get(item.id) || 0,
+      sessionCount: sessionCountMap.get(item.id) || 0,
+      assignmentStatus: (sessionCountMap.get(item.id) || 0) > 0 || (courseCountMap.get(item.id) || 0) > 0 ? 'assigned' : 'unassigned'
+    }));
+
+    return NextResponse.json({ ok: true, data: { workspaceId: workspace.id, items: enriched } });
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json({ ok: false, message: error.message }, { status: error.status });
@@ -59,12 +85,23 @@ export async function POST(request: NextRequest) {
 
     await requireWorkspaceRole(session.userId, workspace.id, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
 
+    const normalizedEmail = normalizeEmail(body.email);
+    if (normalizedEmail) {
+      const exists = await prisma.instructor.findFirst({
+        where: { workspaceId: workspace.id, email: { equals: normalizedEmail, mode: 'insensitive' } },
+        select: { id: true }
+      });
+      if (exists) {
+        throw new ApiError(409, 'INSTRUCTOR_EMAIL_EXISTS');
+      }
+    }
+
     const created = await prisma.instructor.create({
       data: {
         workspaceId: workspace.id,
-        name: body.name,
-        email: body.email || null,
-        phone: body.phone ?? null,
+        name: body.name.trim(),
+        email: normalizedEmail,
+        phone: body.phone?.trim() || null,
         color: body.color ?? "#0ea5e9"
       }
     });

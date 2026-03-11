@@ -25,7 +25,7 @@ export type ImportPreviewItem = {
 export type ImportExecutionMode = 'create_only' | 'update_existing' | 'create_update';
 
 export type ImportPreviewPayload = {
-  entity: 'rooms' | 'groups' | 'courses';
+  entity: 'rooms' | 'groups' | 'courses' | 'instructors';
   mode: 'preview' | 'import';
   importMode: ImportExecutionMode;
   summary: {

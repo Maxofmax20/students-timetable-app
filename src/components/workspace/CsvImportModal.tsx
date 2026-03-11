@@ -59,6 +59,7 @@ export function CsvImportModal({
     if (!preview?.entity) return 'rows';
     if (preview.entity === 'rooms') return 'room';
     if (preview.entity === 'groups') return 'group';
+    if (preview.entity === 'instructors') return 'instructor';
     return 'course';
   }, [preview]);
 

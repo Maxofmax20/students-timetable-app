@@ -82,6 +82,10 @@ export type InstructorApiItem = {
   name: string;
   email?: string | null;
   phone?: string | null;
+  color?: string | null;
+  courseCount?: number;
+  sessionCount?: number;
+  assignmentStatus?: 'assigned' | 'unassigned';
 };
 
 export type RoomApiItem = {
