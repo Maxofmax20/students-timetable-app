@@ -9,6 +9,7 @@ import {
   requireWorkspaceRole
 } from "@/lib/workspace-v1";
 import { requireWorkspaceReadAccess } from "@/lib/workspace-access";
+import { writeWorkspaceAudit } from '@/lib/workspace-audit';
 
 const createSchema = z.object({
   workspaceId: z.string().cuid().optional(),
@@ -85,16 +86,20 @@ export async function POST(request: NextRequest) {
     await requireWorkspaceRole(session.userId, workspace.id, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
     const parentGroupId = await validateParentGroup(workspace.id, body.parentGroupId ?? null);
 
-    const created = await prisma.academicGroup.create({
-      data: {
-        workspaceId: workspace.id,
-        code: body.code.trim().toUpperCase(),
-        name: body.name.trim(),
-        yearLabel: body.yearLabel?.trim() || null,
-        color: body.color ?? "#2563eb",
-        parentGroupId
-      },
-      include: groupInclude
+    const created = await prisma.$transaction(async (tx) => {
+      const item = await tx.academicGroup.create({
+        data: {
+          workspaceId: workspace.id,
+          code: body.code.trim().toUpperCase(),
+          name: body.name.trim(),
+          yearLabel: body.yearLabel?.trim() || null,
+          color: body.color ?? "#2563eb",
+          parentGroupId
+        },
+        include: groupInclude
+      });
+      await writeWorkspaceAudit({ tx, workspaceId: workspace.id, actorUserId: session.userId, entityType: 'GROUP', entityId: item.id, actionType: 'CREATE', summary: `Created group ${item.code}`, after: { code: item.code, name: item.name, parentGroupId: item.parentGroupId } });
+      return item;
     });
 
     return NextResponse.json({ ok: true, data: mapGroup(created) }, { status: 201 });

@@ -10,6 +10,7 @@ import {
 } from "@/lib/workspace-v1";
 import { requireWorkspaceReadAccess } from "@/lib/workspace-access";
 import { normalizeRoomFields } from "@/lib/group-room-model";
+import { writeWorkspaceAudit } from '@/lib/workspace-audit';
 
 const createSchema = z.object({
   workspaceId: z.string().cuid().optional(),
@@ -71,18 +72,22 @@ export async function POST(request: NextRequest) {
 
     if (!normalized.code) throw new ApiError(400, "ROOM_CODE_REQUIRED");
 
-    const created = await prisma.room.create({
-      data: {
-        workspaceId: workspace.id,
-        code: normalized.code,
-        name: body.name.trim(),
-        capacity: body.capacity ?? null,
-        building: body.building?.trim() || null,
-        buildingCode: normalized.buildingCode,
-        roomNumber: normalized.roomNumber,
-        level: normalized.level,
-        color: body.color ?? "#22c55e"
-      }
+    const created = await prisma.$transaction(async (tx) => {
+      const item = await tx.room.create({
+        data: {
+          workspaceId: workspace.id,
+          code: normalized.code,
+          name: body.name.trim(),
+          capacity: body.capacity ?? null,
+          building: body.building?.trim() || null,
+          buildingCode: normalized.buildingCode,
+          roomNumber: normalized.roomNumber,
+          level: normalized.level,
+          color: body.color ?? "#22c55e"
+        }
+      });
+      await writeWorkspaceAudit({ tx, workspaceId: workspace.id, actorUserId: session.userId, entityType: 'ROOM', entityId: item.id, actionType: 'CREATE', summary: `Created room ${item.code}`, after: { code: item.code, name: item.name, buildingCode: item.buildingCode, roomNumber: item.roomNumber } });
+      return item;
     });
 
     return NextResponse.json({ ok: true, data: created }, { status: 201 });

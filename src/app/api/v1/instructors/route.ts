@@ -9,6 +9,7 @@ import {
   requireWorkspaceRole
 } from "@/lib/workspace-v1";
 import { requireWorkspaceReadAccess } from "@/lib/workspace-access";
+import { writeWorkspaceAudit } from '@/lib/workspace-audit';
 
 const createSchema = z.object({
   workspaceId: z.string().cuid().optional(),
@@ -96,14 +97,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const created = await prisma.instructor.create({
-      data: {
-        workspaceId: workspace.id,
-        name: body.name.trim(),
-        email: normalizedEmail,
-        phone: body.phone?.trim() || null,
-        color: body.color ?? "#0ea5e9"
-      }
+    const created = await prisma.$transaction(async (tx) => {
+      const item = await tx.instructor.create({
+        data: {
+          workspaceId: workspace.id,
+          name: body.name.trim(),
+          email: normalizedEmail,
+          phone: body.phone?.trim() || null,
+          color: body.color ?? "#0ea5e9"
+        }
+      });
+      await writeWorkspaceAudit({ tx, workspaceId: workspace.id, actorUserId: session.userId, entityType: 'INSTRUCTOR', entityId: item.id, actionType: 'CREATE', summary: `Created instructor ${item.name}`, after: { name: item.name, email: item.email, phone: item.phone } });
+      return item;
     });
 
     return NextResponse.json({ ok: true, data: created }, { status: 201 });

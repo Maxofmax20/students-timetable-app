@@ -3,6 +3,7 @@ import { SessionType, WorkspaceRole } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { ApiError, requireSession, requireWorkspaceRole } from "@/lib/workspace-v1";
+import { writeWorkspaceAudit } from '@/lib/workspace-audit';
 
 const patchSchema = z.object({
   name: z.string().min(2).max(120).optional(),
@@ -143,14 +144,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
     }
 
-    const updated = await prisma.instructor.update({
-      where: { id },
-      data: {
-        name: body.name?.trim(),
-        email: normalizedEmail,
-        phone: body.phone === undefined ? undefined : (body.phone?.trim() || null),
-        color: body.color
-      }
+    const updated = await prisma.$transaction(async (tx) => {
+      const item = await tx.instructor.update({
+        where: { id },
+        data: {
+          name: body.name?.trim(),
+          email: normalizedEmail,
+          phone: body.phone === undefined ? undefined : (body.phone?.trim() || null),
+          color: body.color
+        }
+      });
+      await writeWorkspaceAudit({ tx, workspaceId: current.workspaceId, actorUserId: session.userId, entityType: 'INSTRUCTOR', entityId: id, actionType: 'UPDATE', summary: `Updated instructor ${item.name}`, before: { name: current.name, email: current.email, phone: current.phone }, after: { name: item.name, email: item.email, phone: item.phone } });
+      return item;
     });
 
     return NextResponse.json({ ok: true, data: updated });
@@ -173,7 +178,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const current = await getInstructorOrThrow(id);
     await requireWorkspaceRole(session.userId, current.workspaceId, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
 
-    await prisma.instructor.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.instructor.delete({ where: { id } });
+      await writeWorkspaceAudit({ tx, workspaceId: current.workspaceId, actorUserId: session.userId, entityType: 'INSTRUCTOR', entityId: id, actionType: 'DELETE', summary: `Deleted instructor ${current.name}`, before: { name: current.name, email: current.email, phone: current.phone, color: current.color }, metadata: { restorable: true } });
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof ApiError) {

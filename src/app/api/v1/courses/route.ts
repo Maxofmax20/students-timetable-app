@@ -9,6 +9,7 @@ import {
   requireWorkspaceRole
 } from '@/lib/workspace-v1';
 import { requireWorkspaceReadAccess } from '@/lib/workspace-access';
+import { summarizeCourseForAudit, summarizeSessions, writeWorkspaceAudit } from '@/lib/workspace-audit';
 
 const sessionTypeSchema = z.enum(['LECTURE', 'SECTION', 'LAB', 'ONLINE', 'HYBRID']);
 
@@ -240,27 +241,40 @@ export async function POST(request: NextRequest) {
           }];
         })();
 
-    const created = await prisma.course.create({
-      data: {
+    const created = await prisma.$transaction(async (tx) => {
+      const item = await tx.course.create({
+        data: {
+          workspaceId: workspace.id,
+          code: body.code,
+          title: body.title,
+          groupId: body.groupId ?? null,
+          instructorId: body.instructorId ?? null,
+          roomId: body.roomId ?? null,
+          color: body.color ?? '#3b82f6',
+          creditHours: body.creditHours ?? null,
+          status: body.status ?? 'ACTIVE',
+          sessions: preparedSessions.length
+            ? {
+                create: preparedSessions.map((sessionItem) => ({
+                  workspaceId: workspace.id,
+                  ...sessionItem
+                }))
+              }
+            : undefined
+        },
+        include: { sessions: true }
+      });
+      await writeWorkspaceAudit({
+        tx,
         workspaceId: workspace.id,
-        code: body.code,
-        title: body.title,
-        groupId: body.groupId ?? null,
-        instructorId: body.instructorId ?? null,
-        roomId: body.roomId ?? null,
-        color: body.color ?? '#3b82f6',
-        creditHours: body.creditHours ?? null,
-        status: body.status ?? 'ACTIVE',
-        sessions: preparedSessions.length
-          ? {
-              create: preparedSessions.map((sessionItem) => ({
-                workspaceId: workspace.id,
-                ...sessionItem
-              }))
-            }
-          : undefined
-      },
-      include: courseInclude
+        actorUserId: session.userId,
+        entityType: 'COURSE',
+        entityId: item.id,
+        actionType: 'CREATE',
+        summary: `Created course ${item.code}`,
+        after: { course: summarizeCourseForAudit(item), sessions: summarizeSessions(item.sessions) }
+      });
+      return tx.course.findUniqueOrThrow({ where: { id: item.id }, include: courseInclude });
     });
 
     return NextResponse.json({ ok: true, data: created }, { status: 201 });

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { ApiError, getOrCreatePersonalWorkspace, requireSession, requireWorkspaceRole } from '@/lib/workspace-v1';
 import { buildImportSummary, getCsvValue, parseCsvText, type ImportPreviewItem, type ImportPreviewPayload } from '@/lib/bulk-import';
+import { writeWorkspaceAudit } from '@/lib/workspace-audit';
 
 const schema = z.object({
   workspaceId: z.string().cuid().optional(),
@@ -213,6 +214,10 @@ export async function POST(request: NextRequest) {
       summary: buildImportSummary(items, parsed.rows.length, body.mode),
       items
     };
+
+    if (body.mode === 'import') {
+      await writeWorkspaceAudit({ workspaceId: workspace.id, actorUserId: session.userId, entityType: 'IMPORT', actionType: 'IMPORT_APPLIED', summary: `Applied instructors import (${body.importMode})`, metadata: { entity: 'instructors', importMode: body.importMode, summary: payload.summary } });
+    }
 
     return NextResponse.json({ ok: true, data: payload });
   } catch (error: unknown) {

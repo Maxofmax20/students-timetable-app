@@ -6,6 +6,7 @@ import { ApiError, getOrCreatePersonalWorkspace, requireSession, requireWorkspac
 import { buildImportSummary, getCsvValue, parseCsvText, type ImportExecutionMode, type ImportPreviewItem, type ImportPreviewPayload } from '@/lib/bulk-import';
 import { inferSessionType, type SessionTypeValue } from '@/lib/course-sessions';
 import { normalizeGroupCode } from '@/lib/group-room-model';
+import { writeWorkspaceAudit } from '@/lib/workspace-audit';
 
 const schema = z.object({
   workspaceId: z.string().cuid().optional(),
@@ -466,6 +467,10 @@ export async function POST(request: NextRequest) {
       summary: buildImportSummary(items, parsed.rows.length, body.mode),
       items
     };
+
+    if (body.mode === 'import') {
+      await writeWorkspaceAudit({ workspaceId: workspace.id, actorUserId: session.userId, entityType: 'IMPORT', actionType: 'IMPORT_APPLIED', summary: `Applied courses import (${body.importMode})`, metadata: { entity: 'courses', importMode: body.importMode, summary: payload.summary } });
+    }
 
     return NextResponse.json({ ok: true, data: payload });
   } catch (error: unknown) {

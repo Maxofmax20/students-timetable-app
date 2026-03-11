@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { ApiError, getOrCreatePersonalWorkspace, requireSession, requireWorkspaceRole } from '@/lib/workspace-v1';
 import { buildImportSummary, getCsvValue, parseCsvText, type ImportPreviewItem, type ImportPreviewPayload } from '@/lib/bulk-import';
 import { inferParentGroupCode, normalizeGroupCode } from '@/lib/group-room-model';
+import { writeWorkspaceAudit } from '@/lib/workspace-audit';
 
 const schema = z.object({
   workspaceId: z.string().cuid().optional(),
@@ -161,6 +162,9 @@ export async function POST(request: NextRequest) {
     }
 
     const payload: ImportPreviewPayload = { entity: 'groups', mode: body.mode, importMode: body.importMode, summary: buildImportSummary(items, parsed.rows.length, body.mode), items };
+    if (body.mode === 'import') {
+      await writeWorkspaceAudit({ workspaceId: workspace.id, actorUserId: session.userId, entityType: 'IMPORT', actionType: 'IMPORT_APPLIED', summary: `Applied groups import (${body.importMode})`, metadata: { entity: 'groups', importMode: body.importMode, summary: payload.summary } });
+    }
     return NextResponse.json({ ok: true, data: payload });
   } catch (error: unknown) {
     if (error instanceof z.ZodError) return NextResponse.json({ ok: false, message: error.issues[0]?.message }, { status: 400 });

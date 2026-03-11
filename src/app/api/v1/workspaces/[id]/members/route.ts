@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { ApiError, requireSession } from "@/lib/workspace-v1";
 import { requireWorkspaceOwnerAccess } from "@/lib/workspace-access";
+import { writeWorkspaceAudit } from '@/lib/workspace-audit';
 
 const addMemberSchema = z.object({
   email: z.string().email(),
@@ -56,13 +57,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const existing = await prisma.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId: id, userId: user.id } } });
     if (existing) throw new ApiError(409, "USER_ALREADY_WORKSPACE_MEMBER");
 
-    const created = await prisma.workspaceMember.create({
-      data: {
-        workspaceId: id,
-        userId: user.id,
-        role: body.role === WorkspaceRole.STUDENT ? WorkspaceRole.VIEWER : body.role
-      },
-      include: { user: { select: { id: true, email: true, name: true } } }
+    const created = await prisma.$transaction(async (tx) => {
+      const item = await tx.workspaceMember.create({
+        data: {
+          workspaceId: id,
+          userId: user.id,
+          role: body.role === WorkspaceRole.STUDENT ? WorkspaceRole.VIEWER : body.role
+        },
+        include: { user: { select: { id: true, email: true, name: true } } }
+      });
+      await writeWorkspaceAudit({ tx, workspaceId: id, actorUserId: session.userId, entityType: 'MEMBERSHIP', entityId: item.id, actionType: 'MEMBER_ADDED', summary: `Added member ${item.user.email}`, after: { targetUserId: item.userId, role: item.role } });
+      return item;
     });
 
     return NextResponse.json({ ok: true, data: created }, { status: 201 });

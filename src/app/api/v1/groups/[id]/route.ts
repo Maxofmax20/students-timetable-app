@@ -3,6 +3,7 @@ import { Prisma, WorkspaceRole } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { ApiError, requireSession, requireWorkspaceRole } from "@/lib/workspace-v1";
+import { writeWorkspaceAudit } from '@/lib/workspace-audit';
 
 const patchSchema = z.object({
   code: z.string().min(1).max(32).optional(),
@@ -54,16 +55,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     await requireWorkspaceRole(session.userId, current.workspaceId, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
     const parentGroupId = await validateParentGroup(current.workspaceId, id, body.parentGroupId);
 
-    const updated = await prisma.academicGroup.update({
-      where: { id },
-      data: {
-        code: body.code?.trim().toUpperCase(),
-        name: body.name?.trim(),
-        yearLabel: body.yearLabel === undefined ? undefined : body.yearLabel?.trim() || null,
-        color: body.color,
-        parentGroupId
-      },
-      include: groupInclude
+    const updated = await prisma.$transaction(async (tx) => {
+      const item = await tx.academicGroup.update({
+        where: { id },
+        data: {
+          code: body.code?.trim().toUpperCase(),
+          name: body.name?.trim(),
+          yearLabel: body.yearLabel === undefined ? undefined : body.yearLabel?.trim() || null,
+          color: body.color,
+          parentGroupId
+        },
+        include: groupInclude
+      });
+      await writeWorkspaceAudit({ tx, workspaceId: current.workspaceId, actorUserId: session.userId, entityType: 'GROUP', entityId: id, actionType: 'UPDATE', summary: `Updated group ${item.code}`, before: { code: current.code, name: current.name, parentGroupId: current.parentGroupId }, after: { code: item.code, name: item.name, parentGroupId: item.parentGroupId } });
+      return item;
     });
 
     return NextResponse.json({ ok: true, data: mapGroup(updated) });
@@ -93,7 +98,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       throw new ApiError(409, "GROUP_HAS_CHILDREN");
     }
 
-    await prisma.academicGroup.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.academicGroup.delete({ where: { id } });
+      await writeWorkspaceAudit({ tx, workspaceId: current.workspaceId, actorUserId: session.userId, entityType: 'GROUP', entityId: id, actionType: 'DELETE', summary: `Deleted group ${current.code}`, before: { code: current.code, name: current.name, parentGroupId: current.parentGroupId }, metadata: { restorable: false } });
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof ApiError) {

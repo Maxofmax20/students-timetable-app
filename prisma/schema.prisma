@@ -236,6 +236,7 @@ model Workspace {
   shares       WorkspaceShareLink[]
   revisions    WorkspaceRevision[]
   savedViews   SavedView[]
+  auditEntries WorkspaceAuditEntry[]
 
   @@index([ownerId, createdAt])
 }
@@ -406,6 +407,24 @@ model WorkspaceRevision {
   createdBy   User?     @relation("WorkspaceRevisionAuthor", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, createdAt])
+}
+
+model WorkspaceAuditEntry {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  actorUserId  String?
+  entityType   String
+  entityId     String?
+  actionType   String
+  summary      String
+  beforeJson   Json?
+  afterJson    Json?
+  metadataJson Json?
+  createdAt    DateTime  @default(now())
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@index([workspaceId, entityType, entityId, createdAt(sort: Desc)])
 }
 
 model OtpCode {
