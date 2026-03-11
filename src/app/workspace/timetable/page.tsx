@@ -66,6 +66,9 @@ export default function WorkspaceTimetablePage() {
   const [workspaceId, setWorkspaceId] = useState('');
   const [activeSavedViewId, setActiveSavedViewId] = useState<string | null>(null);
   const [access, setAccess] = useState<WorkspaceAccess | null>(null);
+  const [showFiltersPanel, setShowFiltersPanel] = useState(false);
+  const [showSavedViewsPanel, setShowSavedViewsPanel] = useState(false);
+  const [showReportsPanel, setShowReportsPanel] = useState(false);
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -128,6 +131,11 @@ export default function WorkspaceTimetablePage() {
       keywords: `${group.code} ${group.name} ${group.parentGroup?.code || ''}`
     }))
   ], [sortedGroups]);
+
+  const savedViewOptions = useMemo(() => [
+    { value: 'CUSTOM', label: 'Custom view', description: 'Use currently selected timetable controls' },
+    ...savedViews.map((view) => ({ value: view.id, label: view.name, description: `Updated ${new Date(view.updatedAt).toLocaleDateString()}` }))
+  ], [savedViews]);
 
   const filteredItems = useMemo(() => {
     const selectedGroup = sortedGroups.find((group) => group.id === selectedGroupId) || null;
@@ -361,26 +369,59 @@ export default function WorkspaceTimetablePage() {
 
         <section className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-              <div>
-                <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Timetable intelligence</div>
-                <h3 className="mt-1 text-xl font-black tracking-tight text-white">Inspect the schedule by type, group, delivery mode, and clashes</h3>
-                <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
-                  Focus the timetable to a specific academic context, reveal room/instructor/group collisions, and reset quickly when you want the full weekly picture back.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
-                  {displayItems.length} visible session{displayItems.length === 1 ? '' : 's'}
-                </span>
-                <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
-                  {conflictStats.sessionsWithConflicts} sessions with clashes
-                </span>
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
+                {displayItems.length} visible session{displayItems.length === 1 ? '' : 's'}
+              </span>
+              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                {conflictStats.sessionsWithConflicts} sessions with clashes
+              </span>
+              <Button variant={showFiltersPanel ? 'primary' : 'secondary'} onClick={() => setShowFiltersPanel((current) => !current)} className="gap-2 ml-auto">
+                <span className="material-symbols-outlined text-[18px]">tune</span>
+                Filters
+              </Button>
+              <Button variant={showSavedViewsPanel ? 'primary' : 'secondary'} onClick={() => setShowSavedViewsPanel((current) => !current)} className="gap-2">
+                <span className="material-symbols-outlined text-[18px]">bookmark</span>
+                Saved views
+              </Button>
+              <Button variant={showReportsPanel ? 'primary' : 'secondary'} onClick={() => setShowReportsPanel((current) => !current)} className="gap-2">
+                <span className="material-symbols-outlined text-[18px]">download</span>
+                Reports & export
+              </Button>
             </div>
 
-            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)]">
-              <div className="grid gap-4 lg:grid-cols-[1.5fr_minmax(0,0.9fr)_minmax(0,0.8fr)_auto]">
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+              <AppSelect
+                label="Current saved view"
+                value={activeSavedViewId || 'CUSTOM'}
+                onChange={(value) => {
+                  if (value === 'CUSTOM') {
+                    setActiveSavedViewId(null);
+                    return;
+                  }
+                  const view = savedViews.find((item) => item.id === value);
+                  if (view) applySavedView(view);
+                }}
+                options={savedViewOptions}
+              />
+              <Button variant="secondary" onClick={resetFilters} className="gap-2 md:self-end">
+                <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                Reset view
+              </Button>
+            </div>
+
+            {activeSummary.length ? (
+              <div className="flex flex-wrap gap-2">
+                {activeSummary.map((label) => (
+                  <span key={label} className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                    {label}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            {showFiltersPanel ? (
+              <div className="grid gap-4 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)] lg:grid-cols-[1.5fr_minmax(0,0.9fr)_minmax(0,0.8fr)_auto]">
                 <div>
                   <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--text-muted)]">Session type visibility</div>
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -427,14 +468,12 @@ export default function WorkspaceTimetablePage() {
                     <span className="material-symbols-outlined text-[18px]">warning</span>
                     {showConflictLayer ? 'Conflict layer on' : 'Conflict layer off'}
                   </Button>
-                  <Button variant="secondary" onClick={resetFilters} className="gap-2">
-                    <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-                    Reset view
-                  </Button>
                 </div>
               </div>
+            ) : null}
 
-              <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-3">
+            {showSavedViewsPanel ? (
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-3">
                 <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                   <div className="w-full md:max-w-sm">
                     <Input
@@ -450,12 +489,6 @@ export default function WorkspaceTimetablePage() {
                     Save Current View
                   </Button>
                 </div>
-
-                {activeSavedViewId ? (
-                  <div className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--gold)]">
-                    Active saved view: {savedViews.find((view) => view.id === activeSavedViewId)?.name || 'Custom'}
-                  </div>
-                ) : null}
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   {savedViews.length ? savedViews.map((view) => {
@@ -490,8 +523,10 @@ export default function WorkspaceTimetablePage() {
                   }) : <div className="text-sm text-[var(--text-secondary)]">No saved views yet — save your current timetable filters.</div>}
                 </div>
               </div>
+            ) : null}
 
-              <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+            {showReportsPanel ? (
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
                 <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--text-muted)]">Reports & export</div>
                 <p className="mt-1 text-xs text-[var(--text-secondary)]">All actions below use the currently visible timetable filters and saved-view state.</p>
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -513,17 +548,7 @@ export default function WorkspaceTimetablePage() {
                   </Button>
                 </div>
               </div>
-
-              {activeSummary.length ? (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {activeSummary.map((label) => (
-                    <span key={label} className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
-                      {label}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
+            ) : null}
           </div>
         </section>
 

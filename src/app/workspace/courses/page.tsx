@@ -228,6 +228,8 @@ export default function WorkspaceCoursesPage() {
   const [workspaceId, setWorkspaceId] = useState<string>('');
   const [activeSavedViewId, setActiveSavedViewId] = useState<string | null>(null);
   const [access, setAccess] = useState<WorkspaceAccess | null>(null);
+  const [showFiltersPanel, setShowFiltersPanel] = useState(false);
+  const [showSavedViewsPanel, setShowSavedViewsPanel] = useState(false);
 
   const loadSavedViews = async (resolvedWorkspaceId: string) => {
     const response = await fetch(`/api/v1/saved-views?workspaceId=${resolvedWorkspaceId}&surface=COURSES`, { credentials: 'include' });
@@ -321,6 +323,11 @@ export default function WorkspaceCoursesPage() {
     { value: 'ALL', label: 'All rooms', description: 'No room-level filtering' },
     ...rooms.map((room) => ({ value: room.id, label: room.code, description: room.name }))
   ], [rooms]);
+
+  const savedViewOptions = useMemo(() => [
+    { value: 'CUSTOM', label: 'Custom view', description: 'Use currently selected filters' },
+    ...savedViews.map((view) => ({ value: view.id, label: view.name, description: `Updated ${new Date(view.updatedAt).toLocaleDateString()}` }))
+  ], [savedViews]);
 
   const applySavedView = (view: SavedCourseView) => {
     setFilters(view.stateJson);
@@ -560,44 +567,45 @@ export default function WorkspaceCoursesPage() {
       <div className="space-y-6">
         <section className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-              <div>
-                <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Smart filtering</div>
-                <h3 className="mt-1 text-xl font-black tracking-tight text-white">Focus the course list without losing the current structure</h3>
-                <p className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
-                  Use data-aware filters for status, session type, day, group, instructor, room, and delivery mode. Save the combinations you use often as reusable views.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
-                  Showing {filteredCourses.length} of {courses.length}
-                </span>
-                {activeFilterSummary.length ? (
-                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
-                    {activeFilterSummary.length} active filter{activeFilterSummary.length === 1 ? '' : 's'}
-                  </span>
-                ) : (
-                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
-                    No filters active
-                  </span>
-                )}
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
+                Showing {filteredCourses.length} of {courses.length}
+              </span>
+              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+                {activeFilterSummary.length} active filter{activeFilterSummary.length === 1 ? '' : 's'}
+              </span>
+              <Button variant={showFiltersPanel ? 'primary' : 'secondary'} onClick={() => setShowFiltersPanel((current) => !current)} className="gap-2 ml-auto">
+                <span className="material-symbols-outlined text-[18px]">tune</span>
+                Filters
+              </Button>
+              <Button variant={showSavedViewsPanel ? 'primary' : 'secondary'} onClick={() => setShowSavedViewsPanel((current) => !current)} className="gap-2">
+                <span className="material-symbols-outlined text-[18px]">bookmark</span>
+                Saved views
+              </Button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <AppSelect label="Status" value={filters.status} onChange={(value) => setFilters((current) => ({ ...current, status: value }))} options={statusOptions} />
-              <AppSelect label="Session type" value={filters.sessionType} onChange={(value) => setFilters((current) => ({ ...current, sessionType: value }))} options={sessionTypeOptions} />
-              <AppSelect label="Day" value={filters.day} onChange={(value) => setFilters((current) => ({ ...current, day: value }))} options={DAY_OPTIONS} />
-              <AppSelect label="Delivery" value={filters.delivery} onChange={(value) => setFilters((current) => ({ ...current, delivery: value }))} options={DELIVERY_OPTIONS} />
-              <AppSelect label="Group" value={filters.groupId} onChange={(value) => setFilters((current) => ({ ...current, groupId: value }))} options={groupOptions} searchable searchPlaceholder="Find group" />
-              <AppSelect label="Instructor" value={filters.instructorId} onChange={(value) => setFilters((current) => ({ ...current, instructorId: value }))} options={instructorOptions} searchable searchPlaceholder="Find instructor" />
-              <AppSelect label="Room" value={filters.roomId} onChange={(value) => setFilters((current) => ({ ...current, roomId: value }))} options={roomOptions} searchable searchPlaceholder="Find room" />
-              <div className="flex items-end">
-                <Button variant="secondary" onClick={() => { setFilters(DEFAULT_FILTERS); setActiveSavedViewId(null); }} className="w-full gap-2">
-                  <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-                  Reset Filters
-                </Button>
-              </div>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
+              <AppSelect
+                label="Current saved view"
+                value={activeSavedViewId || 'CUSTOM'}
+                onChange={(value) => {
+                  if (value === 'CUSTOM') {
+                    setActiveSavedViewId(null);
+                    return;
+                  }
+                  const view = savedViews.find((item) => item.id === value);
+                  if (view) applySavedView(view);
+                }}
+                options={savedViewOptions}
+              />
+              <Button variant="secondary" onClick={exportFilteredCoursesCsv} className="gap-2 md:self-end">
+                <span className="material-symbols-outlined text-[18px]">download</span>
+                Export CSV
+              </Button>
+              <Button variant="secondary" onClick={() => { setFilters(DEFAULT_FILTERS); setActiveSavedViewId(null); }} className="gap-2 md:self-end">
+                <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                Reset
+              </Button>
             </div>
 
             {activeFilterSummary.length ? (
@@ -610,71 +618,61 @@ export default function WorkspaceCoursesPage() {
               </div>
             ) : null}
 
-            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)]">
-              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                <div className="w-full md:max-w-sm">
-                  <Input
-                    label="Saved view name"
-                    value={viewDraftName}
-                    onChange={(event) => setViewDraftName(event.target.value)}
-                    placeholder="e.g. Draft labs for Group A"
-                    helperText="Save the current filter combination so you can reapply it in one tap."
-                  />
+            {showFiltersPanel ? (
+              <div className="grid gap-4 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)] md:grid-cols-2 xl:grid-cols-4">
+                <AppSelect label="Status" value={filters.status} onChange={(value) => setFilters((current) => ({ ...current, status: value }))} options={statusOptions} />
+                <AppSelect label="Session type" value={filters.sessionType} onChange={(value) => setFilters((current) => ({ ...current, sessionType: value }))} options={sessionTypeOptions} />
+                <AppSelect label="Day" value={filters.day} onChange={(value) => setFilters((current) => ({ ...current, day: value }))} options={DAY_OPTIONS} />
+                <AppSelect label="Delivery" value={filters.delivery} onChange={(value) => setFilters((current) => ({ ...current, delivery: value }))} options={DELIVERY_OPTIONS} />
+                <AppSelect label="Group" value={filters.groupId} onChange={(value) => setFilters((current) => ({ ...current, groupId: value }))} options={groupOptions} searchable searchPlaceholder="Find group" />
+                <AppSelect label="Instructor" value={filters.instructorId} onChange={(value) => setFilters((current) => ({ ...current, instructorId: value }))} options={instructorOptions} searchable searchPlaceholder="Find instructor" />
+                <AppSelect label="Room" value={filters.roomId} onChange={(value) => setFilters((current) => ({ ...current, roomId: value }))} options={roomOptions} searchable searchPlaceholder="Find room" />
+                <div className="flex items-end">
+                  <Button variant="secondary" onClick={() => { setFilters(DEFAULT_FILTERS); setActiveSavedViewId(null); }} className="w-full gap-2">
+                    <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                    Reset Filters
+                  </Button>
                 </div>
-                <div className="flex flex-wrap gap-2">
+              </div>
+            ) : null}
+
+            {showSavedViewsPanel ? (
+              <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)]">
+                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div className="w-full md:max-w-sm">
+                    <Input
+                      label="Saved view name"
+                      value={viewDraftName}
+                      onChange={(event) => setViewDraftName(event.target.value)}
+                      placeholder="e.g. Draft labs for Group A"
+                      helperText="Save current filters for one-tap reuse."
+                    />
+                  </div>
                   <Button variant="primary" onClick={() => void saveCurrentView()} className="gap-2">
                     <span className="material-symbols-outlined text-[18px]">bookmark_add</span>
                     Save Current View
                   </Button>
                 </div>
-              </div>
-
-              {activeSavedViewId ? (
-                <div className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--gold)]">
-                  Active saved view: {savedViews.find((view) => view.id === activeSavedViewId)?.name || 'Custom'}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {savedViews.length ? (
+                    savedViews.map((view) => {
+                      const isActive = activeSavedViewId === view.id;
+                      return (
+                        <div key={view.id} className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 ${isActive ? 'border-[var(--gold)] bg-[var(--gold-muted)]' : 'border-[var(--border)] bg-[var(--bg-raised)]'}`}>
+                          <button type="button" onClick={() => applySavedView(view)} className="rounded-full px-2 py-1 text-sm font-semibold text-white transition-colors hover:bg-[var(--surface)]">{view.name}</button>
+                          <button type="button" onClick={() => void renameSavedView(view)} aria-label={`Rename saved view ${view.name}`} className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-white"><span className="material-symbols-outlined text-[18px]">edit</span></button>
+                          <button type="button" onClick={() => void deleteSavedView(view.id)} aria-label={`Delete saved view ${view.name}`} className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--danger)]"><span className="material-symbols-outlined text-[18px]">close</span></button>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-sm text-[var(--text-secondary)]">No saved views yet — create one after setting up a useful filter combination.</div>
+                  )}
                 </div>
-              ) : null}
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                {savedViews.length ? (
-                  savedViews.map((view) => {
-                    const isActive = activeSavedViewId === view.id;
-                    return (
-                      <div key={view.id} className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 ${isActive ? 'border-[var(--gold)] bg-[var(--gold-muted)]' : 'border-[var(--border)] bg-[var(--bg-raised)]'}`}>
-                        <button
-                          type="button"
-                          onClick={() => applySavedView(view)}
-                          className="rounded-full px-2 py-1 text-sm font-semibold text-white transition-colors hover:bg-[var(--surface)]"
-                        >
-                          {view.name}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void renameSavedView(view)}
-                          aria-label={`Rename saved view ${view.name}`}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-white"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">edit</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void deleteSavedView(view.id)}
-                          aria-label={`Delete saved view ${view.name}`}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--danger)]"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">close</span>
-                        </button>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-sm text-[var(--text-secondary)]">No saved views yet — create one after setting up a useful filter combination.</div>
-                )}
               </div>
-            </div>
+            ) : null}
           </div>
         </section>
-
         {!access?.canWrite ? (
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-secondary)]">
             You are in Viewer mode. Course data is read-only; import and create/edit/delete actions are disabled.
@@ -690,18 +688,12 @@ export default function WorkspaceCoursesPage() {
           isLoading={status === 'loading' || loading}
           canCreate={Boolean(access?.canWrite)}
           extraActions={
-            <>
-              <Button onClick={exportFilteredCoursesCsv} variant="secondary" className="gap-2 w-full sm:w-auto justify-center">
-                <span className="material-symbols-outlined text-[20px]">download</span>
-                Export filtered courses (.csv)
+            access?.canImport ? (
+              <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2 w-full sm:w-auto justify-center">
+                <span className="material-symbols-outlined text-[20px]">upload_file</span>
+                Import CSV
               </Button>
-              {access?.canImport ? (
-                <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2 w-full sm:w-auto justify-center">
-                  <span className="material-symbols-outlined text-[20px]">upload_file</span>
-                  Import CSV
-                </Button>
-              ) : null}
-            </>
+            ) : null
           }
         />
       </div>
