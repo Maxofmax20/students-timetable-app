@@ -10,8 +10,21 @@ import { SearchInput } from '@/components/ui/SearchInput';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
+import { CsvImportModal } from '@/components/workspace/CsvImportModal';
 import { formatRoomLevel, groupRoomsByBuilding, normalizeRoomFields, roomDisplaySummary } from '@/lib/group-room-model';
 import type { RoomApiItem } from '@/types';
+
+const ROOMS_TEMPLATE_CSV = `buildingCode,roomNumber,name,buildingName,capacity
+E,119,Room E119,Main Engineering Building,40
+E,226,Room E226,,25
+E,412,Room E412,,60`;
+
+const ROOMS_IMPORT_HELP = [
+  'Supported columns: buildingCode + roomNumber, or a single code/fullCode column. buildingName and capacity are optional.',
+  'Level is derived automatically from the room number using the university rule already used by the product.',
+  'Imports are create-only. Existing room codes are previewed as duplicates and skipped unless you edit the CSV first.',
+  'If name is omitted, the import uses a safe default like "Room E119" so invalid blank-name rows are never created.'
+];
 
 export default function RoomsPage() {
   const { status } = useSession({ required: true, onUnauthenticated() { window.location.href = '/auth'; } });
@@ -23,6 +36,7 @@ export default function RoomsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<RoomApiItem | null>(null);
   const [formData, setFormData] = useState({ code: '', name: '', capacity: '', building: '', buildingCode: '', roomNumber: '' });
   const [actionLoading, setActionLoading] = useState(false);
@@ -199,6 +213,10 @@ export default function RoomsPage() {
                 onClear={() => setSearch('')}
                 className="w-full sm:w-[360px]"
               />
+              <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2">
+                <span className="material-symbols-outlined text-[20px]">upload_file</span>
+                Import CSV
+              </Button>
               <Button onClick={openCreate} variant="primary" className="gap-2">
                 <span className="material-symbols-outlined text-[20px]">meeting_room</span>
                 Add Room
@@ -388,6 +406,21 @@ export default function RoomsPage() {
           </div>
         </div>
       </Modal>
+
+      <CsvImportModal
+        open={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        title="Import Rooms from CSV"
+        subtitle="Preview every room first, validate structure, and only then confirm a create-only import. Existing room codes are never overwritten."
+        endpoint="/api/v1/import/rooms"
+        templateFilename="rooms-import-template.csv"
+        templateCsv={ROOMS_TEMPLATE_CSV}
+        helpLines={ROOMS_IMPORT_HELP}
+        onImported={async () => {
+          setIsImportOpen(false);
+          await fetchRooms();
+        }}
+      />
 
       <Modal
         open={isDeleteOpen}

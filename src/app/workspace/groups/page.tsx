@@ -11,8 +11,23 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { AppSelect } from '@/components/ui/AppSelect';
+import { CsvImportModal } from '@/components/workspace/CsvImportModal';
 import { groupGroupsByRoot, groupHierarchyPath, groupKindLabel, sortGroupsForDisplay } from '@/lib/group-room-model';
 import type { GroupApiItem } from '@/types';
+
+const GROUPS_TEMPLATE_CSV = `code,name,parentCode
+A,Main Group A,
+A1,Subgroup A1,A
+A2,Subgroup A2,A
+B,Main Group B,
+B1,Subgroup B1,B`;
+
+const GROUPS_IMPORT_HELP = [
+  'Supported columns: code, optional name, and optional parentCode/mainGroupCode. Code-only rows are also accepted.',
+  'If a subgroup code looks like A1 or B2 and parentCode is omitted, the import safely infers the main group code from the subgroup code.',
+  'Subgroups must resolve to an existing main group or a main-group row inside the same CSV preview. Orphan subgroup imports are rejected.',
+  'Imports are create-only. Existing group codes are previewed as duplicates and skipped, never overwritten.'
+];
 
 export default function GroupsPage() {
   const { status } = useSession({ required: true, onUnauthenticated() { window.location.href = '/auth'; } });
@@ -24,6 +39,7 @@ export default function GroupsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<GroupApiItem | null>(null);
   const [formData, setFormData] = useState({ code: '', name: '', parentGroupId: '__none__' });
   const [actionLoading, setActionLoading] = useState(false);
@@ -172,6 +188,10 @@ export default function GroupsPage() {
                 onClear={() => setSearch('')}
                 className="w-full sm:w-[360px]"
               />
+              <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2">
+                <span className="material-symbols-outlined text-[20px]">upload_file</span>
+                Import CSV
+              </Button>
               <Button onClick={openCreate} variant="primary" className="gap-2">
                 <span className="material-symbols-outlined text-[20px]">add</span>
                 New Group
@@ -356,6 +376,21 @@ export default function GroupsPage() {
           </div>
         </div>
       </Modal>
+
+      <CsvImportModal
+        open={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        title="Import Groups from CSV"
+        subtitle="Preview group hierarchy first, validate subgroup parents, and only then confirm a create-only import. Existing group codes are never overwritten."
+        endpoint="/api/v1/import/groups"
+        templateFilename="groups-import-template.csv"
+        templateCsv={GROUPS_TEMPLATE_CSV}
+        helpLines={GROUPS_IMPORT_HELP}
+        onImported={async () => {
+          setIsImportOpen(false);
+          await fetchGroups();
+        }}
+      />
 
       <Modal
         open={isDeleteOpen}

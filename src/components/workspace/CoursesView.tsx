@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, type ReactNode } from 'react';
 import { DataTable } from "@/components/workspace/DataTable";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Button } from "@/components/ui/Button";
@@ -16,9 +16,10 @@ export interface CoursesViewProps {
   onAction: (action: ActionLabel) => void;
   onRowAction: (action: RowAction, row: Row) => void;
   isLoading?: boolean;
+  extraActions?: ReactNode;
 }
 
-export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, isLoading }: CoursesViewProps) {
+export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, isLoading, extraActions }: CoursesViewProps) {
   const [search, setSearch] = useState('');
 
   if (isLoading) {
@@ -72,6 +73,7 @@ export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, 
                 onChange={(e) => setSearch(e.target.value)}
                 containerClassName="w-full sm:w-auto sm:min-w-[300px]"
               />
+              {extraActions}
               <Button onClick={() => onAction('New')} variant="primary" className="gap-2 w-full sm:w-auto justify-center">
                 <span className="material-symbols-outlined text-[20px]">add</span>
                 Add Course

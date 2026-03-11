@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/Modal';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { useToast } from '@/components/ui/Toast';
 import { CoursesView } from '@/components/workspace/CoursesView';
+import { CsvImportModal } from '@/components/workspace/CsvImportModal';
 import { EditCourseModal, type EditCourseInitialData, type EditCourseSubmitData } from '@/components/workspace/EditCourseModal';
 import { formatMinute } from '@/lib/schedule';
 import { formatSessionType, inferLegacySessionType, SESSION_TYPE_OPTIONS, stripLegacySessionSuffix } from '@/lib/course-sessions';
@@ -62,6 +63,18 @@ const DELIVERY_OPTIONS = [
   { value: 'PHYSICAL', label: 'Physical sessions', description: 'Lecture / section / lab sessions with a physical room' },
   { value: 'ONLINE', label: 'Online sessions', description: 'Virtual-only sessions' },
   { value: 'HYBRID', label: 'Hybrid sessions', description: 'Mixed physical + online sessions' }
+];
+
+const COURSES_TEMPLATE_CSV = `courseCode,courseTitle,status,sessionType,day,startTime,endTime,groupCode,roomCode,instructorName,instructorEmail,onlinePlatform,onlineLink,note
+EMIE,Electrical Machines & Industrial Electronics,ACTIVE,LECTURE,Sat,08:00,10:00,A,E119,Dr. Ahmed,,,
+EMIE,Electrical Machines & Industrial Electronics,ACTIVE,LAB,Tue,10:00,12:00,A1,E226,Dr. Ahmed,,,
+ROBO,Robotics Engineering,ACTIVE,ONLINE,Thu,13:00,15:00,A2,,Dr. Sara,,Google Meet,https://example.com/robo,Remote delivery`;
+
+const COURSES_IMPORT_HELP = [
+  'Use one CSV row per session. Rows with the same courseCode are grouped into one course with many sessions.',
+  'Required baseline columns: courseCode, courseTitle, sessionType, day, startTime, endTime. Status is optional and defaults to ACTIVE.',
+  'Group and room links resolve by exact groupCode and roomCode. Instructor links resolve by instructorEmail first, or exact unique instructor name if email is blank.',
+  'Imports are create-only. Existing course codes are previewed as duplicates and skipped, never overwritten.'
 ];
 
 function toApiStatus(status: Row['status'] | string | undefined) {
@@ -197,6 +210,7 @@ export default function WorkspaceCoursesPage() {
   const [instructors, setInstructors] = useState<InstructorApiItem[]>([]);
   const [rooms, setRooms] = useState<RoomApiItem[]>([]);
   const [courseModalOpen, setCourseModalOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [courseModalMode, setCourseModalMode] = useState<'create' | 'full' | 'duplicate'>('create');
   const [courseModalData, setCourseModalData] = useState<EditCourseInitialData>({ sessions: [] });
   const [deleteTarget, setDeleteTarget] = useState<CourseApiItem | null>(null);
@@ -544,8 +558,29 @@ export default function WorkspaceCoursesPage() {
           onAction={handleAction}
           onRowAction={handleRowAction}
           isLoading={status === 'loading' || loading}
+          extraActions={
+            <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2 w-full sm:w-auto justify-center">
+              <span className="material-symbols-outlined text-[20px]">upload_file</span>
+              Import CSV
+            </Button>
+          }
         />
       </div>
+
+      <CsvImportModal
+        open={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        title="Import Courses + Sessions from CSV"
+        subtitle="Preview grouped course creation first, validate linked entities, and only then confirm a create-only import. Existing course codes are never overwritten."
+        endpoint="/api/v1/import/courses"
+        templateFilename="courses-sessions-import-template.csv"
+        templateCsv={COURSES_TEMPLATE_CSV}
+        helpLines={COURSES_IMPORT_HELP}
+        onImported={async () => {
+          setIsImportOpen(false);
+          await load();
+        }}
+      />
 
       <EditCourseModal
         open={courseModalOpen}
