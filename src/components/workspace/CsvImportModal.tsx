@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
@@ -34,6 +34,13 @@ export function CsvImportModal({
   const [csvText, setCsvText] = useState('');
   const [preview, setPreview] = useState<ImportPreviewPayload | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const entityLabel = useMemo(() => {
+    if (!preview?.entity) return 'rows';
+    if (preview.entity === 'rooms') return 'room';
+    if (preview.entity === 'groups') return 'group';
+    return 'course';
+  }, [preview]);
 
   useEffect(() => {
     if (!open) {
@@ -85,7 +92,9 @@ export function CsvImportModal({
       if (mode === 'preview') {
         toast('Import preview ready');
       } else {
-        toast(`Imported ${result.data.summary.importedCount} ${result.data.entity}`);
+        const importedCount = result.data.summary.importedCount;
+        const importedEntity = result.data.entity === 'rooms' ? 'room' : result.data.entity === 'groups' ? 'group' : 'course';
+        toast(`Imported ${importedCount} ${importedEntity}${importedCount === 1 ? '' : 's'}`);
         await onImported?.(result.data as ImportPreviewPayload);
       }
     } catch (error) {
@@ -120,7 +129,7 @@ export function CsvImportModal({
             className="gap-2"
           >
             <span className="material-symbols-outlined text-[18px]">upload</span>
-            Confirm Import
+            Confirm Create-Only Import
           </Button>
         </div>
       }
@@ -129,8 +138,8 @@ export function CsvImportModal({
         <div className="rounded-[24px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] p-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">CSV input</div>
-              <p className="mt-1 text-sm text-[var(--text-secondary)]">Upload a CSV file or paste raw CSV text. Preview is always required before import.</p>
+              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">CSV upload or paste</div>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">Upload a CSV file or paste raw CSV text. Preview is always required, and only ready rows will import.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileSelect} />
@@ -138,7 +147,7 @@ export function CsvImportModal({
                 <span className="material-symbols-outlined text-[18px]">upload_file</span>
                 Upload CSV
               </Button>
-              <Button variant="ghost" onClick={() => setCsvText(templateCsv)}>Load sample</Button>
+              <Button variant="ghost" onClick={() => setCsvText(templateCsv)}>Load sample CSV</Button>
             </div>
           </div>
 
@@ -167,12 +176,16 @@ export function CsvImportModal({
 
         {preview ? (
           <div className="space-y-4 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-4">
+            <div>
+              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Preview results</div>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">Review ready, duplicate, and invalid rows before confirming this create-only import.</p>
+            </div>
             <div className="flex flex-wrap gap-2">
               <span className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
                 {preview.summary.totalRows} CSV row{preview.summary.totalRows === 1 ? '' : 's'}
               </span>
               <span className="rounded-full border border-[var(--success)]/20 bg-[var(--success-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--success)]">
-                {preview.mode === 'import' ? preview.summary.importedCount : preview.summary.readyCount} {preview.mode === 'import' ? 'imported' : 'ready'}
+                {preview.mode === 'import' ? preview.summary.importedCount : preview.summary.readyCount} {preview.mode === 'import' ? `imported ${entityLabel}${preview.summary.importedCount === 1 ? '' : 's'}` : `ready ${entityLabel}${preview.summary.readyCount === 1 ? '' : 's'}`}
               </span>
               <span className="rounded-full border border-[var(--warning)]/20 bg-[var(--warning-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--warning)]">
                 {preview.summary.duplicateCount} duplicate{preview.summary.duplicateCount === 1 ? '' : 's'}
