@@ -15,6 +15,15 @@ interface ToastContextType {
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
+const TOAST_DURATION_MS: Record<ToastType, number> = {
+  success: 1900,
+  info: 2600,
+  warning: 3600,
+  error: 4300
+};
+
+const EXIT_ANIMATION_MS = 180;
+
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -30,7 +39,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div className="fixed bottom-6 right-6 z-[200] flex flex-col gap-3 pointer-events-none">
+      <div className="fixed inset-x-3 bottom-3 sm:inset-x-auto sm:right-4 sm:bottom-4 z-[200] flex flex-col gap-2 pointer-events-none">
         {toasts.map((t) => (
           <ToastItem key={t.id} toast={t} onRemove={() => remove(t.id)} />
         ))}
@@ -40,10 +49,26 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 
 function ToastItem({ toast, onRemove }: { toast: Toast, onRemove: () => void }) {
+  const [isLeaving, setIsLeaving] = useState(false);
+
   useEffect(() => {
-    const timer = setTimeout(onRemove, 5000);
-    return () => clearTimeout(timer);
-  }, [onRemove]);
+    const autoDismissTimer = setTimeout(() => {
+      setIsLeaving(true);
+    }, TOAST_DURATION_MS[toast.type]);
+
+    return () => clearTimeout(autoDismissTimer);
+  }, [toast.type]);
+
+  useEffect(() => {
+    if (!isLeaving) return;
+
+    const removeTimer = setTimeout(onRemove, EXIT_ANIMATION_MS);
+    return () => clearTimeout(removeTimer);
+  }, [isLeaving, onRemove]);
+
+  const dismissNow = () => {
+    setIsLeaving(true);
+  };
 
   const icons = {
     success: 'check_circle',
@@ -53,23 +78,28 @@ function ToastItem({ toast, onRemove }: { toast: Toast, onRemove: () => void }) 
   };
 
   const colors = {
-    success: 'bg-[var(--success-muted)] border-[var(--success)] text-[var(--success)]',
-    error: 'bg-[var(--danger-muted)] border-[var(--danger)] text-[var(--danger)]',
-    info: 'bg-[var(--info-muted)] border-[var(--info)] text-[var(--info)]',
-    warning: 'bg-[var(--warning-muted)] border-[var(--warning)] text-[var(--warning)]'
+    success: 'bg-[var(--success-muted)]/95 border-[var(--success)]/45 text-[var(--success)]',
+    error: 'bg-[var(--danger-muted)]/95 border-[var(--danger)]/45 text-[var(--danger)]',
+    info: 'bg-[var(--info-muted)]/95 border-[var(--info)]/45 text-[var(--info)]',
+    warning: 'bg-[var(--warning-muted)]/95 border-[var(--warning)]/45 text-[var(--warning)]'
   };
 
   return (
-    <div 
+    <div
       className={cn(
-        "pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-[var(--radius-md)] border shadow-[var(--shadow-lg)] min-w-[300px] animate-[slideUp_0.3s_ease-out]",
+        'pointer-events-auto flex items-start gap-2.5 px-3 py-2.5 rounded-[var(--radius-md)] border shadow-[0_8px_20px_rgba(0,0,0,0.14)] backdrop-blur-[1px] w-full sm:w-auto sm:min-w-[260px] sm:max-w-[360px] max-w-[min(24rem,calc(100vw-1.5rem))] transition-[opacity,transform] duration-180 ease-out',
+        isLeaving ? 'opacity-0 translate-y-1 scale-[0.985]' : 'opacity-100 translate-y-0 scale-100',
         colors[toast.type]
       )}
     >
-      <span className="material-symbols-outlined text-xl">{icons[toast.type]}</span>
-      <span className="text-sm font-semibold flex-1">{toast.message}</span>
-      <button onClick={onRemove} className="opacity-60 hover:opacity-100 transition-opacity">
-        <span className="material-symbols-outlined text-lg">close</span>
+      <span className="material-symbols-outlined text-[18px] leading-none mt-0.5">{icons[toast.type]}</span>
+      <span className="text-[13px] sm:text-sm font-medium leading-[1.35] flex-1">{toast.message}</span>
+      <button
+        onClick={dismissNow}
+        className="opacity-60 hover:opacity-100 transition-opacity leading-none"
+        aria-label="Dismiss notification"
+      >
+        <span className="material-symbols-outlined text-base">close</span>
       </button>
     </div>
   );
