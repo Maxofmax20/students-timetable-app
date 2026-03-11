@@ -54,3 +54,9 @@ Top control sections remain too tall/heavy, with secondary actions competing wit
 - Mobile readability improves; desktop has no obvious regressions.
 - Build passes before service restart.
 - Production verification done on desktop + mobile viewports.
+
+## Retry Completion Notes (2026-03-11)
+- Tightened top strip spacing/chip density one more step for both pages.
+- Kept primary controls visible (summary chips + Filters + Saved views + compact view selector).
+- Kept secondary actions in on-demand entry points (More / Reports & export panels).
+- Re-validated functionality and production stability after build + restart.

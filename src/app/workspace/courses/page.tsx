@@ -567,12 +567,12 @@ export default function WorkspaceCoursesPage() {
     <AppShell title="Courses" subtitle="Manage and organize all university courses.">
       <div className="space-y-6">
         <section className="rounded-[20px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-2.5 shadow-[var(--shadow-sm)] md:p-3.5">
-          <div className="flex flex-col gap-2.5">
+          <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
+              <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
                 Showing {filteredCourses.length} of {courses.length}
               </span>
-              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
                 {activeFilterSummary.length} active filter{activeFilterSummary.length === 1 ? '' : 's'}
               </span>
               <Button variant={showFiltersPanel ? 'primary' : 'secondary'} onClick={() => setShowFiltersPanel((current) => !current)} className="gap-2 ml-auto">
