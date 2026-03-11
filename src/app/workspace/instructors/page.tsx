@@ -15,6 +15,12 @@ import { CsvImportModal } from '@/components/workspace/CsvImportModal';
 import type { InstructorApiItem } from '@/types';
 import { cn } from '@/lib/utils';
 
+type WorkspaceAccess = {
+  productRole: 'OWNER' | 'EDITOR' | 'VIEWER';
+  canWrite: boolean;
+  canImport: boolean;
+};
+
 type AssignmentFilter = 'all' | 'assigned' | 'unassigned';
 
 type InstructorDetails = {
@@ -87,12 +93,14 @@ export default function InstructorsPage() {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', phone: '' });
   const [actionLoading, setActionLoading] = useState(false);
+  const [access, setAccess] = useState<WorkspaceAccess | null>(null);
 
   const fetchInstructors = async () => {
     try {
       const res = await fetch('/api/v1/instructors');
       const data = await res.json();
       setInstructors(data.data?.items || []);
+      setAccess(data.data?.access || null);
     } catch {
       toast('Failed to load instructors', 'error');
     } finally {
@@ -130,6 +138,7 @@ export default function InstructorsPage() {
   }, [selectedInstructor?.id]);
 
   const handleSave = async () => {
+    if (!access?.canWrite) return toast('Viewer mode: instructor changes are disabled.', 'error');
     if (!formData.name) return toast('Instructor name is required', 'error');
     setActionLoading(true);
 
@@ -162,6 +171,7 @@ export default function InstructorsPage() {
   };
 
   const handleDelete = async () => {
+    if (!access?.canWrite) return toast('Viewer mode: instructor deletion is disabled.', 'error');
     if (!selectedInstructor) return;
     setActionLoading(true);
     try {
@@ -182,6 +192,10 @@ export default function InstructorsPage() {
   };
 
   const openEdit = (i: InstructorApiItem) => {
+    if (!access?.canWrite) {
+      toast('Viewer mode: editing instructors is disabled.', 'error');
+      return;
+    }
     setSelectedInstructor(i);
     setFormData({ name: i.name, email: i.email || '', phone: i.phone || '' });
     setModalMode('edit');
@@ -189,6 +203,10 @@ export default function InstructorsPage() {
   };
 
   const openCreate = () => {
+    if (!access?.canWrite) {
+      toast('Viewer mode: adding instructors is disabled.', 'error');
+      return;
+    }
     setFormData({ name: '', email: '', phone: '' });
     setModalMode('create');
     setIsModalOpen(true);
@@ -226,11 +244,11 @@ export default function InstructorsPage() {
                   onClear={() => setSearch('')}
                   className="w-full sm:w-[300px]"
                 />
-                <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2">
+                <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2" disabled={!access?.canImport}>
                   <span className="material-symbols-outlined text-[20px]">upload_file</span>
                   Import CSV
                 </Button>
-                <Button onClick={openCreate} variant="primary" className="gap-2">
+                <Button onClick={openCreate} variant="primary" className="gap-2" disabled={!access?.canWrite}>
                   <span className="material-symbols-outlined text-[20px]">person_add</span>
                   Add Instructor
                 </Button>
@@ -251,6 +269,12 @@ export default function InstructorsPage() {
               </button>
             </div>
           </div>
+
+          {!access?.canWrite ? (
+            <div className="rounded-[20px] border border-[var(--warning)]/30 bg-[var(--warning-muted)] px-4 py-3 text-sm text-[var(--warning)]">
+              You are in Viewer mode. Instructor records are read-only; create, edit, delete, and import actions are disabled.
+            </div>
+          ) : null}
 
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">
             {loading ? (
@@ -295,14 +319,16 @@ export default function InstructorsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-1 opacity-100 lg:opacity-0 lg:group-hover/row:opacity-100 transition-all">
-                            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(i); }} className="h-8 w-8 p-0 rounded-lg">
-                              <span className="material-symbols-outlined text-[18px]">edit_square</span>
-                            </Button>
-                            <Button variant="ghost-danger" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedInstructor(i); setIsDeleteOpen(true); }} className="h-8 w-8 p-0 rounded-lg">
-                              <span className="material-symbols-outlined text-[18px]">delete</span>
-                            </Button>
-                          </div>
+                          {access?.canWrite ? (
+                            <div className="flex items-center justify-end gap-1 opacity-100 lg:opacity-0 lg:group-hover/row:opacity-100 transition-all">
+                              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(i); }} className="h-8 w-8 p-0 rounded-lg">
+                                <span className="material-symbols-outlined text-[18px]">edit_square</span>
+                              </Button>
+                              <Button variant="ghost-danger" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedInstructor(i); setIsDeleteOpen(true); }} className="h-8 w-8 p-0 rounded-lg">
+                                <span className="material-symbols-outlined text-[18px]">delete</span>
+                              </Button>
+                            </div>
+                          ) : null}
                         </td>
                       </tr>
                     ))}
@@ -400,6 +426,7 @@ export default function InstructorsPage() {
         templateFilename="instructors-import-template.csv"
         templateCsv={INSTRUCTORS_TEMPLATE_CSV}
         helpLines={INSTRUCTORS_IMPORT_HELP}
+        canImport={Boolean(access?.canImport)}
         onImported={async () => {
           setIsImportOpen(false);
           await fetchInstructors();

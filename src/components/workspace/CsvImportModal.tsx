@@ -15,6 +15,7 @@ type CsvImportModalProps = {
   templateFilename: string;
   templateCsv: string;
   helpLines: string[];
+  canImport?: boolean;
   onImported?: (result: ImportPreviewPayload) => Promise<void> | void;
 };
 
@@ -46,6 +47,7 @@ export function CsvImportModal({
   templateFilename,
   templateCsv,
   helpLines,
+  canImport = true,
   onImported
 }: CsvImportModalProps) {
   const { toast } = useToast();
@@ -92,6 +94,10 @@ export function CsvImportModal({
   };
 
   const runRequest = async (mode: 'preview' | 'import') => {
+    if (!canImport) {
+      toast('Viewer mode: import actions are disabled for this workspace.', 'error');
+      return;
+    }
     if (!csvText.trim()) {
       toast('Paste CSV content or upload a CSV file first.', 'error');
       return;
@@ -140,14 +146,14 @@ export function CsvImportModal({
             <span className="material-symbols-outlined text-[18px]">download</span>
             Template CSV
           </Button>
-          <Button variant="primary" onClick={() => void runRequest('preview')} disabled={loading} className="gap-2">
+          <Button variant="primary" onClick={() => void runRequest('preview')} disabled={loading || !canImport} className="gap-2">
             <span className="material-symbols-outlined text-[18px]">preview</span>
             {loading ? 'Working…' : 'Preview Import'}
           </Button>
           <Button
             variant="primary"
             onClick={() => void runRequest('import')}
-            disabled={loading || !preview || preview.summary.readyCount === 0 || preview.mode === 'import'}
+            disabled={loading || !canImport || !preview || preview.summary.readyCount === 0 || preview.mode === 'import'}
             className="gap-2"
           >
             <span className="material-symbols-outlined text-[18px]">upload</span>
@@ -174,6 +180,12 @@ export function CsvImportModal({
           </div>
         </div>
 
+        {!canImport ? (
+          <div className="rounded-[20px] border border-[var(--warning)]/30 bg-[var(--warning-muted)] px-4 py-3 text-sm text-[var(--warning)]">
+            You are in Viewer mode. CSV preview/import is disabled in this shared workspace.
+          </div>
+        ) : null}
+
         <div className="rounded-[24px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] p-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
@@ -182,16 +194,17 @@ export function CsvImportModal({
             </div>
             <div className="flex flex-wrap gap-2">
               <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileSelect} />
-              <Button variant="secondary" onClick={() => fileInputRef.current?.click()} className="gap-2">
+              <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={!canImport} className="gap-2">
                 <span className="material-symbols-outlined text-[18px]">upload_file</span>
                 Upload CSV
               </Button>
-              <Button variant="ghost" onClick={() => setCsvText(templateCsv)}>Load sample CSV</Button>
+              <Button variant="ghost" onClick={() => setCsvText(templateCsv)} disabled={!canImport}>Load sample CSV</Button>
             </div>
           </div>
 
           <textarea
             value={csvText}
+            disabled={!canImport}
             onChange={(event) => {
               setCsvText(event.target.value);
               setPreview(null);

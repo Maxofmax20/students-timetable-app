@@ -14,6 +14,12 @@ import { CsvImportModal } from '@/components/workspace/CsvImportModal';
 import { formatRoomLevel, groupRoomsByBuilding, normalizeRoomFields, roomDisplaySummary } from '@/lib/group-room-model';
 import type { RoomApiItem } from '@/types';
 
+type WorkspaceAccess = {
+  productRole: 'OWNER' | 'EDITOR' | 'VIEWER';
+  canWrite: boolean;
+  canImport: boolean;
+};
+
 const ROOMS_TEMPLATE_CSV = `buildingCode,roomNumber,name,buildingName,capacity
 E,119,Room E119,Main Engineering Building,40
 E,226,Room E226,,25
@@ -41,12 +47,14 @@ export default function RoomsPage() {
   const [formData, setFormData] = useState({ code: '', name: '', capacity: '', building: '', buildingCode: '', roomNumber: '' });
   const [actionLoading, setActionLoading] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [access, setAccess] = useState<WorkspaceAccess | null>(null);
 
   const fetchRooms = async () => {
     try {
       const res = await fetch('/api/v1/rooms');
       const data = await res.json();
       setRooms(data.data?.items || []);
+      setAccess(data.data?.access || null);
     } catch {
       toast('Failed to load rooms', 'error');
     } finally {
@@ -128,6 +136,7 @@ export default function RoomsPage() {
   });
 
   const handleSave = async () => {
+    if (!access?.canWrite) return toast('Viewer mode: room changes are disabled.', 'error');
     if (!formData.name.trim()) return toast('Room name is required', 'error');
     if (!getPayload().code) return toast('Room code or structured building + room number is required', 'error');
 
@@ -156,6 +165,7 @@ export default function RoomsPage() {
   };
 
   const handleDelete = async () => {
+    if (!access?.canWrite) return toast('Viewer mode: room deletion is disabled.', 'error');
     if (!selectedRoom) return;
     setActionLoading(true);
     try {
@@ -174,6 +184,10 @@ export default function RoomsPage() {
   };
 
   const openEdit = (room: RoomApiItem) => {
+    if (!access?.canWrite) {
+      toast('Viewer mode: editing rooms is disabled.', 'error');
+      return;
+    }
     setSelectedRoom(room);
     setFormData({
       code: room.code,
@@ -188,6 +202,10 @@ export default function RoomsPage() {
   };
 
   const openCreate = () => {
+    if (!access?.canWrite) {
+      toast('Viewer mode: adding rooms is disabled.', 'error');
+      return;
+    }
     setSelectedRoom(null);
     setFormData({ code: '', name: '', capacity: '', building: '', buildingCode: '', roomNumber: '' });
     setModalMode('create');
@@ -213,11 +231,11 @@ export default function RoomsPage() {
                 onClear={() => setSearch('')}
                 className="w-full sm:w-[360px]"
               />
-              <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2">
+              <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2" disabled={!access?.canImport}>
                 <span className="material-symbols-outlined text-[20px]">upload_file</span>
                 Import CSV
               </Button>
-              <Button onClick={openCreate} variant="primary" className="gap-2">
+              <Button onClick={openCreate} variant="primary" className="gap-2" disabled={!access?.canWrite}>
                 <span className="material-symbols-outlined text-[20px]">meeting_room</span>
                 Add Room
               </Button>
@@ -236,6 +254,12 @@ export default function RoomsPage() {
             </span>
           </div>
         </div>
+
+        {!access?.canWrite ? (
+          <div className="rounded-[20px] border border-[var(--warning)]/30 bg-[var(--warning-muted)] px-4 py-3 text-sm text-[var(--warning)]">
+            You are in Viewer mode. Room records are read-only; create, edit, delete, and import actions are disabled.
+          </div>
+        ) : null}
 
         <div className="space-y-5">
           {loading ? (
@@ -292,14 +316,16 @@ export default function RoomsPage() {
                                 <span className="rounded-full border border-[var(--border)] px-2.5 py-1">{room.capacity ? `${room.capacity} seats` : 'Capacity not set'}</span>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 self-end md:self-start">
-                              <Button variant="ghost" size="sm" onClick={() => openEdit(room)} className="h-9 w-9 p-0 rounded-lg">
-                                <span className="material-symbols-outlined text-[18px]">edit_square</span>
-                              </Button>
-                              <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedRoom(room); setIsDeleteOpen(true); }} className="h-9 w-9 p-0 rounded-lg">
-                                <span className="material-symbols-outlined text-[18px]">delete</span>
-                              </Button>
-                            </div>
+                            {access?.canWrite ? (
+                              <div className="flex items-center gap-2 self-end md:self-start">
+                                <Button variant="ghost" size="sm" onClick={() => openEdit(room)} className="h-9 w-9 p-0 rounded-lg">
+                                  <span className="material-symbols-outlined text-[18px]">edit_square</span>
+                                </Button>
+                                <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedRoom(room); setIsDeleteOpen(true); }} className="h-9 w-9 p-0 rounded-lg">
+                                  <span className="material-symbols-outlined text-[18px]">delete</span>
+                                </Button>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       ))}
@@ -416,6 +442,7 @@ export default function RoomsPage() {
         templateFilename="rooms-import-template.csv"
         templateCsv={ROOMS_TEMPLATE_CSV}
         helpLines={ROOMS_IMPORT_HELP}
+        canImport={Boolean(access?.canImport)}
         onImported={async () => {
           setIsImportOpen(false);
           await fetchRooms();

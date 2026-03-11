@@ -24,6 +24,12 @@ type TimetableSavedState = {
   showConflictLayer: boolean;
 };
 
+type WorkspaceAccess = {
+  productRole: 'OWNER' | 'EDITOR' | 'VIEWER';
+  canWrite: boolean;
+  canImport: boolean;
+};
+
 type SavedTimetableView = {
   id: string;
   name: string;
@@ -59,6 +65,7 @@ export default function WorkspaceTimetablePage() {
   const [viewDraftName, setViewDraftName] = useState('');
   const [workspaceId, setWorkspaceId] = useState('');
   const [activeSavedViewId, setActiveSavedViewId] = useState<string | null>(null);
+  const [access, setAccess] = useState<WorkspaceAccess | null>(null);
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -78,6 +85,7 @@ export default function WorkspaceTimetablePage() {
         const resolvedWorkspaceId = coursesPayload.data?.workspaceId || '';
         setWorkspaceId(resolvedWorkspaceId);
         setCourses(coursesPayload.data?.items || []);
+        setAccess(coursesPayload.data?.access || null);
         setGroups(groupsResponse.ok && groupsPayload?.ok ? groupsPayload.data?.items || [] : []);
 
         if (resolvedWorkspaceId) {
@@ -345,6 +353,12 @@ export default function WorkspaceTimetablePage() {
   return (
     <AppShell title="Timetable" subtitle="Inspect the weekly schedule with smarter controls and clash visibility.">
       <div className="space-y-6">
+        {!access?.canWrite ? (
+          <div className="rounded-[20px] border border-[var(--warning)]/30 bg-[var(--warning-muted)] px-4 py-3 text-sm text-[var(--warning)]">
+            You are in Viewer mode. Timetable stays fully browsable; shared data editing/import remains blocked in resource pages.
+          </div>
+        ) : null}
+
         <section className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
