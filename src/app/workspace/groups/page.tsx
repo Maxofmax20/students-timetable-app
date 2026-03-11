@@ -44,12 +44,16 @@ export default function GroupsPage() {
   const [formData, setFormData] = useState({ code: '', name: '', parentGroupId: '__none__' });
   const [actionLoading, setActionLoading] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [canWrite, setCanWrite] = useState(true);
+  const [canImport, setCanImport] = useState(true);
 
   const fetchGroups = async () => {
     try {
       const res = await fetch('/api/v1/groups');
       const data = await res.json();
       setGroups(data.data?.items || []);
+      setCanWrite(Boolean(data.data?.access?.canWrite ?? true));
+      setCanImport(Boolean(data.data?.access?.canImport ?? true));
     } catch {
       toast('Failed to load groups', 'error');
     } finally {
@@ -101,6 +105,10 @@ export default function GroupsPage() {
   ], [sortedGroups]);
 
   const handleSave = async () => {
+    if (!canWrite) {
+      toast('Viewer mode: group updates are disabled.', 'error');
+      return;
+    }
     if (!formData.code.trim() || !formData.name.trim()) {
       return toast('Code and name are required', 'error');
     }
@@ -134,6 +142,10 @@ export default function GroupsPage() {
   };
 
   const handleDelete = async () => {
+    if (!canWrite) {
+      toast('Viewer mode: group deletion is disabled.', 'error');
+      return;
+    }
     if (!selectedGroup) return;
     setActionLoading(true);
     try {
@@ -152,6 +164,10 @@ export default function GroupsPage() {
   };
 
   const openEdit = (group: GroupApiItem) => {
+    if (!canWrite) {
+      toast('Viewer mode: editing is disabled.', 'error');
+      return;
+    }
     setSelectedGroup(group);
     setFormData({
       code: group.code,
@@ -163,6 +179,10 @@ export default function GroupsPage() {
   };
 
   const openCreate = () => {
+    if (!canWrite) {
+      toast('Viewer mode: group creation is disabled.', 'error');
+      return;
+    }
     setSelectedGroup(null);
     setFormData({ code: '', name: '', parentGroupId: '__none__' });
     setModalMode('create');
@@ -188,14 +208,20 @@ export default function GroupsPage() {
                 onClear={() => setSearch('')}
                 className="w-full sm:w-[360px]"
               />
-              <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2">
-                <span className="material-symbols-outlined text-[20px]">upload_file</span>
-                Import CSV
-              </Button>
-              <Button onClick={openCreate} variant="primary" className="gap-2">
-                <span className="material-symbols-outlined text-[20px]">add</span>
-                New Group
-              </Button>
+              {canImport ? (
+                <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2">
+                  <span className="material-symbols-outlined text-[20px]">upload_file</span>
+                  Import CSV
+                </Button>
+              ) : null}
+              {canWrite ? (
+                <Button onClick={openCreate} variant="primary" className="gap-2">
+                  <span className="material-symbols-outlined text-[20px]">add</span>
+                  New Group
+                </Button>
+              ) : (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]">Viewer mode</div>
+              )}
             </div>
           </div>
 
@@ -211,6 +237,12 @@ export default function GroupsPage() {
             </span>
           </div>
         </div>
+
+        {!canWrite ? (
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+            You are in Viewer mode. Group management is read-only.
+          </div>
+        ) : null}
 
         <div className="space-y-5">
           {loading ? (

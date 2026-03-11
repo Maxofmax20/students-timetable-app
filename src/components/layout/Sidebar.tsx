@@ -43,6 +43,7 @@ const navigationSections: NavSection[] = [
   {
     title: 'Settings',
     items: [
+      { label: 'Sharing', href: '/workspace/sharing', icon: 'group_add' },
       { label: 'Account', href: '/account', icon: 'person' }
     ]
   }

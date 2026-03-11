@@ -68,6 +68,7 @@ export default function WorkspaceDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [courses, setCourses] = useState<CourseApiItem[]>([]);
   const [stats, setStats] = useState<DashboardStats>({ groups: [], instructors: [], rooms: [] });
+  const [canWrite, setCanWrite] = useState(true);
 
   const load = async () => {
     setLoading(true);
@@ -91,6 +92,7 @@ export default function WorkspaceDashboardPage() {
       }
 
       setCourses(coursesPayload.data?.items || []);
+      setCanWrite(Boolean(coursesPayload.data?.access?.canWrite ?? true));
       setStats({
         groups: groupsResponse.ok && groupsPayload?.ok ? groupsPayload.data?.items || [] : [],
         instructors: instructorsResponse.ok && instructorsPayload?.ok ? instructorsPayload.data?.items || [] : [],
@@ -266,6 +268,10 @@ export default function WorkspaceDashboardPage() {
   const handleAction = (actionName: ActionLabel) => {
     switch (actionName) {
       case 'New':
+        if (!canWrite) {
+          toast('Viewer mode: quick-create is disabled.', 'error');
+          break;
+        }
         router.push('/workspace/courses?create=1');
         break;
       case 'Conflicts':

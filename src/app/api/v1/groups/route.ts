@@ -8,6 +8,7 @@ import {
   requireSession,
   requireWorkspaceRole
 } from "@/lib/workspace-v1";
+import { requireWorkspaceReadAccess } from "@/lib/workspace-access";
 
 const createSchema = z.object({
   workspaceId: z.string().cuid().optional(),
@@ -25,19 +26,15 @@ const groupInclude = {
 
 async function resolveWorkspace(userId: string, workspaceId?: string) {
   if (!workspaceId) {
-    return getOrCreatePersonalWorkspace(userId);
+    const workspace = await getOrCreatePersonalWorkspace(userId);
+    const access = await requireWorkspaceReadAccess(userId, workspace.id);
+    return { workspace, access };
   }
 
-  await requireWorkspaceRole(userId, workspaceId, [
-    WorkspaceRole.OWNER,
-    WorkspaceRole.TEACHER,
-    WorkspaceRole.STUDENT,
-    WorkspaceRole.VIEWER
-  ]);
-
+  const access = await requireWorkspaceReadAccess(userId, workspaceId);
   const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } });
   if (!workspace) throw new ApiError(404, "WORKSPACE_NOT_FOUND");
-  return workspace;
+  return { workspace, access };
 }
 
 async function validateParentGroup(workspaceId: string, parentGroupId?: string | null) {
@@ -62,7 +59,7 @@ export async function GET(request: NextRequest) {
   try {
     const session = await requireSession(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId") ?? undefined;
-    const workspace = await resolveWorkspace(session.userId, workspaceId);
+    const { workspace, access } = await resolveWorkspace(session.userId, workspaceId);
 
     const items = await prisma.academicGroup.findMany({
       where: { workspaceId: workspace.id },
@@ -70,7 +67,7 @@ export async function GET(request: NextRequest) {
       include: groupInclude
     });
 
-    return NextResponse.json({ ok: true, data: { workspaceId: workspace.id, items: items.map(mapGroup) } });
+    return NextResponse.json({ ok: true, data: { workspaceId: workspace.id, access, items: items.map(mapGroup) } });
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json({ ok: false, message: error.message }, { status: error.status });
@@ -83,7 +80,7 @@ export async function POST(request: NextRequest) {
   try {
     const session = await requireSession(request);
     const body = createSchema.parse(await request.json());
-    const workspace = await resolveWorkspace(session.userId, body.workspaceId);
+    const { workspace } = await resolveWorkspace(session.userId, body.workspaceId);
 
     await requireWorkspaceRole(session.userId, workspace.id, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
     const parentGroupId = await validateParentGroup(workspace.id, body.parentGroupId ?? null);

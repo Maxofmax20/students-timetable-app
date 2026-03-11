@@ -37,6 +37,12 @@ type SavedCourseView = {
   updatedAt: string;
 };
 
+type WorkspaceAccess = {
+  productRole: 'OWNER' | 'EDITOR' | 'VIEWER';
+  canWrite: boolean;
+  canImport: boolean;
+};
+
 const DEFAULT_FILTERS: CourseFilters = {
   status: 'ALL',
   sessionType: 'ALL',
@@ -221,6 +227,7 @@ export default function WorkspaceCoursesPage() {
   const [viewDraftName, setViewDraftName] = useState('');
   const [workspaceId, setWorkspaceId] = useState<string>('');
   const [activeSavedViewId, setActiveSavedViewId] = useState<string | null>(null);
+  const [access, setAccess] = useState<WorkspaceAccess | null>(null);
 
   const loadSavedViews = async (resolvedWorkspaceId: string) => {
     const response = await fetch(`/api/v1/saved-views?workspaceId=${resolvedWorkspaceId}&surface=COURSES`, { credentials: 'include' });
@@ -254,6 +261,7 @@ export default function WorkspaceCoursesPage() {
 
       const resolvedWorkspaceId = coursesPayload.data?.workspaceId || '';
       setWorkspaceId(resolvedWorkspaceId);
+      setAccess(coursesPayload.data?.access || null);
       setCourses(coursesPayload.data?.items || []);
       setGroups(groupsResponse.ok && groupsPayload?.ok ? groupsPayload.data?.items || [] : []);
       setInstructors(instructorsResponse.ok && instructorsPayload?.ok ? instructorsPayload.data?.items || [] : []);
@@ -386,6 +394,10 @@ export default function WorkspaceCoursesPage() {
   };
 
   const openCreate = () => {
+    if (!access?.canWrite) {
+      toast('Viewer mode: course creation is disabled.', 'error');
+      return;
+    }
     setCourseModalData({ sessions: [] });
     setCourseModalMode('create');
     setCourseModalOpen(true);
@@ -474,6 +486,10 @@ export default function WorkspaceCoursesPage() {
   };
 
   const handleRowAction = (action: 'Edit' | 'Duplicate' | 'Delete', row: Row) => {
+    if (!access?.canWrite) {
+      toast('Viewer mode: editing actions are disabled.', 'error');
+      return;
+    }
     const course = courses.find((item) => item.id === row.id);
     if (!course) return;
 
@@ -659,6 +675,12 @@ export default function WorkspaceCoursesPage() {
           </div>
         </section>
 
+        {!access?.canWrite ? (
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+            You are in Viewer mode. Course data is read-only; import and create/edit/delete actions are disabled.
+          </div>
+        ) : null}
+
         <CoursesView
           rows={rows}
           denseRows={false}
@@ -666,16 +688,19 @@ export default function WorkspaceCoursesPage() {
           onAction={handleAction}
           onRowAction={handleRowAction}
           isLoading={status === 'loading' || loading}
+          canCreate={Boolean(access?.canWrite)}
           extraActions={
             <>
               <Button onClick={exportFilteredCoursesCsv} variant="secondary" className="gap-2 w-full sm:w-auto justify-center">
                 <span className="material-symbols-outlined text-[20px]">download</span>
                 Export filtered courses (.csv)
               </Button>
-              <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2 w-full sm:w-auto justify-center">
-                <span className="material-symbols-outlined text-[20px]">upload_file</span>
-                Import CSV
-              </Button>
+              {access?.canImport ? (
+                <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2 w-full sm:w-auto justify-center">
+                  <span className="material-symbols-outlined text-[20px]">upload_file</span>
+                  Import CSV
+                </Button>
+              ) : null}
             </>
           }
         />
