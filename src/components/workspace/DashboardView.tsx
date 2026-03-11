@@ -113,11 +113,11 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
 
   return (
     <div className="animate-panel-pop flex flex-col gap-6 pb-16">
-      <section>
-        <div className="mb-3 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Workspace overview</div>
+      <section className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
+        <div className="mb-3 text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Workspace overview</div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {effectiveModel.overviewStats.map((stat) => (
-            <article key={stat.label} className="rounded-2xl border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] p-4 shadow-[var(--shadow-sm)]">
+            <article key={stat.label} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)]">
               <div className="flex items-center justify-between">
                 <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">{stat.label}</p>
                 <span className="material-symbols-outlined text-[18px] text-[var(--text-secondary)]">{stat.icon}</span>
@@ -129,13 +129,13 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-sm)]">
+        <article className="rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-lg)]">
           <div className="mb-4 flex items-center justify-between gap-2">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Today</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Today</p>
               <h3 className="text-lg font-black tracking-tight text-white">Sessions ({effectiveModel.now.day})</h3>
             </div>
-            {inProgressNow ? <span className="rounded-full border border-[var(--success)]/35 bg-[var(--success)]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--success)]">In progress now</span> : null}
+            {inProgressNow ? <span className="rounded-full border border-[var(--success)]/30 bg-[var(--success-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--success)]">In progress now</span> : null}
           </div>
           {effectiveModel.todaySessions.length ? (
             <div className="space-y-2">
@@ -153,7 +153,7 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
                       if (previewRow) onPreviewSelect(previewRow);
                     }
                   }}
-                  className="w-full rounded-2xl border border-[var(--border-soft)] bg-[var(--surface-2)] p-3 text-left shadow-[var(--shadow-sm)] transition-all hover:-translate-y-[1px] hover:border-[var(--text-muted)] hover:shadow-[var(--shadow-md)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]"
+                  className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-3 text-left shadow-[var(--shadow-sm)] transition-all hover:-translate-y-[1px] hover:border-[var(--text-muted)] hover:shadow-[var(--shadow-md)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]"
                 >
                   <p className="truncate text-sm font-black text-white">{session.course}</p>
                   <p className="text-xs font-medium text-[var(--text-secondary)]">{session.timeLabel} • {session.room}</p>
@@ -161,21 +161,21 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
               ))}
             </div>
           ) : (
-            <p className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] p-4 text-sm text-[var(--text-secondary)]">No sessions scheduled today.</p>
+            <p className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-raised)] p-4 text-sm text-[var(--text-secondary)]">No sessions scheduled today.</p>
           )}
         </article>
 
-        <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-sm)]">
-          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Upcoming</p>
+        <article className="rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-lg)]">
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Upcoming</p>
           <h3 className="text-lg font-black tracking-tight text-white">Next session</h3>
           {effectiveModel.nextSession ? (
-            <div className="mt-4 rounded-2xl border border-[var(--border-soft)] bg-[linear-gradient(180deg,var(--surface-2),var(--surface-3))] p-4 shadow-[var(--shadow-sm)]">
+            <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
               <p className="text-base font-black text-white">{effectiveModel.nextSession.course}</p>
               <p className="mt-1 text-sm text-[var(--text-secondary)]">{effectiveModel.nextSession.day} • {effectiveModel.nextSession.timeLabel}</p>
               <p className="mt-2 text-xs text-[var(--text-muted)]">{effectiveModel.nextSession.group} • {effectiveModel.nextSession.instructor} • {effectiveModel.nextSession.room}</p>
             </div>
           ) : (
-            <p className="mt-4 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] p-4 text-sm text-[var(--text-secondary)]">No upcoming sessions found.</p>
+            <p className="mt-4 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-raised)] p-4 text-sm text-[var(--text-secondary)]">No upcoming sessions found.</p>
           )}
 
           <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
@@ -184,7 +184,7 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
               { label: 'Day', value: effectiveModel.now.day },
               { label: 'Unresolved', value: String(effectiveModel.quality.unresolvedCount) }
             ].map((item) => (
-              <div key={item.label} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-2)] p-2">
+              <div key={item.label} className="rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-2">
                 <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[var(--text-muted)]">{item.label}</p>
                 <p className="mt-1 font-bold text-white">{item.value}</p>
               </div>
@@ -194,8 +194,8 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-sm)]">
-          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Health</p>
+        <article className="rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-lg)]">
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Health</p>
           <h3 className="text-lg font-black tracking-tight text-white">Quality checks</h3>
           <div className="mt-4 grid grid-cols-2 gap-3">
             {[
@@ -204,7 +204,7 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
               ['Missing instructors', effectiveModel.quality.missingInstructorCount],
               ['Missing groups', effectiveModel.quality.missingGroupCount]
             ].map(([label, value]) => (
-              <div key={label} className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-2)] p-3">
+              <div key={label} className="rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-3">
                 <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">{label}</p>
                 <p className={cn('mt-1 text-2xl font-black', Number(value) > 0 ? 'text-[var(--danger)]' : 'text-white')}>{value}</p>
               </div>
@@ -217,8 +217,8 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
           </p>
         </article>
 
-        <article className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-sm)]">
-          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Action center</p>
+        <article className="rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-lg)]">
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Action center</p>
           <h3 className="text-lg font-black tracking-tight text-white">Quick actions & links</h3>
           <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
             {[
@@ -242,7 +242,7 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
               <Link
                 key={`${link.label}-${link.href}`}
                 href={link.href}
-                className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1 text-[11px] font-semibold text-[var(--text-secondary)] transition-colors hover:border-[var(--text-muted)] hover:text-white"
+                className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[11px] font-semibold text-[var(--text-secondary)] transition-colors hover:border-[var(--text-muted)] hover:text-white"
               >
                 {link.label}
               </Link>
@@ -251,8 +251,8 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
         </article>
       </section>
 
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-sm)]">
-        <p className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Insights</p>
+      <section className="rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-lg)]">
+        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Insights</p>
         <h3 className="text-lg font-black tracking-tight text-white">Schedule distribution</h3>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Insight label="Busiest day" value={effectiveModel.insights.busiestDay ? `${effectiveModel.insights.busiestDay[0]} (${effectiveModel.insights.busiestDay[1]})` : '—'} />
@@ -279,7 +279,7 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
 
 function Insight({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-2)] p-3">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-3">
       <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">{label}</p>
       <p className="mt-1 truncate text-sm font-bold text-white">{value}</p>
     </div>
@@ -288,7 +288,7 @@ function Insight({ label, value }: { label: string; value: string }) {
 
 function ListInsight({ title, items }: { title: string; items: { label: string; value: number }[] }) {
   return (
-    <div className="rounded-xl border border-[var(--border-soft)] bg-[var(--surface-2)] p-3">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-3">
       <p className="text-sm font-black text-white">{title}</p>
       <div className="mt-2 space-y-1.5">
         {(items.length ? items.slice(0, 5) : [{ label: 'No data', value: 0 }]).map((item) => (
@@ -303,5 +303,5 @@ function ListInsight({ title, items }: { title: string; items: { label: string; 
 }
 
 function Chip({ label, value }: { label: string; value: number }) {
-  return <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">{label}: {value}</span>;
+  return <span className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">{label}: {value}</span>;
 }
