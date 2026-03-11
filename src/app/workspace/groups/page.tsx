@@ -44,6 +44,9 @@ export default function GroupsPage() {
   const [formData, setFormData] = useState({ code: '', name: '', parentGroupId: '__none__' });
   const [actionLoading, setActionLoading] = useState(false);
   const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null);
+  const [isSectionDeleteOpen, setIsSectionDeleteOpen] = useState(false);
+  const [selectedSectionKey, setSelectedSectionKey] = useState<string | null>(null);
+  const [sectionDeleteLoadingKey, setSectionDeleteLoadingKey] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [canWrite, setCanWrite] = useState(true);
   const [canImport, setCanImport] = useState(true);
@@ -84,6 +87,10 @@ export default function GroupsPage() {
   }, [search, sortedGroups]);
 
   const groupedSections = useMemo(() => groupGroupsByRoot(filteredGroups), [filteredGroups]);
+  const selectedSection = useMemo(
+    () => groupedSections.find((section) => section.rootCode === selectedSectionKey) ?? null,
+    [groupedSections, selectedSectionKey]
+  );
 
   const toggleSection = (key: string) => {
     if (search.trim()) return;
@@ -171,6 +178,59 @@ export default function GroupsPage() {
     } finally {
       setActionLoading(false);
       setDeletingGroupId(null);
+    }
+  };
+
+  const openSectionDelete = (rootCode: string) => {
+    if (!canWrite) {
+      toast('Viewer mode: group deletion is disabled.', 'error');
+      return;
+    }
+    if (search.trim()) {
+      toast('Clear search before deleting a full group section so no hidden rows are skipped.', 'error');
+      return;
+    }
+    setSelectedSectionKey(rootCode);
+    setIsSectionDeleteOpen(true);
+  };
+
+  const handleSectionDelete = async () => {
+    if (!canWrite) return toast('Viewer mode: group deletion is disabled.', 'error');
+    if (!selectedSection) return;
+
+    const root = selectedSection.root || selectedSection.items.find((item) => !item.parentGroupId) || selectedSection.items[0];
+    if (!root) {
+      toast('Section root could not be resolved safely.', 'error');
+      return;
+    }
+
+    const subgroups = selectedSection.items.filter((item) => item.id !== root.id);
+    setSectionDeleteLoadingKey(selectedSection.rootCode);
+
+    try {
+      for (const subgroup of subgroups) {
+        const subgroupRes = await fetch(`/api/v1/groups/${subgroup.id}`, { method: 'DELETE' });
+        if (!subgroupRes.ok) {
+          const data = await subgroupRes.json().catch(() => ({}));
+          throw new Error(`Subgroup ${subgroup.code} could not be deleted: ${data?.message || 'delete failed'}`);
+        }
+      }
+
+      const rootRes = await fetch(`/api/v1/groups/${root.id}`, { method: 'DELETE' });
+      if (!rootRes.ok) {
+        const data = await rootRes.json().catch(() => ({}));
+        throw new Error(`Main group ${root.code} could not be deleted: ${data?.message || 'delete failed'}`);
+      }
+
+      const idsToRemove = new Set(selectedSection.items.map((item) => item.id));
+      setGroups((current) => current.filter((group) => !idsToRemove.has(group.id)));
+      toast(`Deleted section ${selectedSection.rootCode} (${selectedSection.items.length} row${selectedSection.items.length === 1 ? '' : 's'})`);
+      setIsSectionDeleteOpen(false);
+      setSelectedSectionKey(null);
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Section delete failed', 'error');
+    } finally {
+      setSectionDeleteLoadingKey(null);
     }
   };
 
@@ -266,11 +326,8 @@ export default function GroupsPage() {
 
               return (
                 <section key={section.rootCode} className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">
-                  <button
-                    type="button"
-                    onClick={() => toggleSection(section.rootCode)}
-                    aria-expanded={!isCollapsed}
-                    className="flex w-full flex-col gap-3 border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] px-4 py-4 text-left transition-colors hover:bg-[linear-gradient(135deg,var(--surface-2),var(--surface-3))] md:px-6"
+                  <div
+                    className="flex w-full flex-col gap-3 border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] px-4 py-4 text-left transition-colors md:px-6"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
@@ -281,18 +338,36 @@ export default function GroupsPage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
+                        {canWrite ? (
+                          <Button
+                            type="button"
+                            variant="ghost-danger"
+                            size="sm"
+                            onClick={() => openSectionDelete(section.rootCode)}
+                            className="min-h-9 rounded-lg px-3"
+                            disabled={sectionDeleteLoadingKey === section.rootCode}
+                          >
+                            <span className="material-symbols-outlined text-[17px]">delete_sweep</span>
+                            <span className="text-[11px] font-black uppercase tracking-[0.1em]">Delete section</span>
+                          </Button>
+                        ) : null}
                         <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
                           {subgroups.length} subgroup{subgroups.length === 1 ? '' : 's'}
                         </span>
                         <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
                           {section.items.length} total row{section.items.length === 1 ? '' : 's'}
                         </span>
-                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]">
+                        <button
+                          type="button"
+                          onClick={() => toggleSection(section.rootCode)}
+                          aria-expanded={!isCollapsed}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]"
+                        >
                           <span className={`material-symbols-outlined text-[20px] transition-transform ${isCollapsed ? '' : 'rotate-180'}`}>expand_more</span>
-                        </span>
+                        </button>
                       </div>
                     </div>
-                  </button>
+                  </div>
 
                   {!isCollapsed ? (
                     <div className="p-4 md:p-6 space-y-3">
@@ -446,6 +521,30 @@ export default function GroupsPage() {
           await fetchGroups();
         }}
       />
+
+      <Modal
+        open={isSectionDeleteOpen}
+        onClose={() => { if (!sectionDeleteLoadingKey) { setIsSectionDeleteOpen(false); setSelectedSectionKey(null); } }}
+        title="Delete Group Section"
+        subtitle="This will remove the main group row and every subgroup in this visible section."
+        actions={
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => { setIsSectionDeleteOpen(false); setSelectedSectionKey(null); }} disabled={Boolean(sectionDeleteLoadingKey)}>Cancel</Button>
+            <Button variant="danger" onClick={handleSectionDelete} disabled={Boolean(sectionDeleteLoadingKey) || !selectedSection}>
+              {sectionDeleteLoadingKey ? 'Deleting section...' : `Delete ${selectedSection?.items.length || 0} row${(selectedSection?.items.length || 0) === 1 ? '' : 's'}`}
+            </Button>
+          </div>
+        }
+      >
+        <div className="rounded-[24px] border border-[var(--danger)]/25 bg-[linear-gradient(135deg,var(--danger-muted),transparent)] p-4">
+          <div className="flex items-start gap-3">
+            <span className="material-symbols-outlined text-[20px] text-[var(--danger)]">warning</span>
+            <p className="text-[var(--text-secondary)] text-sm leading-relaxed">
+              You are about to permanently delete section <span className="text-white font-bold">{selectedSection?.rootCode}</span>, including <span className="text-white font-bold">{selectedSection?.items.length || 0} group row{(selectedSection?.items.length || 0) === 1 ? '' : 's'}</span> (main group + subgroups in this section). This action is irreversible.
+            </p>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={isDeleteOpen}

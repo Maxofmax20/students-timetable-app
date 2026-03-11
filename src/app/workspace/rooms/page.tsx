@@ -47,6 +47,9 @@ export default function RoomsPage() {
   const [formData, setFormData] = useState({ code: '', name: '', capacity: '', building: '', buildingCode: '', roomNumber: '' });
   const [actionLoading, setActionLoading] = useState(false);
   const [deletingRoomId, setDeletingRoomId] = useState<string | null>(null);
+  const [isSectionDeleteOpen, setIsSectionDeleteOpen] = useState(false);
+  const [selectedSectionKey, setSelectedSectionKey] = useState<string | null>(null);
+  const [sectionDeleteLoadingKey, setSectionDeleteLoadingKey] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [access, setAccess] = useState<WorkspaceAccess | null>(null);
 
@@ -93,6 +96,10 @@ export default function RoomsPage() {
   }, [rooms, search]);
 
   const groupedRooms = useMemo(() => groupRoomsByBuilding(filteredRooms), [filteredRooms]);
+  const selectedSection = useMemo(
+    () => groupedRooms.find((section) => section.buildingCode === selectedSectionKey) ?? null,
+    [groupedRooms, selectedSectionKey]
+  );
 
   const toggleSection = (key: string) => {
     if (search.trim()) return;
@@ -188,6 +195,57 @@ export default function RoomsPage() {
     }
   };
 
+  const openSectionDelete = (buildingCode: string) => {
+    if (!access?.canWrite) {
+      toast('Viewer mode: room deletion is disabled.', 'error');
+      return;
+    }
+    if (search.trim()) {
+      toast('Clear search before deleting a full building section so no hidden rooms are skipped.', 'error');
+      return;
+    }
+    setSelectedSectionKey(buildingCode);
+    setIsSectionDeleteOpen(true);
+  };
+
+  const handleSectionDelete = async () => {
+    if (!access?.canWrite) return toast('Viewer mode: room deletion is disabled.', 'error');
+    if (!selectedSection) return;
+
+    const roomIds = selectedSection.rooms.map((room) => room.id);
+    if (!roomIds.length) {
+      setIsSectionDeleteOpen(false);
+      setSelectedSectionKey(null);
+      return;
+    }
+
+    setSectionDeleteLoadingKey(selectedSection.buildingCode);
+    try {
+      const failures: string[] = [];
+      for (const room of selectedSection.rooms) {
+        const res = await fetch(`/api/v1/rooms/${room.id}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          failures.push(`${room.code}: ${data?.message || 'delete failed'}`);
+        }
+      }
+
+      if (failures.length) {
+        toast(`Stopped: ${failures.length} room delete(s) failed in ${selectedSection.buildingCode}. ${failures[0]}`, 'error');
+        return;
+      }
+
+      setRooms((current) => current.filter((room) => !roomIds.includes(room.id)));
+      toast(`Deleted ${roomIds.length} room${roomIds.length === 1 ? '' : 's'} from ${selectedSection.buildingCode === '—' ? 'Unstructured rooms' : `Building ${selectedSection.buildingCode}`}`);
+      setIsSectionDeleteOpen(false);
+      setSelectedSectionKey(null);
+    } catch {
+      toast('Section delete failed', 'error');
+    } finally {
+      setSectionDeleteLoadingKey(null);
+    }
+  };
+
   const openEdit = (room: RoomApiItem) => {
     if (!access?.canWrite) {
       toast('Viewer mode: editing rooms is disabled.', 'error');
@@ -275,11 +333,8 @@ export default function RoomsPage() {
 
               return (
                 <section key={section.buildingCode} className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">
-                  <button
-                    type="button"
-                    onClick={() => toggleSection(section.buildingCode)}
-                    aria-expanded={!isCollapsed}
-                    className="flex w-full flex-col gap-3 border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] px-4 py-4 text-left transition-colors hover:bg-[linear-gradient(135deg,var(--surface-2),var(--surface-3))] md:px-6"
+                  <div
+                    className="flex w-full flex-col gap-3 border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] px-4 py-4 text-left transition-colors md:px-6"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
@@ -290,15 +345,36 @@ export default function RoomsPage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
+                        {access?.canWrite ? (
+                          <Button
+                            type="button"
+                            variant="ghost-danger"
+                            size="sm"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openSectionDelete(section.buildingCode);
+                            }}
+                            className="min-h-9 rounded-lg px-3"
+                            disabled={sectionDeleteLoadingKey === section.buildingCode}
+                          >
+                            <span className="material-symbols-outlined text-[17px]">delete_sweep</span>
+                            <span className="text-[11px] font-black uppercase tracking-[0.1em]">Delete section</span>
+                          </Button>
+                        ) : null}
                         <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
                           {section.rooms.length} room{section.rooms.length === 1 ? '' : 's'}
                         </span>
-                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]">
+                        <button
+                          type="button"
+                          onClick={() => toggleSection(section.buildingCode)}
+                          aria-expanded={!isCollapsed}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]"
+                        >
                           <span className={`material-symbols-outlined text-[20px] transition-transform ${isCollapsed ? '' : 'rotate-180'}`}>expand_more</span>
-                        </span>
+                        </button>
                       </div>
                     </div>
-                  </button>
+                  </div>
 
                   {!isCollapsed ? (
                     <div className="p-4 md:p-6 grid gap-3">
@@ -459,6 +535,30 @@ export default function RoomsPage() {
           await fetchRooms();
         }}
       />
+
+      <Modal
+        open={isSectionDeleteOpen}
+        onClose={() => { if (!sectionDeleteLoadingKey) { setIsSectionDeleteOpen(false); setSelectedSectionKey(null); } }}
+        title="Delete Building Section"
+        subtitle="This removes every room currently listed in this building section."
+        actions={
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => { setIsSectionDeleteOpen(false); setSelectedSectionKey(null); }} disabled={Boolean(sectionDeleteLoadingKey)}>Cancel</Button>
+            <Button variant="danger" onClick={handleSectionDelete} disabled={Boolean(sectionDeleteLoadingKey) || !selectedSection}>
+              {sectionDeleteLoadingKey ? 'Deleting section...' : `Delete ${selectedSection?.rooms.length || 0} room${(selectedSection?.rooms.length || 0) === 1 ? '' : 's'}`}
+            </Button>
+          </div>
+        }
+      >
+        <div className="rounded-[24px] border border-[var(--danger)]/25 bg-[linear-gradient(135deg,var(--danger-muted),transparent)] p-4">
+          <div className="flex items-start gap-3">
+            <span className="material-symbols-outlined text-[20px] text-[var(--danger)]">warning</span>
+            <p className="text-[var(--text-secondary)] text-sm leading-relaxed">
+              You are about to permanently delete <span className="text-white font-bold">{selectedSection?.rooms.length || 0} room{(selectedSection?.rooms.length || 0) === 1 ? '' : 's'}</span> from <span className="text-white font-bold">{selectedSection?.buildingCode === '—' ? 'Unstructured rooms' : `Building ${selectedSection?.buildingCode}`}</span>. This action is irreversible.
+            </p>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={isDeleteOpen}
