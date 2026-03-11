@@ -69,7 +69,6 @@ export default function WorkspaceTimetablePage() {
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const [showSavedViewsPanel, setShowSavedViewsPanel] = useState(false);
   const [showReportsPanel, setShowReportsPanel] = useState(false);
-  const [showSecondaryActions, setShowSecondaryActions] = useState(false);
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -178,9 +177,8 @@ export default function WorkspaceTimetablePage() {
       if (group) labels.push(group.code);
     }
     if (deliveryFilter !== 'ALL') labels.push(deliveryFilter === 'PHYSICAL' ? 'Physical only' : `${deliveryFilter.charAt(0)}${deliveryFilter.slice(1).toLowerCase()} only`);
-    if (showConflictLayer) labels.push('Conflict layer on');
     return labels;
-  }, [deliveryFilter, selectedGroupId, selectedTypes.length, showConflictLayer, sortedGroups]);
+  }, [deliveryFilter, selectedGroupId, selectedTypes.length, sortedGroups]);
 
   const conflictStats = useMemo(() => {
     const sessionsWithConflicts = displayItems.filter((item) => item.conflictCount).length;
@@ -368,51 +366,39 @@ export default function WorkspaceTimetablePage() {
           </div>
         ) : null}
 
-        <section className="rounded-[20px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-2.5 shadow-[var(--shadow-sm)] md:p-3.5">
+        <section className="rounded-[20px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-2 shadow-[var(--shadow-sm)] md:p-2.5">
           <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
                 {displayItems.length} visible session{displayItems.length === 1 ? '' : 's'}
               </span>
               <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
                 {conflictStats.sessionsWithConflicts} sessions with clashes
               </span>
-              <Button variant={showFiltersPanel ? 'primary' : 'secondary'} onClick={() => setShowFiltersPanel((current) => !current)} className="gap-2 ml-auto">
+              <Button variant={showFiltersPanel ? 'primary' : 'secondary'} onClick={() => setShowFiltersPanel((current) => !current)} className="ml-auto gap-1.5 px-3">
                 <span className="material-symbols-outlined text-[18px]">tune</span>
                 Filters
               </Button>
-              <Button variant={showSavedViewsPanel ? 'primary' : 'secondary'} onClick={() => setShowSavedViewsPanel((current) => !current)} className="gap-2">
+              <Button variant={showSavedViewsPanel ? 'primary' : 'secondary'} onClick={() => setShowSavedViewsPanel((current) => !current)} className="gap-1.5 px-3">
                 <span className="material-symbols-outlined text-[18px]">bookmark</span>
                 Saved views
               </Button>
-              <div className="relative">
-                <Button variant="ghost" onClick={() => setShowSecondaryActions((current) => !current)} className="gap-1.5 px-3">
-                  <span className="material-symbols-outlined text-[18px]">more_horiz</span>
-                  More
-                </Button>
-                {showSecondaryActions ? (
-                  <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-[220px] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[var(--shadow-md)]">
-                    <Button variant="ghost" onClick={() => { setShowReportsPanel((current) => !current); setShowSecondaryActions(false); }} className="w-full justify-start gap-2 px-2 py-2 text-sm">
-                      <span className="material-symbols-outlined text-[18px]">download</span>
-                      Reports & export
-                    </Button>
-                    <Button variant="ghost" onClick={() => { resetFilters(); setShowSecondaryActions(false); }} className="w-full justify-start gap-2 px-2 py-2 text-sm text-[var(--text-secondary)]">
-                      <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-                      Reset view
-                    </Button>
-                    <Button variant="ghost" onClick={() => { setShowConflictLayer((current) => !current); setShowSecondaryActions(false); }} className="w-full justify-start gap-2 px-2 py-2 text-sm text-[var(--text-secondary)]">
-                      <span className="material-symbols-outlined text-[18px]">warning</span>
-                      {showConflictLayer ? 'Conflict layer on' : 'Conflict layer off'}
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
+              <Button variant={showConflictLayer ? 'secondary' : 'ghost'} onClick={() => setShowConflictLayer((current) => !current)} className="gap-1.5 px-2.5 text-[var(--text-secondary)] sm:px-3">
+                <span className="material-symbols-outlined text-[18px]">warning</span>
+                <span className="hidden sm:inline">{showConflictLayer ? 'Conflicts on' : 'Conflicts off'}</span>
+              </Button>
+              <Button variant="ghost" onClick={() => setShowReportsPanel((current) => !current)} className="gap-1.5 px-2.5 text-[var(--text-secondary)] sm:px-3">
+                <span className="material-symbols-outlined text-[18px]">download</span>
+                <span className="hidden sm:inline">Reports</span>
+              </Button>
+              <Button variant="ghost" onClick={resetFilters} className="gap-1.5 px-2.5 text-[var(--text-secondary)] sm:px-3">
+                <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                <span className="hidden sm:inline">Reset</span>
+              </Button>
             </div>
 
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="min-w-[220px] flex-1 md:max-w-[360px]">
-                <AppSelect
-                label="View"
+            <div className="min-w-[180px] md:max-w-[300px]">
+              <AppSelect
                 value={activeSavedViewId || 'CUSTOM'}
                 onChange={(value) => {
                   if (value === 'CUSTOM') {
@@ -423,12 +409,9 @@ export default function WorkspaceTimetablePage() {
                   if (view) applySavedView(view);
                 }}
                 options={savedViewOptions}
+                placeholder="Current saved view"
+                compact
               />
-              </div>
-              <Button variant="ghost" onClick={() => setShowSavedViewsPanel((current) => !current)} className="gap-2">
-                <span className="material-symbols-outlined text-[18px]">tune</span>
-                Manage saved views
-              </Button>
             </div>
 
             {activeSummary.length ? (

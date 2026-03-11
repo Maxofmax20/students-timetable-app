@@ -230,7 +230,6 @@ export default function WorkspaceCoursesPage() {
   const [access, setAccess] = useState<WorkspaceAccess | null>(null);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const [showSavedViewsPanel, setShowSavedViewsPanel] = useState(false);
-  const [showSecondaryActions, setShowSecondaryActions] = useState(false);
 
   const loadSavedViews = async (resolvedWorkspaceId: string) => {
     const response = await fetch(`/api/v1/saved-views?workspaceId=${resolvedWorkspaceId}&surface=COURSES`, { credentials: 'include' });
@@ -566,47 +565,35 @@ export default function WorkspaceCoursesPage() {
   return (
     <AppShell title="Courses" subtitle="Manage and organize all university courses.">
       <div className="space-y-6">
-        <section className="rounded-[20px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-2.5 shadow-[var(--shadow-sm)] md:p-3.5">
+        <section className="rounded-[20px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-2 shadow-[var(--shadow-sm)] md:p-2.5">
           <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
               <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
                 Showing {filteredCourses.length} of {courses.length}
               </span>
               <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
                 {activeFilterSummary.length} active filter{activeFilterSummary.length === 1 ? '' : 's'}
               </span>
-              <Button variant={showFiltersPanel ? 'primary' : 'secondary'} onClick={() => setShowFiltersPanel((current) => !current)} className="gap-2 ml-auto">
+              <Button variant={showFiltersPanel ? 'primary' : 'secondary'} onClick={() => setShowFiltersPanel((current) => !current)} className="ml-auto gap-1.5 px-3">
                 <span className="material-symbols-outlined text-[18px]">tune</span>
                 Filters
               </Button>
-              <Button variant={showSavedViewsPanel ? 'primary' : 'secondary'} onClick={() => setShowSavedViewsPanel((current) => !current)} className="gap-2">
+              <Button variant={showSavedViewsPanel ? 'primary' : 'secondary'} onClick={() => setShowSavedViewsPanel((current) => !current)} className="gap-1.5 px-3">
                 <span className="material-symbols-outlined text-[18px]">bookmark</span>
                 Saved views
               </Button>
-              <div className="relative">
-                <Button variant="ghost" onClick={() => setShowSecondaryActions((current) => !current)} className="gap-1.5 px-3">
-                  <span className="material-symbols-outlined text-[18px]">more_horiz</span>
-                  More
-                </Button>
-                {showSecondaryActions ? (
-                  <div className="absolute right-0 top-[calc(100%+8px)] z-20 min-w-[190px] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[var(--shadow-md)]">
-                    <Button variant="ghost" onClick={() => { exportFilteredCoursesCsv(); setShowSecondaryActions(false); }} className="w-full justify-start gap-2 px-2 py-2 text-sm">
-                      <span className="material-symbols-outlined text-[18px]">download</span>
-                      Export CSV
-                    </Button>
-                    <Button variant="ghost" onClick={() => { setFilters(DEFAULT_FILTERS); setActiveSavedViewId(null); setShowSecondaryActions(false); }} className="w-full justify-start gap-2 px-2 py-2 text-sm text-[var(--text-secondary)]">
-                      <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-                      Reset view
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
+              <Button variant="ghost" onClick={exportFilteredCoursesCsv} className="gap-1.5 px-2.5 text-[var(--text-secondary)] sm:px-3">
+                <span className="material-symbols-outlined text-[18px]">download</span>
+                <span className="hidden sm:inline">Export</span>
+              </Button>
+              <Button variant="ghost" onClick={() => { setFilters(DEFAULT_FILTERS); setActiveSavedViewId(null); }} className="gap-1.5 px-2.5 text-[var(--text-secondary)] sm:px-3">
+                <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                <span className="hidden sm:inline">Reset</span>
+              </Button>
             </div>
 
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="min-w-[220px] flex-1 md:max-w-[360px]">
-                <AppSelect
-                label="View"
+            <div className="min-w-[180px] md:max-w-[300px]">
+              <AppSelect
                 value={activeSavedViewId || 'CUSTOM'}
                 onChange={(value) => {
                   if (value === 'CUSTOM') {
@@ -617,12 +604,9 @@ export default function WorkspaceCoursesPage() {
                   if (view) applySavedView(view);
                 }}
                 options={savedViewOptions}
+                placeholder="Current saved view"
+                compact
               />
-              </div>
-              <Button variant="ghost" onClick={() => setShowSavedViewsPanel((current) => !current)} className="gap-2">
-                <span className="material-symbols-outlined text-[18px]">tune</span>
-                Manage saved views
-              </Button>
             </div>
 
             {activeFilterSummary.length ? (
