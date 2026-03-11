@@ -45,6 +45,22 @@ curl -I https://demostb.duckdns.org/auth
 curl -I https://demostb.duckdns.org/workspace
 ```
 
+Batch 9 canonical verification commands:
+```bash
+npm run verify:health
+npm run verify:smoke
+npm run verify:release
+```
+
+Command intent:
+- `verify:health`: service status + `/api/health` + key route reachability + local build freshness checks.
+- `verify:smoke`: focused route/API smoke checks; includes authenticated checks only if `ST_VERIFY_EMAIL` + `ST_VERIFY_PASSWORD` are provided at runtime.
+- `verify:release`: post-deploy gate that composes health then smoke and fails fast on errors.
+
+Limitations (explicit):
+- Runtime commit hash is not currently exposed by the app; stale-runtime detection is limited to build freshness and live reachability behavior.
+- Legacy `scripts/batch7_closeout_verify.mjs` is deprecated and intentionally non-runnable.
+
 ## Database
 - Runtime DB: PostgreSQL
 - Host: `127.0.0.1:5432`

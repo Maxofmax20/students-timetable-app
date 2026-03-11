@@ -252,6 +252,20 @@ curl -I https://demostb.duckdns.org/auth
 curl -I https://demostb.duckdns.org/workspace
 ```
 
+### Batch 9 verification commands (ops/testing)
+```bash
+npm run verify:health
+npm run verify:smoke
+npm run verify:release
+```
+
+Notes:
+- `verify:release` runs `verify:health` then `verify:smoke` and fails on first failing step.
+- For authenticated smoke coverage, set runtime env vars (do not commit credentials):
+  - `ST_VERIFY_EMAIL`
+  - `ST_VERIFY_PASSWORD`
+- Without credentials, smoke still verifies auth reachability/gating and key route availability, but authenticated API/UI checks are reported as `SKIP`.
+
 ### Production notes
 - Reverse proxy: Caddy
 - App runtime: `students-timetable.service`
