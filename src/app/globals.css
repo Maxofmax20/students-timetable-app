@@ -209,3 +209,31 @@ a:focus:not(:focus-visible) {
 .muted {
   color: var(--text-secondary);
 }
+
+/* UI polish helpers (2026-03-11 pass) */
+.polish-section-shell {
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: linear-gradient(160deg, var(--surface), var(--surface-2));
+  box-shadow: var(--shadow-sm);
+}
+
+.polish-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 0.3rem 0.65rem;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+
+.truncate-safe {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

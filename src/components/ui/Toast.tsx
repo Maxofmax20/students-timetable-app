@@ -16,10 +16,10 @@ interface ToastContextType {
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 const TOAST_DURATION_MS: Record<ToastType, number> = {
-  success: 1900,
-  info: 2600,
-  warning: 3600,
-  error: 4300
+  success: 1650,
+  info: 2200,
+  warning: 3400,
+  error: 4100
 };
 
 const EXIT_ANIMATION_MS = 180;
