@@ -334,7 +334,19 @@ export default function RoomsPage() {
               return (
                 <section key={section.buildingCode} className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">
                   <div
-                    className="flex w-full flex-col gap-3 border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] px-4 py-4 text-left transition-colors md:px-6"
+                    role="button"
+                    tabIndex={0}
+                    onClick={(event) => {
+                      if ((event.target as HTMLElement).closest('button')) return;
+                      toggleSection(section.buildingCode);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        toggleSection(section.buildingCode);
+                      }
+                    }}
+                    className="flex w-full cursor-pointer flex-col gap-3 border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] px-4 py-4 text-left transition-colors md:px-6"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
@@ -344,7 +356,7 @@ export default function RoomsPage() {
                           {section.buildingName ? `${section.buildingName} • ` : ''}Rooms are grouped under the same building letter for faster scanning.
                         </p>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2" onClick={(event) => event.stopPropagation()}>
                         {access?.canWrite ? (
                           <Button
                             type="button"
@@ -366,7 +378,10 @@ export default function RoomsPage() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => toggleSection(section.buildingCode)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleSection(section.buildingCode);
+                          }}
                           aria-expanded={!isCollapsed}
                           className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]"
                         >

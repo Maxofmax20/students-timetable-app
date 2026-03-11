@@ -327,7 +327,19 @@ export default function GroupsPage() {
               return (
                 <section key={section.rootCode} className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">
                   <div
-                    className="flex w-full flex-col gap-3 border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] px-4 py-4 text-left transition-colors md:px-6"
+                    role="button"
+                    tabIndex={0}
+                    onClick={(event) => {
+                      if ((event.target as HTMLElement).closest('button')) return;
+                      toggleSection(section.rootCode);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        toggleSection(section.rootCode);
+                      }
+                    }}
+                    className="flex w-full cursor-pointer flex-col gap-3 border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] px-4 py-4 text-left transition-colors md:px-6"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
@@ -337,13 +349,16 @@ export default function GroupsPage() {
                           {root.parentGroupId ? `Grouped around inferred root ${section.rootCode}` : 'Parent row first, then all subgroup children underneath.'}
                         </p>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2" onClick={(event) => event.stopPropagation()}>
                         {canWrite ? (
                           <Button
                             type="button"
                             variant="ghost-danger"
                             size="sm"
-                            onClick={() => openSectionDelete(section.rootCode)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openSectionDelete(section.rootCode);
+                            }}
                             className="min-h-9 rounded-lg px-3"
                             disabled={sectionDeleteLoadingKey === section.rootCode}
                           >
@@ -359,7 +374,10 @@ export default function GroupsPage() {
                         </span>
                         <button
                           type="button"
-                          onClick={() => toggleSection(section.rootCode)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleSection(section.rootCode);
+                          }}
                           aria-expanded={!isCollapsed}
                           className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]"
                         >
