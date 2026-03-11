@@ -12,8 +12,10 @@ Batch 2 timetable intelligence shipped functionally, but the new timetable board
 
 ## 2) Goals
 - Preserve the shipped timetable intelligence controls and filtering behavior.
+- Bring back a real, usable List View alongside Grid View on desktop and mobile.
 - Fix card overlap/stacking so dense timetable columns remain visually stable.
 - Prioritize card content so small cards show only the most important information first.
+- Improve course-name readability in grid cards without reintroducing clutter.
 - Improve compact mode and adaptive density so smaller cards degrade gracefully instead of breaking.
 - Improve mobile timetable usability with a realistic dense-schedule fallback if needed.
 
@@ -27,6 +29,7 @@ Batch 2 timetable intelligence shipped functionally, but the new timetable board
 ## 4) Scope
 ### In Scope
 - Timetable rendering/layout updates inside the existing Batch 2 surface.
+- Restoring Grid/List toggle behavior and a real grouped List View.
 - Card density/content prioritization rules.
 - Overlap layout improvements and adaptive rendering for dense cases.
 - Mobile-specific rendering simplification or safe tap-for-details behavior if needed.
@@ -58,12 +61,14 @@ Batch 2 timetable intelligence shipped functionally, but the new timetable board
 
 ## 7) Acceptance Criteria
 - [ ] AC1: The timetable still retains session-type controls, group/subgroup focus, delivery-mode filtering, visible-session count, conflict toggle, and reset behavior.
-- [ ] AC2: Overlapping or adjacent sessions no longer look visually broken; lane layout remains readable on dense days.
-- [ ] AC3: Card content adapts by available size/density, prioritizing type, course code/title, and time before secondary metadata.
-- [ ] AC4: Compact mode is meaningfully more readable and less cluttered than the normal dense case instead of simply shrinking broken content.
-- [ ] AC5: Mobile timetable rendering is usable and does not collapse into unreadable text pileups; a reduced-detail or tap-for-details fallback is acceptable if clean.
-- [ ] AC6: Desktop timetable rendering is cleaner and more stable while preserving current intelligence/filter behavior.
-- [ ] AC7: `npm run build` passes and production remains stable after deployment.
+- [ ] AC2: Grid and List toggle both exist and work on desktop and mobile.
+- [ ] AC3: List View is grouped sensibly by day, shows full course names clearly, and remains readable with fuller metadata than Grid View.
+- [ ] AC4: Overlapping or adjacent sessions no longer look visually broken; lane layout remains readable on dense days.
+- [ ] AC5: Grid card content adapts by available size/density, prioritizing type, course code/title, and time before secondary metadata, with smarter course-name handling.
+- [ ] AC6: Compact mode is meaningfully more readable and less cluttered than the normal dense case instead of simply shrinking broken content.
+- [ ] AC7: Mobile timetable rendering is usable and does not collapse into unreadable text pileups; List View provides a comfortable readable alternative.
+- [ ] AC8: Desktop timetable rendering is cleaner and more stable while preserving current intelligence/filter behavior.
+- [ ] AC9: `npm run build` passes and production remains stable after deployment.
 
 ## 8) Implementation Plan (Task Breakdown)
 - [ ] T1 — Patch the Batch 2 spec to lock this pass to timetable rendering fixes only.
