@@ -375,43 +375,52 @@ export default function WorkspaceTimetablePage() {
               <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
                 {conflictStats.sessionsWithConflicts} sessions with clashes
               </span>
-              <Button variant={showFiltersPanel ? 'primary' : 'secondary'} onClick={() => setShowFiltersPanel((current) => !current)} className="ml-auto gap-1.5 px-3">
-                <span className="material-symbols-outlined text-[18px]">tune</span>
-                Filters
-              </Button>
-              <Button variant={showSavedViewsPanel ? 'primary' : 'secondary'} onClick={() => setShowSavedViewsPanel((current) => !current)} className="gap-1.5 px-3">
-                <span className="material-symbols-outlined text-[18px]">bookmark</span>
-                Saved views
-              </Button>
-              <Button variant={showConflictLayer ? 'secondary' : 'ghost'} onClick={() => setShowConflictLayer((current) => !current)} className="gap-1.5 px-2.5 text-[var(--text-secondary)] sm:px-3">
-                <span className="material-symbols-outlined text-[18px]">warning</span>
-                <span className="hidden sm:inline">{showConflictLayer ? 'Conflicts on' : 'Conflicts off'}</span>
-              </Button>
-              <Button variant="ghost" onClick={() => setShowReportsPanel((current) => !current)} className="gap-1.5 px-2.5 text-[var(--text-secondary)] sm:px-3">
-                <span className="material-symbols-outlined text-[18px]">download</span>
-                <span className="hidden sm:inline">Reports</span>
-              </Button>
-              <Button variant="ghost" onClick={resetFilters} className="gap-1.5 px-2.5 text-[var(--text-secondary)] sm:px-3">
-                <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-                <span className="hidden sm:inline">Reset</span>
-              </Button>
+
+              <div className="ml-auto inline-flex flex-wrap items-center gap-1 rounded-xl border border-[var(--border)]/80 bg-[var(--surface)] px-1.5 py-1">
+                <Button variant={showFiltersPanel ? 'primary' : 'secondary'} onClick={() => setShowFiltersPanel((current) => !current)} className="gap-1.5 px-2.5">
+                  <span className="material-symbols-outlined text-[18px]">tune</span>
+                  Filters
+                </Button>
+                <Button variant={showSavedViewsPanel ? 'primary' : 'secondary'} onClick={() => setShowSavedViewsPanel((current) => !current)} className="gap-1.5 px-2.5">
+                  <span className="material-symbols-outlined text-[18px]">bookmarks</span>
+                  Saved views
+                </Button>
+              </div>
+
+              <div className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-[var(--border)]/70 bg-[var(--bg-raised)] px-1.5 py-1">
+                <Button variant={showConflictLayer ? 'secondary' : 'ghost'} onClick={() => setShowConflictLayer((current) => !current)} className="gap-1.5 px-2 text-[var(--text-secondary)]">
+                  <span className="material-symbols-outlined text-[18px]">crisis_alert</span>
+                  <span>{showConflictLayer ? 'Conflicts on' : 'Conflicts off'}</span>
+                </Button>
+                <Button variant="ghost" onClick={() => setShowReportsPanel((current) => !current)} className="gap-1.5 px-2 text-[var(--text-secondary)]">
+                  <span className="material-symbols-outlined text-[18px]">assessment</span>
+                  <span>Reports</span>
+                </Button>
+                <Button variant="ghost" onClick={resetFilters} className="gap-1.5 px-2 text-[var(--text-secondary)]">
+                  <span className="material-symbols-outlined text-[18px]">filter_alt_off</span>
+                  <span>Reset</span>
+                </Button>
+              </div>
             </div>
 
-            <div className="min-w-[180px] md:max-w-[300px]">
-              <AppSelect
-                value={activeSavedViewId || 'CUSTOM'}
-                onChange={(value) => {
-                  if (value === 'CUSTOM') {
-                    setActiveSavedViewId(null);
-                    return;
-                  }
-                  const view = savedViews.find((item) => item.id === value);
-                  if (view) applySavedView(view);
-                }}
-                options={savedViewOptions}
-                placeholder="Current saved view"
-                compact
-              />
+            <div className="flex items-center gap-2 rounded-xl border border-[var(--border)]/70 bg-[var(--surface)] px-2 py-1.5 md:max-w-[340px]">
+              <span className="material-symbols-outlined text-[16px] text-[var(--text-muted)]">bookmarks</span>
+              <div className="min-w-[180px] flex-1">
+                <AppSelect
+                  value={activeSavedViewId || 'CUSTOM'}
+                  onChange={(value) => {
+                    if (value === 'CUSTOM') {
+                      setActiveSavedViewId(null);
+                      return;
+                    }
+                    const view = savedViews.find((item) => item.id === value);
+                    if (view) applySavedView(view);
+                  }}
+                  options={savedViewOptions}
+                  placeholder="Current saved view"
+                  compact
+                />
+              </div>
             </div>
 
             {activeSummary.length ? (
