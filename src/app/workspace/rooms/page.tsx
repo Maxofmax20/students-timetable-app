@@ -22,7 +22,7 @@ E,412,Room E412,,60`;
 const ROOMS_IMPORT_HELP = [
   'Supported columns: buildingCode + roomNumber, or a single code/fullCode column. buildingName and capacity are optional.',
   'Level is derived automatically from the room number using the university rule already used by the product.',
-  'Imports are create-only. Existing room codes are previewed as duplicates and skipped unless you edit the CSV first.',
+  'Choose import mode: create only, update existing, or create + update. Preview clearly shows each row outcome before confirmation.',
   'If name is omitted, the import uses a safe default like "Room E119" so invalid blank-name rows are never created.'
 ];
 

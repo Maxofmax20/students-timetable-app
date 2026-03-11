@@ -3,14 +3,15 @@ import { Prisma, WorkspaceRole } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { ApiError, getOrCreatePersonalWorkspace, requireSession, requireWorkspaceRole } from '@/lib/workspace-v1';
-import { buildImportSummary, getCsvValue, parseCsvText, type ImportPreviewItem, type ImportPreviewPayload } from '@/lib/bulk-import';
+import { buildImportSummary, getCsvValue, parseCsvText, type ImportExecutionMode, type ImportPreviewItem, type ImportPreviewPayload } from '@/lib/bulk-import';
 import { inferSessionType, type SessionTypeValue } from '@/lib/course-sessions';
 import { normalizeGroupCode } from '@/lib/group-room-model';
 
 const schema = z.object({
   workspaceId: z.string().cuid().optional(),
   csv: z.string().min(1),
-  mode: z.enum(['preview', 'import']).default('preview')
+  mode: z.enum(['preview', 'import']).default('preview'),
+  importMode: z.enum(['create_only', 'update_existing', 'create_update']).default('create_only')
 });
 
 type PreparedSession = {
@@ -102,6 +103,20 @@ function firstIfSame(values: Array<string | null>) {
   return values.every((value) => (value ?? null) === first) ? first : null;
 }
 
+function sessionSignature(session: PreparedSession) {
+  return [
+    session.type,
+    session.day,
+    session.startMinute,
+    session.endMinute,
+    session.groupId || '-',
+    session.roomId || '-',
+    session.instructorId || '-',
+    session.onlinePlatform || '-',
+    session.onlineLink || '-'
+  ].join('|');
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await requireSession(request);
@@ -112,13 +127,34 @@ export async function POST(request: NextRequest) {
 
     const parsed = parseCsvText(body.csv);
     const [existingCourses, groups, rooms, instructors] = await Promise.all([
-      prisma.course.findMany({ where: { workspaceId: workspace.id }, select: { code: true } }),
+      prisma.course.findMany({
+        where: { workspaceId: workspace.id },
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          status: true,
+          sessions: {
+            select: {
+              type: true,
+              day: true,
+              startMinute: true,
+              endMinute: true,
+              groupId: true,
+              instructorId: true,
+              roomId: true,
+              onlinePlatform: true,
+              onlineLink: true
+            }
+          }
+        }
+      }),
       prisma.academicGroup.findMany({ where: { workspaceId: workspace.id }, select: { id: true, code: true } }),
       prisma.room.findMany({ where: { workspaceId: workspace.id }, select: { id: true, code: true } }),
       prisma.instructor.findMany({ where: { workspaceId: workspace.id }, select: { id: true, name: true, email: true } })
     ]);
 
-    const existingCourseCodes = new Set(existingCourses.map((course) => course.code.toUpperCase()));
+    const existingByCode = new Map(existingCourses.map((course) => [course.code.toUpperCase(), course]));
     const groupsByCode = new Map(groups.map((group) => [normalizeGroupCode(group.code), group.id]));
     const roomsByCode = new Map(rooms.map((room) => [room.code.toUpperCase(), room.id]));
     const instructorsByEmail = new Map(instructors.filter((instructor) => instructor.email).map((instructor) => [instructor.email!.trim().toLowerCase(), instructor.id]));
@@ -132,7 +168,6 @@ export async function POST(request: NextRequest) {
 
     const pending = new Map<string, PendingCourse>();
     const items: ImportPreviewItem[] = [];
-    const duplicateCourses = new Map<string, number[]>();
 
     parsed.rows.forEach((record, index) => {
       const sourceRow = index + 2;
@@ -147,13 +182,6 @@ export async function POST(request: NextRequest) {
           sourceRows: [sourceRow],
           messages: ['Course code and course title are both required.']
         });
-        return;
-      }
-
-      if (existingCourseCodes.has(code)) {
-        const current = duplicateCourses.get(code) || [];
-        current.push(sourceRow);
-        duplicateCourses.set(code, current);
         return;
       }
 
@@ -217,13 +245,7 @@ export async function POST(request: NextRequest) {
           instructorId = matches[0];
         }
 
-        const sessionKey = [type, day, startMinute, endMinute, groupId || '-', roomId || '-', instructorId || '-', onlinePlatform || '-', onlineLink || '-'].join('|');
-        if (course.sessionKeys.has(sessionKey)) {
-          throw new ApiError(400, 'DUPLICATE_SESSION_ROW');
-        }
-        course.sessionKeys.add(sessionKey);
-
-        course.sessions.push({
+        const candidateSession: PreparedSession = {
           type,
           day,
           startMinute,
@@ -234,7 +256,14 @@ export async function POST(request: NextRequest) {
           onlinePlatform: type === 'ONLINE' || type === 'HYBRID' ? onlinePlatform || null : null,
           onlineLink: type === 'ONLINE' || type === 'HYBRID' ? onlineLink || null : null,
           note: note || null
-        });
+        };
+
+        const signature = sessionSignature(candidateSession);
+        if (course.sessionKeys.has(signature)) {
+          throw new ApiError(400, 'DUPLICATE_SESSION_ROW');
+        }
+        course.sessionKeys.add(signature);
+        course.sessions.push(candidateSession);
       } catch (error) {
         course.errors.push(`Row ${sourceRow}: ${error instanceof ApiError ? error.message : 'COURSE_IMPORT_ROW_INVALID'}`);
       }
@@ -242,18 +271,17 @@ export async function POST(request: NextRequest) {
       pending.set(code, course);
     });
 
-    duplicateCourses.forEach((sourceRows, code) => {
-      items.push({
-        key: `duplicate-course-${code}`,
-        status: 'duplicate',
-        label: code,
-        detail: 'Course code already exists in this workspace',
-        sourceRows,
-        messages: ['Course imports are create-only. Existing course codes are previewed and skipped, never overwritten.']
-      });
-    });
+    const createCourses: PendingCourse[] = [];
+    const updateCourses: Array<{
+      id: string;
+      code: string;
+      title?: string;
+      status?: string;
+      appendSessions: PreparedSession[];
+      sourceRows: number[];
+      messages: string[];
+    }> = [];
 
-    const readyCourses: PendingCourse[] = [];
     for (const course of pending.values()) {
       if (course.sessions.length > 24) {
         course.errors.push('A single imported course cannot create more than 24 sessions.');
@@ -275,22 +303,111 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      readyCourses.push(course);
+      const existing = existingByCode.get(course.code);
+      if (!existing) {
+        if (body.importMode === 'update_existing') {
+          items.push({
+            key: `skip-course-${course.code}`,
+            status: 'skipped',
+            label: `${course.code} — ${course.title}`,
+            detail: `${course.sessions.length} session${course.sessions.length === 1 ? '' : 's'} in CSV`,
+            sourceRows: course.sourceRows,
+            messages: ['Row group is valid but skipped because mode is update-existing only and this course does not exist yet.']
+          });
+          continue;
+        }
+
+        createCourses.push(course);
+        items.push({
+          key: `create-course-${course.code}`,
+          status: body.mode === 'import' ? 'created' : 'ready_create',
+          label: `${course.code} — ${course.title}`,
+          detail: `${course.sessions.length} session${course.sessions.length === 1 ? '' : 's'} ready to create`,
+          sourceRows: course.sourceRows
+        });
+        continue;
+      }
+
+      if (body.importMode === 'create_only') {
+        items.push({
+          key: `duplicate-course-${course.code}`,
+          status: 'duplicate_skipped',
+          label: `${course.code} — ${course.title}`,
+          detail: 'Course already exists',
+          sourceRows: course.sourceRows,
+          messages: ['Create-only mode skips existing course codes.']
+        });
+        continue;
+      }
+
+      const existingSessionSignatures = new Set(existing.sessions.map((session) => sessionSignature({
+        type: session.type as SessionTypeValue,
+        day: session.day,
+        startMinute: session.startMinute,
+        endMinute: session.endMinute,
+        groupId: session.groupId,
+        instructorId: session.instructorId,
+        roomId: session.roomId,
+        onlinePlatform: session.onlinePlatform,
+        onlineLink: session.onlineLink,
+        note: null
+      })));
+
+      const appendSessions = course.sessions.filter((sessionItem) => !existingSessionSignatures.has(sessionSignature(sessionItem)));
+      const messages: string[] = [];
+      let nextTitle: string | undefined;
+      let nextStatus: string | undefined;
+
+      if (existing.title !== course.title) {
+        nextTitle = course.title;
+        messages.push(`title: "${existing.title}" → "${course.title}"`);
+      }
+      if (existing.status !== course.status) {
+        nextStatus = course.status;
+        messages.push(`status: ${existing.status} → ${course.status}`);
+      }
+      if (appendSessions.length) {
+        messages.push(`append ${appendSessions.length} new session${appendSessions.length === 1 ? '' : 's'}`);
+      }
+
+      if (!messages.length) {
+        items.push({
+          key: `matched-course-${course.code}`,
+          status: 'duplicate_skipped',
+          label: `${course.code} — ${course.title}`,
+          detail: 'Existing course already matches and all sessions already exist',
+          sourceRows: course.sourceRows,
+          messages: ['No update needed.']
+        });
+        continue;
+      }
+
+      updateCourses.push({
+        id: existing.id,
+        code: course.code,
+        title: nextTitle,
+        status: nextStatus,
+        appendSessions,
+        sourceRows: course.sourceRows,
+        messages
+      });
+
       items.push({
-        key: `ready-course-${course.code}`,
-        status: body.mode === 'import' ? 'imported' : 'ready',
+        key: `update-course-${course.code}`,
+        status: body.mode === 'import' ? 'updated' : 'ready_update',
         label: `${course.code} — ${course.title}`,
-        detail: `${course.sessions.length} session${course.sessions.length === 1 ? '' : 's'} ready to import`,
-        sourceRows: course.sourceRows
+        detail: `${course.sourceRows.length} CSV row${course.sourceRows.length === 1 ? '' : 's'} supplied`,
+        sourceRows: course.sourceRows,
+        messages: [`Update plan: ${messages.join('; ')}`]
       });
     }
 
-    if (body.mode === 'import' && readyCourses.length) {
+    if (body.mode === 'import' && (createCourses.length || updateCourses.length)) {
       await prisma.$transaction(async (tx) => {
-        for (const course of readyCourses) {
-          const commonGroupId = firstIfSame(course.sessions.map((session) => session.groupId));
-          const commonInstructorId = firstIfSame(course.sessions.map((session) => session.instructorId));
-          const commonRoomId = firstIfSame(course.sessions.map((session) => session.roomId));
+        for (const course of createCourses) {
+          const commonGroupId = firstIfSame(course.sessions.map((sessionItem) => sessionItem.groupId));
+          const commonInstructorId = firstIfSame(course.sessions.map((sessionItem) => sessionItem.instructorId));
+          const commonRoomId = firstIfSame(course.sessions.map((sessionItem) => sessionItem.roomId));
 
           await tx.course.create({
             data: {
@@ -311,12 +428,33 @@ export async function POST(request: NextRequest) {
             }
           });
         }
+
+        for (const course of updateCourses) {
+          await tx.course.update({
+            where: { id: course.id },
+            data: {
+              ...(course.title ? { title: course.title } : {}),
+              ...(course.status ? { status: course.status } : {}),
+              ...(course.appendSessions.length
+                ? {
+                  sessions: {
+                    create: course.appendSessions.map((sessionItem) => ({
+                      workspaceId: workspace.id,
+                      ...sessionItem
+                    }))
+                  }
+                }
+                : {})
+            }
+          });
+        }
       });
     }
 
     const payload: ImportPreviewPayload = {
       entity: 'courses',
       mode: body.mode,
+      importMode: body.importMode as ImportExecutionMode,
       summary: buildImportSummary(items, parsed.rows.length, body.mode),
       items
     };

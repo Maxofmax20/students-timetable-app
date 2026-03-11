@@ -9,24 +9,15 @@ import { inferParentGroupCode, normalizeGroupCode } from '@/lib/group-room-model
 const schema = z.object({
   workspaceId: z.string().cuid().optional(),
   csv: z.string().min(1),
-  mode: z.enum(['preview', 'import']).default('preview')
+  mode: z.enum(['preview', 'import']).default('preview'),
+  importMode: z.enum(['create_only', 'update_existing', 'create_update']).default('create_only')
 });
 
-type PreparedGroup = {
-  code: string;
-  name: string;
-  parentCode: string | null;
-};
+type PreparedGroup = { code: string; name: string; parentCode: string | null };
 
 async function resolveWorkspace(userId: string, workspaceId?: string) {
   if (!workspaceId) return getOrCreatePersonalWorkspace(userId);
-
-  await requireWorkspaceRole(userId, workspaceId, [
-    WorkspaceRole.OWNER,
-    WorkspaceRole.TEACHER,
-    WorkspaceRole.STUDENT,
-    WorkspaceRole.VIEWER
-  ]);
+  await requireWorkspaceRole(userId, workspaceId, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER, WorkspaceRole.STUDENT, WorkspaceRole.VIEWER]);
   const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } });
   if (!workspace) throw new ApiError(404, 'WORKSPACE_NOT_FOUND');
   return workspace;
@@ -36,24 +27,9 @@ function prepareGroup(record: Record<string, string>) {
   const code = normalizeGroupCode(getCsvValue(record, ['code', 'groupCode']));
   const explicitParent = normalizeGroupCode(getCsvValue(record, ['parentCode', 'mainGroupCode', 'parentGroupCode']));
   if (!code) throw new ApiError(400, 'GROUP_CODE_REQUIRED');
-
-  const inferredParent = inferParentGroupCode(code);
-  const parentCode = explicitParent || inferredParent || null;
+  const parentCode = explicitParent || inferParentGroupCode(code) || null;
   const name = getCsvValue(record, ['name', 'groupName']) || (parentCode ? `Subgroup ${code}` : `Main Group ${code}`);
-
-  return {
-    code,
-    name,
-    parentCode
-  } satisfies PreparedGroup;
-}
-
-function buildLabel(group: PreparedGroup) {
-  return `${group.code} — ${group.name}`;
-}
-
-function buildDetail(group: PreparedGroup) {
-  return group.parentCode ? `Subgroup under ${group.parentCode}` : 'Main group';
+  return { code, name, parentCode } satisfies PreparedGroup;
 }
 
 export async function POST(request: NextRequest) {
@@ -61,167 +37,92 @@ export async function POST(request: NextRequest) {
     const session = await requireSession(request);
     const body = schema.parse(await request.json());
     const workspace = await resolveWorkspace(session.userId, body.workspaceId);
-
     await requireWorkspaceRole(session.userId, workspace.id, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
 
     const parsed = parseCsvText(body.csv);
-    const existingGroups = await prisma.academicGroup.findMany({
-      where: { workspaceId: workspace.id },
-      select: { id: true, code: true, parentGroupId: true }
-    });
+    const existingGroups = await prisma.academicGroup.findMany({ where: { workspaceId: workspace.id }, select: { id: true, code: true, name: true, parentGroupId: true } });
+    const existingByCode = new Map(existingGroups.map((g) => [normalizeGroupCode(g.code), g]));
 
-    const existingByCode = new Map(existingGroups.map((group) => [normalizeGroupCode(group.code), group]));
     const seenCodes = new Set<string>();
-    const pending: Array<{ sourceRow: number; group: PreparedGroup }> = [];
     const items: ImportPreviewItem[] = [];
+    const createRows: Array<{ sourceRow: number; group: PreparedGroup }> = [];
+    const updateRows: Array<{ id: string; patch: { name?: string; parentGroupId?: string | null }; sourceRow: number; code: string }> = [];
 
+    const pendingMainCodes = new Set<string>();
     parsed.rows.forEach((record, index) => {
       const sourceRow = index + 2;
       try {
         const group = prepareGroup(record);
-        if (existingByCode.has(group.code)) {
-          items.push({
-            key: `${group.code}-${sourceRow}`,
-            status: 'duplicate',
-            label: buildLabel(group),
-            detail: buildDetail(group),
-            sourceRows: [sourceRow],
-            messages: ['Group code already exists in this workspace. Imports are create-only and will skip it.']
-          });
-          return;
-        }
-
         if (seenCodes.has(group.code)) {
-          items.push({
-            key: `${group.code}-${sourceRow}`,
-            status: 'duplicate',
-            label: buildLabel(group),
-            detail: buildDetail(group),
-            sourceRows: [sourceRow],
-            messages: ['Group code is duplicated inside this CSV file. Keep only one row per group.']
-          });
+          items.push({ key: `${group.code}-${sourceRow}`, status: 'duplicate', label: `${group.code} — ${group.name}`, detail: group.parentCode ? `Subgroup under ${group.parentCode}` : 'Main group', sourceRows: [sourceRow], messages: ['Group code is duplicated inside this CSV file.'] });
+          return;
+        }
+        seenCodes.add(group.code);
+        if (!group.parentCode) pendingMainCodes.add(group.code);
+
+        const existing = existingByCode.get(group.code);
+        if (!existing) {
+          createRows.push({ sourceRow, group });
+          items.push({ key: `${group.code}-${sourceRow}`, status: body.mode === 'import' ? 'created' : 'ready_create', label: `${group.code} — ${group.name}`, detail: group.parentCode ? `Subgroup under ${group.parentCode}` : 'Main group', sourceRows: [sourceRow] });
           return;
         }
 
-        seenCodes.add(group.code);
-        pending.push({ sourceRow, group });
+        if (body.importMode === 'create_only') {
+          items.push({ key: `${group.code}-${sourceRow}`, status: 'duplicate_skipped', label: `${group.code} — ${group.name}`, detail: group.parentCode ? `Subgroup under ${group.parentCode}` : 'Main group', sourceRows: [sourceRow], messages: ['Group exists. Create-only mode skips existing rows.'] });
+          return;
+        }
+
+        const patch: { name?: string; parentGroupId?: string | null } = {};
+        const defaultMainName = `Main Group ${group.code}`;
+        const defaultSubName = `Subgroup ${group.code}`;
+        if ((existing.name === defaultMainName || existing.name === defaultSubName) && group.name && group.name !== existing.name) patch.name = group.name;
+
+        if (!existing.parentGroupId && group.parentCode) {
+          const parent = existingByCode.get(group.parentCode);
+          if (parent && !parent.parentGroupId) patch.parentGroupId = parent.id;
+        }
+
+        if (!Object.keys(patch).length) {
+          items.push({ key: `${group.code}-${sourceRow}`, status: 'duplicate_skipped', label: `${group.code} — ${group.name}`, detail: group.parentCode ? `Subgroup under ${group.parentCode}` : 'Main group', sourceRows: [sourceRow], messages: ['No safe group upgrade changes found.'] });
+          return;
+        }
+
+        updateRows.push({ id: existing.id, patch, sourceRow, code: group.code });
+        items.push({ key: `${group.code}-${sourceRow}`, status: body.mode === 'import' ? 'updated' : 'ready_update', label: `${group.code} — ${group.name}`, detail: group.parentCode ? `Subgroup under ${group.parentCode}` : 'Main group', sourceRows: [sourceRow], messages: ['Safe upgrade will only fill missing parent/name metadata.'] });
       } catch (error) {
-        items.push({
-          key: `invalid-group-${sourceRow}`,
-          status: 'invalid',
-          label: `CSV row ${sourceRow}`,
-          sourceRows: [sourceRow],
-          messages: [error instanceof ApiError ? error.message : 'GROUP_IMPORT_ROW_INVALID']
-        });
+        items.push({ key: `invalid-group-${sourceRow}`, status: 'invalid', label: `CSV row ${sourceRow}`, sourceRows: [sourceRow], messages: [error instanceof ApiError ? error.message : 'GROUP_IMPORT_ROW_INVALID'] });
       }
     });
 
-    const pendingMainCodes = new Set(pending.filter((entry) => !entry.group.parentCode).map((entry) => entry.group.code));
-    const readyGroups: PreparedGroup[] = [];
-
-    for (const entry of pending) {
-      const { sourceRow, group } = entry;
-      const parentCode = group.parentCode;
-      const existingParent = parentCode ? existingByCode.get(parentCode) : null;
-
-      if (parentCode) {
-        if (existingParent && existingParent.parentGroupId) {
-          items.push({
-            key: `${group.code}-${sourceRow}`,
-            status: 'invalid',
-            label: buildLabel(group),
-            detail: buildDetail(group),
-            sourceRows: [sourceRow],
-            messages: ['Parent group must be a main group, not another subgroup.']
-          });
-          continue;
-        }
-
-        if (!existingParent && !pendingMainCodes.has(parentCode)) {
-          items.push({
-            key: `${group.code}-${sourceRow}`,
-            status: 'invalid',
-            label: buildLabel(group),
-            detail: buildDetail(group),
-            sourceRows: [sourceRow],
-            messages: ['Subgroup parent could not be resolved from an existing main group or a main-group row in this CSV.']
-          });
-          continue;
-        }
-      }
-
-      readyGroups.push(group);
-      items.push({
-        key: `${group.code}-${sourceRow}`,
-        status: body.mode === 'import' ? 'imported' : 'ready',
-        label: buildLabel(group),
-        detail: buildDetail(group),
-        sourceRows: [sourceRow],
-        messages: group.name === `Subgroup ${group.code}` || group.name === `Main Group ${group.code}`
-          ? ['Group name was not provided, so the import will use a safe default name.']
-          : undefined
-      });
-    }
-
-    if (body.mode === 'import' && readyGroups.length) {
+    if (body.mode === 'import') {
       await prisma.$transaction(async (tx) => {
-        const createdMainGroups = new Map<string, string>();
-        const existingMainGroups = await tx.academicGroup.findMany({
-          where: { workspaceId: workspace.id, parentGroupId: null },
-          select: { id: true, code: true }
-        });
-        const existingMainByCode = new Map(existingMainGroups.map((group) => [normalizeGroupCode(group.code), group.id]));
-
-        for (const group of readyGroups.filter((item) => !item.parentCode)) {
-          const created = await tx.academicGroup.create({
-            data: {
-              workspaceId: workspace.id,
-              code: group.code,
-              name: group.name,
-              color: '#2563eb',
-              parentGroupId: null
-            }
-          });
-          createdMainGroups.set(group.code, created.id);
+        const createdMain = new Map<string, string>();
+        for (const row of createRows.filter((entry) => !entry.group.parentCode)) {
+          const created = await tx.academicGroup.create({ data: { workspaceId: workspace.id, code: row.group.code, name: row.group.name, color: '#2563eb', parentGroupId: null } });
+          createdMain.set(row.group.code, created.id);
         }
 
-        for (const group of readyGroups.filter((item) => item.parentCode)) {
-          const resolvedParentId = createdMainGroups.get(group.parentCode!) || existingMainByCode.get(group.parentCode!);
-          if (!resolvedParentId) {
-            throw new ApiError(400, 'INVALID_PARENT_GROUP');
-          }
+        const existingMain = await tx.academicGroup.findMany({ where: { workspaceId: workspace.id, parentGroupId: null }, select: { id: true, code: true } });
+        const existingMainByCode = new Map(existingMain.map((g) => [normalizeGroupCode(g.code), g.id]));
 
-          await tx.academicGroup.create({
-            data: {
-              workspaceId: workspace.id,
-              code: group.code,
-              name: group.name,
-              color: '#2563eb',
-              parentGroupId: resolvedParentId
-            }
-          });
+        for (const row of createRows.filter((entry) => entry.group.parentCode)) {
+          const parentId = createdMain.get(row.group.parentCode!) || existingMainByCode.get(row.group.parentCode!);
+          if (!parentId) continue;
+          await tx.academicGroup.create({ data: { workspaceId: workspace.id, code: row.group.code, name: row.group.name, color: '#2563eb', parentGroupId: parentId } });
+        }
+
+        for (const row of updateRows) {
+          await tx.academicGroup.update({ where: { id: row.id }, data: row.patch });
         }
       });
     }
 
-    const payload: ImportPreviewPayload = {
-      entity: 'groups',
-      mode: body.mode,
-      summary: buildImportSummary(items, parsed.rows.length, body.mode),
-      items
-    };
-
+    const payload: ImportPreviewPayload = { entity: 'groups', mode: body.mode, importMode: body.importMode, summary: buildImportSummary(items, parsed.rows.length, body.mode), items };
     return NextResponse.json({ ok: true, data: payload });
   } catch (error: unknown) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ ok: false, message: error.issues[0]?.message }, { status: 400 });
-    }
-    if (error instanceof ApiError) {
-      return NextResponse.json({ ok: false, message: error.message }, { status: error.status });
-    }
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      return NextResponse.json({ ok: false, message: 'GROUP_CODE_EXISTS' }, { status: 409 });
-    }
+    if (error instanceof z.ZodError) return NextResponse.json({ ok: false, message: error.issues[0]?.message }, { status: 400 });
+    if (error instanceof ApiError) return NextResponse.json({ ok: false, message: error.message }, { status: error.status });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return NextResponse.json({ ok: false, message: 'GROUP_CODE_EXISTS' }, { status: 409 });
     return NextResponse.json({ ok: false, message: 'GROUP_IMPORT_FAILED' }, { status: 500 });
   }
 }

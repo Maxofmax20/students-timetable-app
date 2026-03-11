@@ -26,7 +26,7 @@ const GROUPS_IMPORT_HELP = [
   'Supported columns: code, optional name, and optional parentCode/mainGroupCode. Code-only rows are also accepted.',
   'If a subgroup code looks like A1 or B2 and parentCode is omitted, the import safely infers the main group code from the subgroup code.',
   'Subgroups must resolve to an existing main group or a main-group row inside the same CSV preview. Orphan subgroup imports are rejected.',
-  'Imports are create-only. Existing group codes are previewed as duplicates and skipped, never overwritten.'
+  'Choose import mode: create only, update existing, or create + update. Preview clearly shows each row outcome before confirmation.'
 ];
 
 export default function GroupsPage() {

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
-import type { ImportPreviewPayload } from '@/lib/bulk-import';
+import type { ImportExecutionMode, ImportPreviewPayload, ImportPreviewStatus } from '@/lib/bulk-import';
 
 type CsvImportModalProps = {
   open: boolean;
@@ -17,6 +17,25 @@ type CsvImportModalProps = {
   helpLines: string[];
   onImported?: (result: ImportPreviewPayload) => Promise<void> | void;
 };
+
+const IMPORT_MODES: Array<{ value: ImportExecutionMode; label: string; description: string }> = [
+  { value: 'create_only', label: 'Create only', description: 'Create missing records only. Existing records are skipped.' },
+  { value: 'update_existing', label: 'Update existing', description: 'Only update existing records. New records are skipped.' },
+  { value: 'create_update', label: 'Create + update', description: 'Create missing records and safely update existing records.' }
+];
+
+function statusTone(status: ImportPreviewStatus) {
+  if (['ready', 'ready_create', 'ready_update', 'created', 'updated', 'imported'].includes(status)) {
+    return 'border border-[var(--success)]/20 bg-[var(--success-muted)] text-[var(--success)]';
+  }
+  if (['duplicate', 'duplicate_skipped', 'skipped'].includes(status)) {
+    return 'border border-[var(--warning)]/20 bg-[var(--warning-muted)] text-[var(--warning)]';
+  }
+  if (status === 'conflict') {
+    return 'border border-[var(--danger)]/25 bg-[var(--danger-muted)] text-[var(--danger)]';
+  }
+  return 'border border-[var(--danger)]/20 bg-[var(--danger-muted)] text-[var(--danger)]';
+}
 
 export function CsvImportModal({
   open,
@@ -34,6 +53,7 @@ export function CsvImportModal({
   const [csvText, setCsvText] = useState('');
   const [preview, setPreview] = useState<ImportPreviewPayload | null>(null);
   const [loading, setLoading] = useState(false);
+  const [importMode, setImportMode] = useState<ImportExecutionMode>('create_only');
 
   const entityLabel = useMemo(() => {
     if (!preview?.entity) return 'rows';
@@ -47,6 +67,7 @@ export function CsvImportModal({
       setCsvText('');
       setPreview(null);
       setLoading(false);
+      setImportMode('create_only');
     }
   }, [open]);
 
@@ -81,7 +102,7 @@ export function CsvImportModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ csv: csvText, mode })
+        body: JSON.stringify({ csv: csvText, mode, importMode })
       });
       const result = await response.json();
       if (!response.ok || !result?.ok || !result?.data) {
@@ -94,7 +115,7 @@ export function CsvImportModal({
       } else {
         const importedCount = result.data.summary.importedCount;
         const importedEntity = result.data.entity === 'rooms' ? 'room' : result.data.entity === 'groups' ? 'group' : 'course';
-        toast(`Imported ${importedCount} ${importedEntity}${importedCount === 1 ? '' : 's'}`);
+        toast(`Applied ${importedCount} ${importedEntity}${importedCount === 1 ? '' : 's'}`);
         await onImported?.(result.data as ImportPreviewPayload);
       }
     } catch (error) {
@@ -129,17 +150,34 @@ export function CsvImportModal({
             className="gap-2"
           >
             <span className="material-symbols-outlined text-[18px]">upload</span>
-            Confirm Create-Only Import
+            Confirm Import
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
+        <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Import mode</div>
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
+            {IMPORT_MODES.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => { setImportMode(option.value); setPreview(null); }}
+                className={`rounded-[16px] border p-3 text-left transition-colors ${importMode === option.value ? 'border-[var(--gold)] bg-[var(--gold-muted)]' : 'border-[var(--border)] bg-[var(--bg-raised)] hover:bg-[var(--surface-2)]'}`}
+              >
+                <div className="text-sm font-bold text-white">{option.label}</div>
+                <div className="mt-1 text-xs text-[var(--text-secondary)]">{option.description}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="rounded-[24px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] p-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">CSV upload or paste</div>
-              <p className="mt-1 text-sm text-[var(--text-secondary)]">Upload a CSV file or paste raw CSV text. Preview is always required, and only ready rows will import.</p>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">Upload a CSV file or paste raw CSV text. Preview is always required before import.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFileSelect} />
@@ -178,21 +216,29 @@ export function CsvImportModal({
           <div className="space-y-4 rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-4">
             <div>
               <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Preview results</div>
-              <p className="mt-1 text-sm text-[var(--text-secondary)]">Review ready, duplicate, and invalid rows before confirming this create-only import.</p>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">Review what will be created, updated, skipped, or blocked before confirmation.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <span className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
                 {preview.summary.totalRows} CSV row{preview.summary.totalRows === 1 ? '' : 's'}
               </span>
               <span className="rounded-full border border-[var(--success)]/20 bg-[var(--success-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--success)]">
-                {preview.mode === 'import' ? preview.summary.importedCount : preview.summary.readyCount} {preview.mode === 'import' ? `imported ${entityLabel}${preview.summary.importedCount === 1 ? '' : 's'}` : `ready ${entityLabel}${preview.summary.readyCount === 1 ? '' : 's'}`}
+                {preview.summary.readyCreateCount} ready create
+              </span>
+              <span className="rounded-full border border-[var(--info)]/20 bg-[var(--info-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--info)]">
+                {preview.summary.readyUpdateCount} ready update
               </span>
               <span className="rounded-full border border-[var(--warning)]/20 bg-[var(--warning-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--warning)]">
-                {preview.summary.duplicateCount} duplicate{preview.summary.duplicateCount === 1 ? '' : 's'}
+                {preview.summary.duplicateCount} duplicate/skip
               </span>
               <span className="rounded-full border border-[var(--danger)]/20 bg-[var(--danger-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--danger)]">
-                {preview.summary.invalidCount} invalid
+                {preview.summary.invalidCount + preview.summary.conflictCount} invalid/conflict
               </span>
+              {preview.mode === 'import' ? (
+                <span className="rounded-full border border-[var(--success)]/20 bg-[var(--success-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--success)]">
+                  {preview.summary.importedCount} applied {entityLabel}{preview.summary.importedCount === 1 ? '' : 's'}
+                </span>
+              ) : null}
             </div>
 
             <div className="max-h-[320px] space-y-3 overflow-y-auto pr-1">
@@ -213,13 +259,7 @@ export function CsvImportModal({
                         </ul>
                       ) : null}
                     </div>
-                    <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${
-                      item.status === 'ready' || item.status === 'imported'
-                        ? 'border border-[var(--success)]/20 bg-[var(--success-muted)] text-[var(--success)]'
-                        : item.status === 'duplicate'
-                          ? 'border border-[var(--warning)]/20 bg-[var(--warning-muted)] text-[var(--warning)]'
-                          : 'border border-[var(--danger)]/20 bg-[var(--danger-muted)] text-[var(--danger)]'
-                    }`}>
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${statusTone(item.status)}`}>
                       {item.status}
                     </span>
                   </div>

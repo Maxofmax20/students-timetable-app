@@ -9,7 +9,8 @@ import { formatRoomLevel, normalizeRoomFields, roomDisplaySummary } from '@/lib/
 const schema = z.object({
   workspaceId: z.string().cuid().optional(),
   csv: z.string().min(1),
-  mode: z.enum(['preview', 'import']).default('preview')
+  mode: z.enum(['preview', 'import']).default('preview'),
+  importMode: z.enum(['create_only', 'update_existing', 'create_update']).default('create_only')
 });
 
 type PreparedRoom = {
@@ -24,13 +25,7 @@ type PreparedRoom = {
 
 async function resolveWorkspace(userId: string, workspaceId?: string) {
   if (!workspaceId) return getOrCreatePersonalWorkspace(userId);
-
-  await requireWorkspaceRole(userId, workspaceId, [
-    WorkspaceRole.OWNER,
-    WorkspaceRole.TEACHER,
-    WorkspaceRole.STUDENT,
-    WorkspaceRole.VIEWER
-  ]);
+  await requireWorkspaceRole(userId, workspaceId, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER, WorkspaceRole.STUDENT, WorkspaceRole.VIEWER]);
   const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } });
   if (!workspace) throw new ApiError(404, 'WORKSPACE_NOT_FOUND');
   return workspace;
@@ -44,32 +39,18 @@ function prepareRoom(record: Record<string, string>) {
   const name = getCsvValue(record, ['name', 'roomName', 'title']);
   const capacityValue = getCsvValue(record, ['capacity', 'seats']);
 
-  const normalized = normalizeRoomFields({
-    code,
-    buildingCode,
-    roomNumber
-  });
-
-  if (!normalized.code || !normalized.buildingCode || !normalized.roomNumber) {
-    throw new ApiError(400, 'ROOM_STRUCTURE_INVALID');
-  }
-
-  const parsedCapacity = parseOptionalPositiveInt(capacityValue, 2000, 'ROOM_CAPACITY_INVALID');
-  const displayName = name.trim() || `Room ${normalized.code}`;
+  const normalized = normalizeRoomFields({ code, buildingCode, roomNumber });
+  if (!normalized.code || !normalized.buildingCode || !normalized.roomNumber) throw new ApiError(400, 'ROOM_STRUCTURE_INVALID');
 
   return {
     code: normalized.code,
-    name: displayName,
-    capacity: parsedCapacity,
+    name: name.trim() || `Room ${normalized.code}`,
+    capacity: parseOptionalPositiveInt(capacityValue, 2000, 'ROOM_CAPACITY_INVALID'),
     building: building.trim() || null,
     buildingCode: normalized.buildingCode,
     roomNumber: normalized.roomNumber,
     level: normalized.level
   } satisfies PreparedRoom;
-}
-
-function buildLabel(room: PreparedRoom) {
-  return `${room.code} — ${room.name}`;
 }
 
 function buildDetail(room: PreparedRoom) {
@@ -81,102 +62,84 @@ export async function POST(request: NextRequest) {
     const session = await requireSession(request);
     const body = schema.parse(await request.json());
     const workspace = await resolveWorkspace(session.userId, body.workspaceId);
-
     await requireWorkspaceRole(session.userId, workspace.id, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
 
     const parsed = parseCsvText(body.csv);
-    const existingRooms = await prisma.room.findMany({
-      where: { workspaceId: workspace.id },
-      select: { code: true }
-    });
+    const existingRooms = await prisma.room.findMany({ where: { workspaceId: workspace.id } });
+    const existingByCode = new Map(existingRooms.map((room) => [room.code.toUpperCase(), room]));
 
-    const existingCodes = new Set(existingRooms.map((room) => room.code.toUpperCase()));
     const seenCodes = new Set<string>();
     const items: ImportPreviewItem[] = [];
-    const readyRooms: PreparedRoom[] = [];
+    const createRows: PreparedRoom[] = [];
+    const updateRows: Array<{ id: string; patch: Partial<PreparedRoom>; code: string; sourceRow: number }> = [];
 
     parsed.rows.forEach((record, index) => {
       const sourceRow = index + 2;
       try {
         const room = prepareRoom(record);
-        const normalizedCode = room.code.toUpperCase();
+        const code = room.code.toUpperCase();
+        if (seenCodes.has(code)) {
+          items.push({ key: `${code}-${sourceRow}`, status: 'duplicate', label: `${room.code} — ${room.name}`, detail: buildDetail(room), sourceRows: [sourceRow], messages: ['Room code is duplicated inside this CSV file. Keep only one row per room.'] });
+          return;
+        }
+        seenCodes.add(code);
 
-        if (existingCodes.has(normalizedCode)) {
-          items.push({
-            key: `${normalizedCode}-${sourceRow}`,
-            status: 'duplicate',
-            label: buildLabel(room),
-            detail: buildDetail(room),
-            sourceRows: [sourceRow],
-            messages: ['Room code already exists in this workspace. Imports are create-only and will skip it.']
-          });
+        const existing = existingByCode.get(code);
+        if (!existing) {
+          createRows.push(room);
+          items.push({ key: `${code}-${sourceRow}`, status: body.mode === 'import' ? 'created' : 'ready_create', label: `${room.code} — ${room.name}`, detail: buildDetail(room), sourceRows: [sourceRow] });
           return;
         }
 
-        if (seenCodes.has(normalizedCode)) {
-          items.push({
-            key: `${normalizedCode}-${sourceRow}`,
-            status: 'duplicate',
-            label: buildLabel(room),
-            detail: buildDetail(room),
-            sourceRows: [sourceRow],
-            messages: ['Room code is duplicated inside this CSV file. Keep only one row per room.']
-          });
+        if (body.importMode === 'create_only') {
+          items.push({ key: `${code}-${sourceRow}`, status: 'duplicate_skipped', label: `${room.code} — ${room.name}`, detail: buildDetail(room), sourceRows: [sourceRow], messages: ['Room exists. Create-only mode skips existing rows.'] });
           return;
         }
 
-        seenCodes.add(normalizedCode);
-        readyRooms.push(room);
-        items.push({
-          key: `${normalizedCode}-${sourceRow}`,
-          status: body.mode === 'import' ? 'imported' : 'ready',
-          label: buildLabel(room),
-          detail: buildDetail(room),
-          sourceRows: [sourceRow],
-          messages: room.name === `Room ${room.code}` ? ['Room name was not provided, so the import will use a safe default name.'] : undefined
-        });
+        const patch: Partial<PreparedRoom> = {};
+        if ((!existing.name || existing.name.trim() === '' || existing.name.trim().toLowerCase() === `room ${code}`.toLowerCase()) && room.name) patch.name = room.name;
+        if (!existing.building && room.building) patch.building = room.building;
+        if (existing.capacity == null && room.capacity != null) patch.capacity = room.capacity;
+        if (!existing.buildingCode && room.buildingCode) patch.buildingCode = room.buildingCode;
+        if (!existing.roomNumber && room.roomNumber) patch.roomNumber = room.roomNumber;
+        if (existing.level == null && room.level != null) patch.level = room.level;
+
+        if (!Object.keys(patch).length) {
+          items.push({ key: `${code}-${sourceRow}`, status: 'duplicate_skipped', label: `${room.code} — ${room.name}`, detail: buildDetail(room), sourceRows: [sourceRow], messages: ['No safe gap-filling changes found for this existing room.'] });
+          return;
+        }
+
+        updateRows.push({ id: existing.id, patch, code, sourceRow });
+        items.push({ key: `${code}-${sourceRow}`, status: body.mode === 'import' ? 'updated' : 'ready_update', label: `${room.code} — ${room.name}`, detail: buildDetail(room), sourceRows: [sourceRow], messages: ['Safe upgrade will fill missing fields only.'] });
       } catch (error) {
-        const message = error instanceof ApiError ? error.message : 'ROOM_IMPORT_ROW_INVALID';
-        items.push({
-          key: `invalid-room-${sourceRow}`,
-          status: 'invalid',
-          label: `CSV row ${sourceRow}`,
-          sourceRows: [sourceRow],
-          messages: [message]
-        });
+        items.push({ key: `invalid-room-${sourceRow}`, status: 'invalid', label: `CSV row ${sourceRow}`, sourceRows: [sourceRow], messages: [error instanceof ApiError ? error.message : 'ROOM_IMPORT_ROW_INVALID'] });
       }
     });
 
-    if (body.mode === 'import' && readyRooms.length) {
+    if (body.mode === 'import') {
       await prisma.$transaction(async (tx) => {
-        await tx.room.createMany({
-          data: readyRooms.map((room) => ({
-            workspaceId: workspace.id,
-            ...room,
-            color: '#22c55e'
-          }))
-        });
+        if (createRows.length) {
+          await tx.room.createMany({ data: createRows.map((room) => ({ workspaceId: workspace.id, ...room, color: '#22c55e' })) });
+        }
+        for (const row of updateRows) {
+          await tx.room.update({ where: { id: row.id }, data: row.patch });
+        }
       });
     }
 
     const payload: ImportPreviewPayload = {
       entity: 'rooms',
       mode: body.mode,
+      importMode: body.importMode,
       summary: buildImportSummary(items, parsed.rows.length, body.mode),
       items
     };
 
     return NextResponse.json({ ok: true, data: payload });
   } catch (error: unknown) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({ ok: false, message: error.issues[0]?.message }, { status: 400 });
-    }
-    if (error instanceof ApiError) {
-      return NextResponse.json({ ok: false, message: error.message }, { status: error.status });
-    }
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      return NextResponse.json({ ok: false, message: 'ROOM_CODE_EXISTS' }, { status: 409 });
-    }
+    if (error instanceof z.ZodError) return NextResponse.json({ ok: false, message: error.issues[0]?.message }, { status: 400 });
+    if (error instanceof ApiError) return NextResponse.json({ ok: false, message: error.message }, { status: error.status });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return NextResponse.json({ ok: false, message: 'ROOM_CODE_EXISTS' }, { status: 409 });
     return NextResponse.json({ ok: false, message: 'ROOM_IMPORT_FAILED' }, { status: 500 });
   }
 }

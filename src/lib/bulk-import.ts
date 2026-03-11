@@ -1,6 +1,17 @@
 import { ApiError } from '@/lib/workspace-v1';
 
-export type ImportPreviewStatus = 'ready' | 'duplicate' | 'invalid' | 'imported' | 'skipped';
+export type ImportPreviewStatus =
+  | 'ready'
+  | 'ready_create'
+  | 'ready_update'
+  | 'duplicate'
+  | 'duplicate_skipped'
+  | 'invalid'
+  | 'conflict'
+  | 'imported'
+  | 'created'
+  | 'updated'
+  | 'skipped';
 
 export type ImportPreviewItem = {
   key: string;
@@ -11,15 +22,23 @@ export type ImportPreviewItem = {
   messages?: string[];
 };
 
+export type ImportExecutionMode = 'create_only' | 'update_existing' | 'create_update';
+
 export type ImportPreviewPayload = {
   entity: 'rooms' | 'groups' | 'courses';
   mode: 'preview' | 'import';
+  importMode: ImportExecutionMode;
   summary: {
     totalRows: number;
     readyCount: number;
+    readyCreateCount: number;
+    readyUpdateCount: number;
     invalidCount: number;
     duplicateCount: number;
+    conflictCount: number;
     importedCount: number;
+    createdCount: number;
+    updatedCount: number;
     skippedCount: number;
   };
   items: ImportPreviewItem[];
@@ -119,20 +138,32 @@ export function parseOptionalPositiveInt(value: string, max: number, errorMessag
 }
 
 export function buildImportSummary(items: ImportPreviewItem[], totalRows: number, mode: 'preview' | 'import'): ImportPreviewPayload['summary'] {
-  const readyCount = items.filter((item) => item.status === 'ready').length;
+  const readyCreateCount = items.filter((item) => item.status === 'ready_create').length;
+  const readyUpdateCount = items.filter((item) => item.status === 'ready_update').length;
+  const legacyReadyCount = items.filter((item) => item.status === 'ready').length;
+  const readyCount = readyCreateCount + readyUpdateCount + legacyReadyCount;
   const invalidCount = items.filter((item) => item.status === 'invalid').length;
-  const duplicateCount = items.filter((item) => item.status === 'duplicate').length;
-  const importedCount = mode === 'import' ? items.filter((item) => item.status === 'imported').length : 0;
+  const duplicateCount = items.filter((item) => item.status === 'duplicate' || item.status === 'duplicate_skipped').length;
+  const conflictCount = items.filter((item) => item.status === 'conflict').length;
+  const createdCount = mode === 'import' ? items.filter((item) => item.status === 'created').length : 0;
+  const updatedCount = mode === 'import' ? items.filter((item) => item.status === 'updated').length : 0;
+  const legacyImportedCount = mode === 'import' ? items.filter((item) => item.status === 'imported').length : 0;
+  const importedCount = createdCount + updatedCount + legacyImportedCount;
   const skippedCount = mode === 'import'
-    ? items.filter((item) => item.status === 'invalid' || item.status === 'duplicate' || item.status === 'skipped').length
-    : duplicateCount + invalidCount;
+    ? items.filter((item) => ['invalid', 'duplicate', 'duplicate_skipped', 'conflict', 'skipped'].includes(item.status)).length
+    : duplicateCount + invalidCount + conflictCount;
 
   return {
     totalRows,
     readyCount,
+    readyCreateCount,
+    readyUpdateCount,
     invalidCount,
     duplicateCount,
+    conflictCount,
     importedCount,
+    createdCount,
+    updatedCount,
     skippedCount
   };
 }

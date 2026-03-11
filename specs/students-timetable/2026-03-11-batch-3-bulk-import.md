@@ -5,7 +5,7 @@
 - **Status:** Approved
 - **Owner:** main assistant
 - **Created:** 2026-03-11
-- **Last Updated:** 2026-03-11
+- **Last Updated:** 2026-03-11 (upgrade-mode addendum) (upgrade mode tightening)
 
 ## 1) Problem Statement
 Students Timetable now has stable resource pages and a corrected course/session model, but data entry is still too manual for real production use. Batch 3 must add safe, production-appropriate CSV import workflows for Rooms and Groups, and preferably Courses + Sessions, without destabilizing the live app or silently damaging workspace data.
@@ -14,7 +14,9 @@ Students Timetable now has stable resource pages and a corrected course/session 
 - Add a real CSV import workflow for Rooms with validation, preview, confirmation, and explicit duplicate handling.
 - Add a real CSV import workflow for Groups with validation, preview, confirmation, and safe hierarchy inference.
 - Add a CSV import workflow for Courses + Sessions if it can be shipped safely in the same batch using the existing one-course-many-sessions model.
-- Keep imports create-only and non-destructive by default.
+- Keep imports non-destructive by default with explicit mode selection.
+- Add explicit import modes for Batch 3: **create only**, **update existing (safe non-destructive updates only)**, and **create + update**.
+- Add an explicit, opt-in **safe upgrade mode** for Batch 3 that upgrades existing records without destructive overwrites (fill missing fields and append missing sessions only).
 - Make import UX understandable from the product surface with templates/help, preview counts, error lists, and confirm-before-write behavior.
 
 ## 3) Non-Goals
@@ -32,6 +34,7 @@ Students Timetable now has stable resource pages and a corrected course/session 
 - Preview + confirm import workflow.
 - Validation + duplicate/conflict reporting.
 - Create-only persistence behavior for valid, non-duplicate rows.
+- Opt-in safe upgrade behavior for existing rows/courses that only applies additive or gap-filling updates.
 - Safe course/session CSV import if it can be delivered without schema changes or risky inference.
 
 ### Out of Scope
@@ -62,12 +65,15 @@ Students Timetable now has stable resource pages and a corrected course/session 
 
 ## 7) Acceptance Criteria
 - [ ] AC1: Rooms CSV import works from the Rooms page and supports buildingCode, roomNumber, derived level, code/full code, optional building name, and optional capacity.
-- [ ] AC2: Rooms import rejects malformed structured rows, reports duplicates explicitly, and never silently overwrites an existing room.
+- [ ] AC2: Rooms import rejects malformed structured rows, reports duplicates explicitly, and never silently overwrites an existing room in create-only mode.
+- [ ] AC2b: Rooms safe upgrade mode can update existing rooms only with non-destructive gap-filling changes (e.g., missing name/building/capacity/structure), with explicit preview before confirmation.
 - [ ] AC3: Groups CSV import works from the Groups page and safely creates main-group/subgroup hierarchy using the existing parentGroup model.
-- [ ] AC4: Groups import does not create orphan subgroup links, does not silently merge unrelated groups, and reports duplicates explicitly.
+- [ ] AC4: Groups import does not create orphan subgroup links, does not silently merge unrelated groups, and reports duplicates explicitly in create-only mode.
+- [ ] AC4b: Groups safe upgrade mode only applies non-destructive updates (e.g., fill missing parent/main-group link or replace placeholder auto-name), never rewiring already-linked groups.
 - [ ] AC5: Each implemented import flow provides preview counts (valid / invalid / duplicate), validation feedback, and a confirmation step before writes.
 - [ ] AC6: Imported Rooms and Groups appear correctly in the existing UI after import.
 - [ ] AC7: Courses + Sessions CSV import is implemented if safe using the existing one-course-many-sessions model; if not safely shippable, the final report explicitly says so.
+- [ ] AC7b: Courses safe upgrade mode can append missing sessions to existing courses only when the session signature is new; it must never delete or mutate existing sessions silently.
 - [ ] AC8: Desktop usability is good and mobile basic usability is acceptable for the implemented import flows.
 - [ ] AC9: `npm run build` passes and production remains stable after deployment.
 

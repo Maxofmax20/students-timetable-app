@@ -74,7 +74,7 @@ const COURSES_IMPORT_HELP = [
   'Use one CSV row per session. Rows with the same courseCode are grouped into one course with many sessions.',
   'Required baseline columns: courseCode, courseTitle, sessionType, day, startTime, endTime. Status is optional and defaults to ACTIVE.',
   'Group and room links resolve by exact groupCode and roomCode. Instructor links resolve by instructorEmail first, or exact unique instructor name if email is blank.',
-  'Imports are create-only. Existing course codes are previewed as duplicates and skipped, never overwritten.'
+  'Choose import mode: create only, update existing, or create + update. Preview clearly shows create vs upgrade vs conflict outcomes before confirmation.'
 ];
 
 function toApiStatus(status: Row['status'] | string | undefined) {
