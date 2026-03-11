@@ -32,11 +32,11 @@ type CourseFilters = {
 type SavedCourseView = {
   id: string;
   name: string;
-  filters: CourseFilters;
+  stateJson: CourseFilters;
   createdAt: string;
+  updatedAt: string;
 };
 
-const FILTER_STORAGE_KEY = 'students-timetable:courses-saved-views:v1';
 const DEFAULT_FILTERS: CourseFilters = {
   status: 'ALL',
   sessionType: 'ALL',
@@ -219,21 +219,17 @@ export default function WorkspaceCoursesPage() {
   const [filters, setFilters] = useState<CourseFilters>(DEFAULT_FILTERS);
   const [savedViews, setSavedViews] = useState<SavedCourseView[]>([]);
   const [viewDraftName, setViewDraftName] = useState('');
+  const [workspaceId, setWorkspaceId] = useState<string>('');
+  const [activeSavedViewId, setActiveSavedViewId] = useState<string | null>(null);
 
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(FILTER_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as SavedCourseView[];
-      if (Array.isArray(parsed)) setSavedViews(parsed);
-    } catch {
-      // ignore corrupt local storage payloads and continue with a clean slate
+  const loadSavedViews = async (resolvedWorkspaceId: string) => {
+    const response = await fetch(`/api/v1/saved-views?workspaceId=${resolvedWorkspaceId}&surface=COURSES`, { credentials: 'include' });
+    const payload = await response.json();
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.message || 'Failed to load saved views');
     }
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(savedViews));
-  }, [savedViews]);
+    setSavedViews(payload.data?.items || []);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -256,10 +252,15 @@ export default function WorkspaceCoursesPage() {
         throw new Error(coursesPayload?.message || 'Failed to load courses');
       }
 
+      const resolvedWorkspaceId = coursesPayload.data?.workspaceId || '';
+      setWorkspaceId(resolvedWorkspaceId);
       setCourses(coursesPayload.data?.items || []);
       setGroups(groupsResponse.ok && groupsPayload?.ok ? groupsPayload.data?.items || [] : []);
       setInstructors(instructorsResponse.ok && instructorsPayload?.ok ? instructorsPayload.data?.items || [] : []);
       setRooms(roomsResponse.ok && roomsPayload?.ok ? roomsPayload.data?.items || [] : []);
+      if (resolvedWorkspaceId) {
+        await loadSavedViews(resolvedWorkspaceId);
+      }
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Failed to load courses', 'error');
     } finally {
@@ -314,30 +315,73 @@ export default function WorkspaceCoursesPage() {
   ], [rooms]);
 
   const applySavedView = (view: SavedCourseView) => {
-    setFilters(view.filters);
+    setFilters(view.stateJson);
+    setActiveSavedViewId(view.id);
     toast(`Applied saved view: ${view.name}`);
   };
 
-  const saveCurrentView = () => {
+  const saveCurrentView = async () => {
     const name = viewDraftName.trim();
     if (!name) {
       toast('Give this view a name first.', 'error');
       return;
     }
+    if (!workspaceId) {
+      toast('Workspace is still loading. Try again in a moment.', 'error');
+      return;
+    }
 
-    const view: SavedCourseView = {
-      id: `${Date.now()}`,
-      name,
-      filters,
-      createdAt: new Date().toISOString()
-    };
-    setSavedViews((current) => [view, ...current]);
+    const response = await fetch('/api/v1/saved-views', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ workspaceId, surface: 'COURSES', name, stateJson: filters })
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload?.ok) {
+      toast(payload?.message || 'Failed to save current view', 'error');
+      return;
+    }
+
+    setSavedViews((current) => [payload.data, ...current]);
     setViewDraftName('');
+    setActiveSavedViewId(payload.data.id);
     toast('Saved current view');
   };
 
-  const deleteSavedView = (id: string) => {
+  const renameSavedView = async (view: SavedCourseView) => {
+    const nextName = window.prompt('Rename saved view', view.name)?.trim();
+    if (!nextName || nextName === view.name) return;
+
+    const response = await fetch(`/api/v1/saved-views/${view.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ workspaceId, name: nextName })
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload?.ok) {
+      toast(payload?.message || 'Failed to rename saved view', 'error');
+      return;
+    }
+
+    setSavedViews((current) => current.map((item) => (item.id === view.id ? payload.data : item)));
+    toast('Saved view renamed');
+  };
+
+  const deleteSavedView = async (id: string) => {
+    const response = await fetch(`/api/v1/saved-views/${id}?workspaceId=${workspaceId}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload?.ok) {
+      toast(payload?.message || 'Failed to remove saved view', 'error');
+      return;
+    }
+
     setSavedViews((current) => current.filter((view) => view.id !== id));
+    if (activeSavedViewId === id) setActiveSavedViewId(null);
     toast('Saved view removed');
   };
 
@@ -486,7 +530,7 @@ export default function WorkspaceCoursesPage() {
               <AppSelect label="Instructor" value={filters.instructorId} onChange={(value) => setFilters((current) => ({ ...current, instructorId: value }))} options={instructorOptions} searchable searchPlaceholder="Find instructor" />
               <AppSelect label="Room" value={filters.roomId} onChange={(value) => setFilters((current) => ({ ...current, roomId: value }))} options={roomOptions} searchable searchPlaceholder="Find room" />
               <div className="flex items-end">
-                <Button variant="secondary" onClick={() => setFilters(DEFAULT_FILTERS)} className="w-full gap-2">
+                <Button variant="secondary" onClick={() => { setFilters(DEFAULT_FILTERS); setActiveSavedViewId(null); }} className="w-full gap-2">
                   <span className="material-symbols-outlined text-[18px]">restart_alt</span>
                   Reset Filters
                 </Button>
@@ -515,34 +559,51 @@ export default function WorkspaceCoursesPage() {
                   />
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="primary" onClick={saveCurrentView} className="gap-2">
+                  <Button variant="primary" onClick={() => void saveCurrentView()} className="gap-2">
                     <span className="material-symbols-outlined text-[18px]">bookmark_add</span>
                     Save Current View
                   </Button>
                 </div>
               </div>
 
+              {activeSavedViewId ? (
+                <div className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--gold)]">
+                  Active saved view: {savedViews.find((view) => view.id === activeSavedViewId)?.name || 'Custom'}
+                </div>
+              ) : null}
+
               <div className="mt-4 flex flex-wrap gap-2">
                 {savedViews.length ? (
-                  savedViews.map((view) => (
-                    <div key={view.id} className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-2 py-1">
-                      <button
-                        type="button"
-                        onClick={() => applySavedView(view)}
-                        className="rounded-full px-2 py-1 text-sm font-semibold text-white transition-colors hover:bg-[var(--surface)]"
-                      >
-                        {view.name}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => deleteSavedView(view.id)}
-                        aria-label={`Delete saved view ${view.name}`}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--danger)]"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">close</span>
-                      </button>
-                    </div>
-                  ))
+                  savedViews.map((view) => {
+                    const isActive = activeSavedViewId === view.id;
+                    return (
+                      <div key={view.id} className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 ${isActive ? 'border-[var(--gold)] bg-[var(--gold-muted)]' : 'border-[var(--border)] bg-[var(--bg-raised)]'}`}>
+                        <button
+                          type="button"
+                          onClick={() => applySavedView(view)}
+                          className="rounded-full px-2 py-1 text-sm font-semibold text-white transition-colors hover:bg-[var(--surface)]"
+                        >
+                          {view.name}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void renameSavedView(view)}
+                          aria-label={`Rename saved view ${view.name}`}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-white"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void deleteSavedView(view.id)}
+                          aria-label={`Delete saved view ${view.name}`}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--danger)]"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">close</span>
+                        </button>
+                      </div>
+                    );
+                  })
                 ) : (
                   <div className="text-sm text-[var(--text-secondary)]">No saved views yet — create one after setting up a useful filter combination.</div>
                 )}

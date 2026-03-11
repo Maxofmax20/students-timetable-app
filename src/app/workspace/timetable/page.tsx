@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { useToast } from '@/components/ui/Toast';
 import { TimetableView, type TimetableItem } from '@/components/workspace/TimetableView';
@@ -14,6 +15,20 @@ import type { CourseApiItem, GroupApiItem } from '@/types';
 const SESSION_TYPE_OPTIONS = ['Lecture', 'Section', 'Lab', 'Online', 'Hybrid'] as const;
 type SessionTypeLabel = (typeof SESSION_TYPE_OPTIONS)[number];
 type DeliveryFilter = 'ALL' | 'PHYSICAL' | 'ONLINE' | 'HYBRID';
+
+type TimetableSavedState = {
+  selectedTypes: SessionTypeLabel[];
+  selectedGroupId: string;
+  deliveryFilter: DeliveryFilter;
+  showConflictLayer: boolean;
+};
+
+type SavedTimetableView = {
+  id: string;
+  name: string;
+  stateJson: TimetableSavedState;
+  updatedAt: string;
+};
 
 function matchesDelivery(item: TimetableItem, filter: DeliveryFilter) {
   if (filter === 'ALL') return true;
@@ -68,6 +83,10 @@ export default function WorkspaceTimetablePage() {
   const [selectedGroupId, setSelectedGroupId] = useState<string>('ALL');
   const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>('ALL');
   const [showConflictLayer, setShowConflictLayer] = useState(true);
+  const [savedViews, setSavedViews] = useState<SavedTimetableView[]>([]);
+  const [viewDraftName, setViewDraftName] = useState('');
+  const [workspaceId, setWorkspaceId] = useState('');
+  const [activeSavedViewId, setActiveSavedViewId] = useState<string | null>(null);
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -84,8 +103,19 @@ export default function WorkspaceTimetablePage() {
           throw new Error(coursesPayload?.message || 'Failed to load timetable data');
         }
 
+        const resolvedWorkspaceId = coursesPayload.data?.workspaceId || '';
+        setWorkspaceId(resolvedWorkspaceId);
         setCourses(coursesPayload.data?.items || []);
         setGroups(groupsResponse.ok && groupsPayload?.ok ? groupsPayload.data?.items || [] : []);
+
+        if (resolvedWorkspaceId) {
+          const savedViewsResponse = await fetch(`/api/v1/saved-views?workspaceId=${resolvedWorkspaceId}&surface=TIMETABLE`, { credentials: 'include' });
+          const savedViewsPayload = await savedViewsResponse.json();
+          if (!savedViewsResponse.ok || !savedViewsPayload?.ok) {
+            throw new Error(savedViewsPayload?.message || 'Failed to load timetable saved views');
+          }
+          setSavedViews(savedViewsPayload.data?.items || []);
+        }
       } catch (error) {
         toast(error instanceof Error ? error.message : 'Failed to load timetable data', 'error');
       } finally {
@@ -168,11 +198,88 @@ export default function WorkspaceTimetablePage() {
     return { sessionsWithConflicts, totalConflictBadges };
   }, [displayItems]);
 
+  const applySavedView = (view: SavedTimetableView) => {
+    const state = view.stateJson;
+    setSelectedTypes(state.selectedTypes);
+    setSelectedGroupId(state.selectedGroupId);
+    setDeliveryFilter(state.deliveryFilter);
+    setShowConflictLayer(state.showConflictLayer);
+    setActiveSavedViewId(view.id);
+    toast(`Applied saved view: ${view.name}`);
+  };
+
+  const saveCurrentView = async () => {
+    const name = viewDraftName.trim();
+    if (!name) {
+      toast('Give this view a name first.', 'error');
+      return;
+    }
+    if (!workspaceId) {
+      toast('Workspace is still loading. Try again in a moment.', 'error');
+      return;
+    }
+
+    const stateJson: TimetableSavedState = { selectedTypes, selectedGroupId, deliveryFilter, showConflictLayer };
+    const response = await fetch('/api/v1/saved-views', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ workspaceId, surface: 'TIMETABLE', name, stateJson })
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload?.ok) {
+      toast(payload?.message || 'Failed to save current view', 'error');
+      return;
+    }
+
+    setSavedViews((current) => [payload.data, ...current]);
+    setViewDraftName('');
+    setActiveSavedViewId(payload.data.id);
+    toast('Saved current view');
+  };
+
+  const renameSavedView = async (view: SavedTimetableView) => {
+    const nextName = window.prompt('Rename saved view', view.name)?.trim();
+    if (!nextName || nextName === view.name) return;
+
+    const response = await fetch(`/api/v1/saved-views/${view.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ workspaceId, name: nextName })
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload?.ok) {
+      toast(payload?.message || 'Failed to rename saved view', 'error');
+      return;
+    }
+
+    setSavedViews((current) => current.map((item) => (item.id === view.id ? payload.data : item)));
+    toast('Saved view renamed');
+  };
+
+  const deleteSavedView = async (id: string) => {
+    const response = await fetch(`/api/v1/saved-views/${id}?workspaceId=${workspaceId}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload?.ok) {
+      toast(payload?.message || 'Failed to remove saved view', 'error');
+      return;
+    }
+
+    setSavedViews((current) => current.filter((view) => view.id !== id));
+    if (activeSavedViewId === id) setActiveSavedViewId(null);
+    toast('Saved view removed');
+  };
+
   const resetFilters = () => {
     setSelectedTypes([...SESSION_TYPE_OPTIONS]);
     setSelectedGroupId('ALL');
     setDeliveryFilter('ALL');
     setShowConflictLayer(true);
+    setActiveSavedViewId(null);
   };
 
   return (
@@ -250,6 +357,63 @@ export default function WorkspaceTimetablePage() {
                     <span className="material-symbols-outlined text-[18px]">restart_alt</span>
                     Reset view
                   </Button>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div className="w-full md:max-w-sm">
+                    <Input
+                      label="Saved view name"
+                      value={viewDraftName}
+                      onChange={(event) => setViewDraftName(event.target.value)}
+                      placeholder="e.g. Group A online checks"
+                      helperText="Save current timetable controls for one-click reuse."
+                    />
+                  </div>
+                  <Button variant="primary" onClick={() => void saveCurrentView()} className="gap-2">
+                    <span className="material-symbols-outlined text-[18px]">bookmark_add</span>
+                    Save Current View
+                  </Button>
+                </div>
+
+                {activeSavedViewId ? (
+                  <div className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--gold)]">
+                    Active saved view: {savedViews.find((view) => view.id === activeSavedViewId)?.name || 'Custom'}
+                  </div>
+                ) : null}
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {savedViews.length ? savedViews.map((view) => {
+                    const isActive = activeSavedViewId === view.id;
+                    return (
+                      <div key={view.id} className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 ${isActive ? 'border-[var(--gold)] bg-[var(--gold-muted)]' : 'border-[var(--border)] bg-[var(--surface)]'}`}>
+                        <button
+                          type="button"
+                          onClick={() => applySavedView(view)}
+                          className="rounded-full px-2 py-1 text-sm font-semibold text-white transition-colors hover:bg-[var(--surface)]"
+                        >
+                          {view.name}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void renameSavedView(view)}
+                          aria-label={`Rename saved view ${view.name}`}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-white"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void deleteSavedView(view.id)}
+                          aria-label={`Delete saved view ${view.name}`}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--danger)]"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">close</span>
+                        </button>
+                      </div>
+                    );
+                  }) : <div className="text-sm text-[var(--text-secondary)]">No saved views yet — save your current timetable filters.</div>}
                 </div>
               </div>
 

@@ -41,6 +41,7 @@ model User {
   workspaceShares      WorkspaceShareLink[] @relation("WorkspaceShareCreator")
   workspaceRevisions   WorkspaceRevision[]  @relation("WorkspaceRevisionAuthor")
   otpCodes             OtpCode[]
+  savedViews           SavedView[]
 
   // NextAuth relations
   accounts Account[]
@@ -203,6 +204,11 @@ enum SessionType {
   HYBRID
 }
 
+enum SavedViewSurface {
+  COURSES
+  TIMETABLE
+}
+
 model Workspace {
   id           String               @id @default(cuid())
   ownerId      String
@@ -229,6 +235,7 @@ model Workspace {
   sessions     SessionEntry[]
   shares       WorkspaceShareLink[]
   revisions    WorkspaceRevision[]
+  savedViews   SavedView[]
 
   @@index([ownerId, createdAt])
 }
@@ -354,6 +361,22 @@ model SessionEntry {
   @@index([workspaceId, day, startMinute])
   @@index([workspaceId, roomId, day, startMinute])
   @@index([workspaceId, instructorId, day, startMinute])
+}
+
+model SavedView {
+  id          String           @id @default(cuid())
+  userId      String
+  workspaceId String
+  surface     SavedViewSurface
+  name        String
+  stateJson   Json
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId, surface, name])
+  @@index([userId, workspaceId, surface, updatedAt])
 }
 
 model WorkspaceShareLink {
