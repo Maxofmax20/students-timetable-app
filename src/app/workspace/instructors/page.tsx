@@ -229,42 +229,44 @@ export default function InstructorsPage() {
       <div className="grid gap-6 p-1 md:p-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-8 animate-panel-pop">
         <section className="flex min-h-0 flex-col gap-6">
           <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
-            <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-col gap-1">
                 <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Faculty directory</div>
-                <h2 className="text-3xl font-bold text-white tracking-tight">Instructors</h2>
+                <h2 className="text-2xl font-bold text-white tracking-tight sm:text-3xl">Instructors</h2>
                 <p className="text-[var(--text-secondary)] text-sm">Scan assignment impact quickly, then inspect schedules/workload before editing or removing instructors.</p>
               </div>
 
-              <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="w-full lg:max-w-[620px]">
                 <SearchInput
                   placeholder="Search instructors..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   onClear={() => setSearch('')}
-                  className="w-full sm:w-[300px]"
+                  className="w-full"
                 />
-                <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2" disabled={!access?.canImport}>
-                  <span className="material-symbols-outlined text-[20px]">upload_file</span>
-                  Import CSV
-                </Button>
-                <Button onClick={openCreate} variant="primary" className="gap-2" disabled={!access?.canWrite}>
-                  <span className="material-symbols-outlined text-[20px]">person_add</span>
-                  Add Instructor
-                </Button>
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="min-h-11 w-full justify-center gap-2" disabled={!access?.canImport}>
+                    <span className="material-symbols-outlined text-[20px]">upload_file</span>
+                    Import CSV
+                  </Button>
+                  <Button onClick={openCreate} variant="primary" className="min-h-11 w-full justify-center gap-2" disabled={!access?.canWrite}>
+                    <span className="material-symbols-outlined text-[20px]">person_add</span>
+                    Add Instructor
+                  </Button>
+                </div>
               </div>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+            <div className="mt-4 flex flex-wrap gap-2.5">
+              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]">
                 {instructors.length} faculty records
               </span>
-              <button type="button" onClick={() => setAssignmentFilter('assigned')} className={cn('rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em]', assignmentFilter === 'assigned' ? 'border-[var(--success)]/30 bg-[var(--success-muted)] text-[var(--success)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]')}>
+              <button type="button" onClick={() => setAssignmentFilter('assigned')} className={cn('rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] min-h-8', assignmentFilter === 'assigned' ? 'border-[var(--success)]/30 bg-[var(--success-muted)] text-[var(--success)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]')}>
                 {assignedCount} assigned
               </button>
-              <button type="button" onClick={() => setAssignmentFilter('unassigned')} className={cn('rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em]', assignmentFilter === 'unassigned' ? 'border-[var(--warning)]/30 bg-[var(--warning-muted)] text-[var(--warning)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]')}>
+              <button type="button" onClick={() => setAssignmentFilter('unassigned')} className={cn('rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] min-h-8', assignmentFilter === 'unassigned' ? 'border-[var(--warning)]/30 bg-[var(--warning-muted)] text-[var(--warning)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]')}>
                 {unassignedCount} unassigned
               </button>
-              <button type="button" onClick={() => setAssignmentFilter('all')} className={cn('rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em]', assignmentFilter === 'all' ? 'border-[var(--gold)]/30 bg-[var(--gold-muted)] text-[var(--gold)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]')}>
+              <button type="button" onClick={() => setAssignmentFilter('all')} className={cn('rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] min-h-8', assignmentFilter === 'all' ? 'border-[var(--gold)]/30 bg-[var(--gold-muted)] text-[var(--gold)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]')}>
                 all
               </button>
             </div>
@@ -282,59 +284,103 @@ export default function InstructorsPage() {
                 {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
               </div>
             ) : filteredInstructors.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-[var(--bg-raised)]/50 text-[var(--text-secondary)] border-b border-[var(--border)]">
-                      <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Instructor</th>
-                      <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Contact</th>
-                      <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Assignments</th>
-                      <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px] text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--border-soft)]">
-                    {filteredInstructors.map((i) => (
-                      <tr key={i.id} className={cn('group/row hover:bg-[var(--surface-2)]/30 transition-all cursor-pointer', selectedInstructor?.id === i.id ? 'bg-[var(--gold-muted)]/40' : '')} onClick={() => setSelectedInstructor(i)}>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <Avatar name={i.name} size="sm" />
-                            <div>
-                              <div className="text-white font-bold text-sm tracking-tight">{i.name}</div>
-                              <div className={cn('text-[10px] font-black uppercase tracking-[0.12em]', (i.assignmentStatus || 'unassigned') === 'assigned' ? 'text-[var(--success)]' : 'text-[var(--warning)]')}>
-                                {(i.assignmentStatus || 'unassigned') === 'assigned' ? 'Assigned' : 'Unassigned'}
+              <>
+                <div className="space-y-3 p-3 md:hidden">
+                  {filteredInstructors.map((i) => (
+                    <article
+                      key={i.id}
+                      className={cn('rounded-2xl border p-3.5 transition-all cursor-pointer bg-[var(--bg-raised)]', selectedInstructor?.id === i.id ? 'border-[var(--gold)]/40 bg-[var(--gold-muted)]/25' : 'border-[var(--border)]')}
+                      onClick={() => setSelectedInstructor(i)}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex items-center gap-3">
+                          <Avatar name={i.name} size="sm" />
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-bold tracking-tight text-white" title={i.name}>{i.name}</div>
+                            <div className={cn('mt-0.5 text-[10px] font-black uppercase tracking-[0.12em]', (i.assignmentStatus || 'unassigned') === 'assigned' ? 'text-[var(--success)]' : 'text-[var(--warning)]')}>
+                              {(i.assignmentStatus || 'unassigned') === 'assigned' ? 'Assigned' : 'Unassigned'}
+                            </div>
+                          </div>
+                        </div>
+                        {access?.canWrite ? (
+                          <div className="flex items-center gap-1.5">
+                            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(i); }} className="h-10 w-10 rounded-xl p-0">
+                              <span className="material-symbols-outlined text-[18px]">edit_square</span>
+                            </Button>
+                            <Button variant="ghost-danger" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedInstructor(i); setIsDeleteOpen(true); }} className="h-10 w-10 rounded-xl p-0">
+                              <span className="material-symbols-outlined text-[18px]">delete</span>
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-3 space-y-1.5 text-xs">
+                        <div className="truncate text-[var(--text-secondary)]" title={i.email || 'No email'}>{i.email || 'No email'}</div>
+                        <div className="truncate text-[var(--text-muted)]" title={i.phone || 'No phone'}>{i.phone || 'No phone'}</div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                        <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-white">{i.sessionCount || 0} sessions</span>
+                        <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[var(--text-secondary)]">{i.courseCount || 0} courses</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-[var(--bg-raised)]/50 text-[var(--text-secondary)] border-b border-[var(--border)]">
+                        <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Instructor</th>
+                        <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Contact</th>
+                        <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Assignments</th>
+                        <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px] text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border-soft)]">
+                      {filteredInstructors.map((i) => (
+                        <tr key={i.id} className={cn('group/row hover:bg-[var(--surface-2)]/30 transition-all cursor-pointer', selectedInstructor?.id === i.id ? 'bg-[var(--gold-muted)]/40' : '')} onClick={() => setSelectedInstructor(i)}>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <Avatar name={i.name} size="sm" />
+                              <div>
+                                <div className="text-white font-bold text-sm tracking-tight">{i.name}</div>
+                                <div className={cn('text-[10px] font-black uppercase tracking-[0.12em]', (i.assignmentStatus || 'unassigned') === 'assigned' ? 'text-[var(--success)]' : 'text-[var(--warning)]')}>
+                                  {(i.assignmentStatus || 'unassigned') === 'assigned' ? 'Assigned' : 'Unassigned'}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex flex-col">
-                            <span className="text-[var(--text-secondary)] text-sm">{i.email || 'No email'}</span>
-                            <span className="text-[var(--text-muted)] text-[11px]">{i.phone || 'No phone'}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex flex-col text-sm">
-                            <span className="text-white font-semibold">{i.sessionCount || 0} sessions</span>
-                            <span className="text-[var(--text-secondary)]">{i.courseCount || 0} courses</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          {access?.canWrite ? (
-                            <div className="flex items-center justify-end gap-1 opacity-100 lg:opacity-0 lg:group-hover/row:opacity-100 transition-all">
-                              <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(i); }} className="h-8 w-8 p-0 rounded-lg">
-                                <span className="material-symbols-outlined text-[18px]">edit_square</span>
-                              </Button>
-                              <Button variant="ghost-danger" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedInstructor(i); setIsDeleteOpen(true); }} className="h-8 w-8 p-0 rounded-lg">
-                                <span className="material-symbols-outlined text-[18px]">delete</span>
-                              </Button>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex max-w-[280px] flex-col">
+                              <span className="truncate text-[var(--text-secondary)] text-sm" title={i.email || 'No email'}>{i.email || 'No email'}</span>
+                              <span className="truncate text-[var(--text-muted)] text-[11px]" title={i.phone || 'No phone'}>{i.phone || 'No phone'}</span>
                             </div>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col text-sm">
+                              <span className="text-white font-semibold">{i.sessionCount || 0} sessions</span>
+                              <span className="text-[var(--text-secondary)]">{i.courseCount || 0} courses</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            {access?.canWrite ? (
+                              <div className="flex items-center justify-end gap-1 opacity-100 lg:opacity-0 lg:group-hover/row:opacity-100 transition-all">
+                                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEdit(i); }} className="h-9 w-9 p-0 rounded-lg">
+                                  <span className="material-symbols-outlined text-[18px]">edit_square</span>
+                                </Button>
+                                <Button variant="ghost-danger" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedInstructor(i); setIsDeleteOpen(true); }} className="h-9 w-9 p-0 rounded-lg">
+                                  <span className="material-symbols-outlined text-[18px]">delete</span>
+                                </Button>
+                              </div>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             ) : (
               <EmptyState
                 icon={search ? 'search_off' : 'person_add'}
