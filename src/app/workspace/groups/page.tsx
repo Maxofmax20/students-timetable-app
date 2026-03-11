@@ -381,7 +381,7 @@ export default function GroupsPage() {
         open={isImportOpen}
         onClose={() => setIsImportOpen(false)}
         title="Import Groups from CSV"
-        subtitle="Preview group hierarchy first, validate subgroup parents, and only then confirm a create-only import. Existing group codes are never overwritten."
+        subtitle="Preview group hierarchy first, validate subgroup parents, and then confirm explicit create/update actions. Existing group codes are never silently overwritten."
         endpoint="/api/v1/import/groups"
         templateFilename="groups-import-template.csv"
         templateCsv={GROUPS_TEMPLATE_CSV}

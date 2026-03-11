@@ -44,11 +44,11 @@ export async function POST(request: NextRequest) {
     const existingByCode = new Map(existingGroups.map((g) => [normalizeGroupCode(g.code), g]));
 
     const seenCodes = new Set<string>();
+    const csvMainCodes = new Set<string>();
     const items: ImportPreviewItem[] = [];
     const createRows: Array<{ sourceRow: number; group: PreparedGroup }> = [];
     const updateRows: Array<{ id: string; patch: { name?: string; parentGroupId?: string | null }; sourceRow: number; code: string }> = [];
 
-    const pendingMainCodes = new Set<string>();
     parsed.rows.forEach((record, index) => {
       const sourceRow = index + 2;
       try {
@@ -57,11 +57,42 @@ export async function POST(request: NextRequest) {
           items.push({ key: `${group.code}-${sourceRow}`, status: 'duplicate', label: `${group.code} — ${group.name}`, detail: group.parentCode ? `Subgroup under ${group.parentCode}` : 'Main group', sourceRows: [sourceRow], messages: ['Group code is duplicated inside this CSV file.'] });
           return;
         }
+
         seenCodes.add(group.code);
-        if (!group.parentCode) pendingMainCodes.add(group.code);
+        if (!group.parentCode) csvMainCodes.add(group.code);
 
         const existing = existingByCode.get(group.code);
+
+        if (group.parentCode) {
+          const parentFromDb = existingByCode.get(group.parentCode);
+          const parentExistsAsMain = !!(parentFromDb && !parentFromDb.parentGroupId);
+          const parentExistsInCsvAsMain = csvMainCodes.has(group.parentCode);
+          if (!parentExistsAsMain && !parentExistsInCsvAsMain) {
+            items.push({
+              key: `conflict-parent-${group.code}-${sourceRow}`,
+              status: 'conflict',
+              label: `${group.code} — ${group.name}`,
+              detail: `Subgroup under ${group.parentCode}`,
+              sourceRows: [sourceRow],
+              messages: [`Parent group ${group.parentCode} is missing or not a main group. Add/fix the parent row first.`]
+            });
+            return;
+          }
+        }
+
         if (!existing) {
+          if (body.importMode === 'update_existing') {
+            items.push({
+              key: `${group.code}-${sourceRow}`,
+              status: 'skipped',
+              label: `${group.code} — ${group.name}`,
+              detail: group.parentCode ? `Subgroup under ${group.parentCode}` : 'Main group',
+              sourceRows: [sourceRow],
+              messages: ['Row is valid but skipped because mode is update-existing only and this group does not exist yet.']
+            });
+            return;
+          }
+
           createRows.push({ sourceRow, group });
           items.push({ key: `${group.code}-${sourceRow}`, status: body.mode === 'import' ? 'created' : 'ready_create', label: `${group.code} — ${group.name}`, detail: group.parentCode ? `Subgroup under ${group.parentCode}` : 'Main group', sourceRows: [sourceRow] });
           return;
@@ -79,7 +110,19 @@ export async function POST(request: NextRequest) {
 
         if (!existing.parentGroupId && group.parentCode) {
           const parent = existingByCode.get(group.parentCode);
-          if (parent && !parent.parentGroupId) patch.parentGroupId = parent.id;
+          if (parent && !parent.parentGroupId) {
+            patch.parentGroupId = parent.id;
+          } else if (csvMainCodes.has(group.parentCode)) {
+            items.push({
+              key: `conflict-upgrade-parent-${group.code}-${sourceRow}`,
+              status: 'conflict',
+              label: `${group.code} — ${group.name}`,
+              detail: `Subgroup under ${group.parentCode}`,
+              sourceRows: [sourceRow],
+              messages: ['Cannot safely re-link an existing group to a parent that is only being created in this same import batch. Import parent first, then run update mode.']
+            });
+            return;
+          }
         }
 
         if (!Object.keys(patch).length) {

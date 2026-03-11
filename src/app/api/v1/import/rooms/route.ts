@@ -86,6 +86,18 @@ export async function POST(request: NextRequest) {
 
         const existing = existingByCode.get(code);
         if (!existing) {
+          if (body.importMode === 'update_existing') {
+            items.push({
+              key: `${code}-${sourceRow}`,
+              status: 'skipped',
+              label: `${room.code} — ${room.name}`,
+              detail: buildDetail(room),
+              sourceRows: [sourceRow],
+              messages: ['Row is valid but skipped because mode is update-existing only and this room does not exist yet.']
+            });
+            return;
+          }
+
           createRows.push(room);
           items.push({ key: `${code}-${sourceRow}`, status: body.mode === 'import' ? 'created' : 'ready_create', label: `${room.code} — ${room.name}`, detail: buildDetail(room), sourceRows: [sourceRow] });
           return;

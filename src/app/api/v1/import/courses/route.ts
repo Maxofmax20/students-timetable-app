@@ -275,8 +275,6 @@ export async function POST(request: NextRequest) {
     const updateCourses: Array<{
       id: string;
       code: string;
-      title?: string;
-      status?: string;
       appendSessions: PreparedSession[];
       sourceRows: number[];
       messages: string[];
@@ -355,17 +353,31 @@ export async function POST(request: NextRequest) {
 
       const appendSessions = course.sessions.filter((sessionItem) => !existingSessionSignatures.has(sessionSignature(sessionItem)));
       const messages: string[] = [];
-      let nextTitle: string | undefined;
-      let nextStatus: string | undefined;
 
       if (existing.title !== course.title) {
-        nextTitle = course.title;
-        messages.push(`title: "${existing.title}" → "${course.title}"`);
+        items.push({
+          key: `conflict-course-title-${course.code}`,
+          status: 'conflict',
+          label: `${course.code} — ${course.title}`,
+          detail: `${course.sourceRows.length} CSV row${course.sourceRows.length === 1 ? '' : 's'} supplied`,
+          sourceRows: course.sourceRows,
+          messages: [`Existing title is "${existing.title}". Course import upgrade mode does not rename existing courses automatically.`]
+        });
+        continue;
       }
+
       if (existing.status !== course.status) {
-        nextStatus = course.status;
-        messages.push(`status: ${existing.status} → ${course.status}`);
+        items.push({
+          key: `conflict-course-status-${course.code}`,
+          status: 'conflict',
+          label: `${course.code} — ${course.title}`,
+          detail: `${course.sourceRows.length} CSV row${course.sourceRows.length === 1 ? '' : 's'} supplied`,
+          sourceRows: course.sourceRows,
+          messages: [`Existing status is ${existing.status}. Course import upgrade mode does not change status automatically.`]
+        });
+        continue;
       }
+
       if (appendSessions.length) {
         messages.push(`append ${appendSessions.length} new session${appendSessions.length === 1 ? '' : 's'}`);
       }
@@ -385,8 +397,6 @@ export async function POST(request: NextRequest) {
       updateCourses.push({
         id: existing.id,
         code: course.code,
-        title: nextTitle,
-        status: nextStatus,
         appendSessions,
         sourceRows: course.sourceRows,
         messages
@@ -397,8 +407,8 @@ export async function POST(request: NextRequest) {
         status: body.mode === 'import' ? 'updated' : 'ready_update',
         label: `${course.code} — ${course.title}`,
         detail: `${course.sourceRows.length} CSV row${course.sourceRows.length === 1 ? '' : 's'} supplied`,
-        sourceRows: course.sourceRows,
-        messages: [`Update plan: ${messages.join('; ')}`]
+        messages: ['Safe upgrade will append missing sessions only.'],
+        sourceRows: course.sourceRows
       });
     }
 
@@ -433,8 +443,6 @@ export async function POST(request: NextRequest) {
           await tx.course.update({
             where: { id: course.id },
             data: {
-              ...(course.title ? { title: course.title } : {}),
-              ...(course.status ? { status: course.status } : {}),
               ...(course.appendSessions.length
                 ? {
                   sessions: {

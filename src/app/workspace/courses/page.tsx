@@ -632,7 +632,7 @@ export default function WorkspaceCoursesPage() {
         open={isImportOpen}
         onClose={() => setIsImportOpen(false)}
         title="Import Courses + Sessions from CSV"
-        subtitle="Preview grouped course creation first, validate linked entities, and only then confirm a create-only import. Existing course codes are never overwritten."
+        subtitle="Preview grouped course imports first, validate linked entities, and then confirm explicit create/append actions. Existing course records are never silently overwritten."
         endpoint="/api/v1/import/courses"
         templateFilename="courses-sessions-import-template.csv"
         templateCsv={COURSES_TEMPLATE_CSV}

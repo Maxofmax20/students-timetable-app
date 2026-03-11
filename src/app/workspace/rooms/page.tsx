@@ -411,7 +411,7 @@ export default function RoomsPage() {
         open={isImportOpen}
         onClose={() => setIsImportOpen(false)}
         title="Import Rooms from CSV"
-        subtitle="Preview every room first, validate structure, and only then confirm a create-only import. Existing room codes are never overwritten."
+        subtitle="Preview every room first, validate structure, and then confirm explicit create/update actions. Existing room codes are never silently overwritten."
         endpoint="/api/v1/import/rooms"
         templateFilename="rooms-import-template.csv"
         templateCsv={ROOMS_TEMPLATE_CSV}
