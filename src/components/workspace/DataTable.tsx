@@ -11,9 +11,13 @@ interface DataTableProps {
   dense?: boolean;
   timeMode: TimeMode;
   onRowAction: (action: RowAction, row: Row) => void;
+  selectedIds?: Set<string>;
+  onToggleRow?: (id: string) => void;
+  onToggleAllVisible?: () => void;
+  allVisibleSelected?: boolean;
 }
 
-export function DataTable({ rows, dense = false, timeMode, onRowAction }: DataTableProps) {
+export function DataTable({ rows, dense = false, timeMode, onRowAction, selectedIds, onToggleRow, onToggleAllVisible, allVisibleSelected }: DataTableProps) {
   const [sortCol, setSortCol] = useState<keyof Row | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
 
@@ -45,6 +49,12 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction }: DataTa
       <div className="md:hidden space-y-3 p-3">
         {sortedRows.map((row) => (
           <div key={row.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
+            <div className="mb-2 flex items-center justify-between">
+              <label className="inline-flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                <input type="checkbox" checked={Boolean(selectedIds?.has(row.id))} onChange={() => onToggleRow?.(row.id)} />
+                Select
+              </label>
+            </div>
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="text-sm font-bold text-white truncate" title={row.course}>{row.course}</h3>
@@ -103,6 +113,9 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction }: DataTa
         <table className="w-full border-collapse text-left min-w-[800px]">
           <thead>
             <tr className="bg-[var(--bg-raised)]/50 text-[var(--text-secondary)] border-b border-[var(--border)]">
+              <th className="px-4 py-4">
+                <input type="checkbox" checked={Boolean(allVisibleSelected)} onChange={() => onToggleAllVisible?.()} />
+              </th>
               {[
                 { key: 'course', label: 'Course' },
                 { key: 'group', label: 'Group' },
@@ -129,6 +142,9 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction }: DataTa
           <tbody className="divide-y divide-[var(--border-soft)]">
             {sortedRows.map((row) => (
               <tr key={row.id} className="group/row hover:bg-[var(--surface-2)]/30 transition-all">
+                <td className={cn("px-4", dense ? "py-2" : "py-4")}>
+                  <input type="checkbox" checked={Boolean(selectedIds?.has(row.id))} onChange={() => onToggleRow?.(row.id)} />
+                </td>
                 <td className={cn("px-6 font-semibold text-white", dense ? "py-2 text-xs" : "py-4 text-sm")}>
                   <span className="block max-w-[260px] truncate" title={row.course}>{row.course}</span>
                 </td>

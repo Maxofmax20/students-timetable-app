@@ -18,9 +18,13 @@ export interface CoursesViewProps {
   isLoading?: boolean;
   extraActions?: ReactNode;
   canCreate?: boolean;
+  selectedIds?: Set<string>;
+  onToggleRow?: (id: string) => void;
+  onToggleAllVisible?: () => void;
+  allVisibleSelected?: boolean;
 }
 
-export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, isLoading, extraActions, canCreate = true }: CoursesViewProps) {
+export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, isLoading, extraActions, canCreate = true, selectedIds, onToggleRow, onToggleAllVisible, allVisibleSelected }: CoursesViewProps) {
   const [search, setSearch] = useState('');
 
   if (isLoading) {
@@ -92,7 +96,11 @@ export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, 
                rows={filteredRows} 
                dense={denseRows} 
                timeMode={timeMode} 
-               onRowAction={onRowAction} 
+               onRowAction={onRowAction}
+               selectedIds={selectedIds}
+               onToggleRow={onToggleRow}
+               onToggleAllVisible={onToggleAllVisible}
+               allVisibleSelected={allVisibleSelected}
              />
            ) : (
              <EmptyState 

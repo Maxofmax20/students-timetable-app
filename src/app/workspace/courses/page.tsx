@@ -10,6 +10,8 @@ import { Modal } from '@/components/ui/Modal';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { useToast } from '@/components/ui/Toast';
 import { CoursesView } from '@/components/workspace/CoursesView';
+import { BulkActionBar } from '@/components/workspace/BulkActionBar';
+import { useBulkSelection } from '@/components/workspace/useBulkSelection';
 import { CsvImportModal } from '@/components/workspace/CsvImportModal';
 import { EditCourseModal, type EditCourseInitialData, type EditCourseSubmitData } from '@/components/workspace/EditCourseModal';
 import { formatMinute } from '@/lib/schedule';
@@ -220,6 +222,9 @@ export default function WorkspaceCoursesPage() {
   const [courseModalMode, setCourseModalMode] = useState<'create' | 'full' | 'duplicate'>('create');
   const [courseModalData, setCourseModalData] = useState<EditCourseInitialData>({ sessions: [] });
   const [deleteTarget, setDeleteTarget] = useState<CourseApiItem | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkStatusOpen, setBulkStatusOpen] = useState<'ACTIVE' | 'DRAFT' | null>(null);
+  const [bulkConfirmText, setBulkConfirmText] = useState('');
   const [saving, setSaving] = useState(false);
   const [createHandled, setCreateHandled] = useState(false);
   const [filters, setFilters] = useState<CourseFilters>(DEFAULT_FILTERS);
@@ -295,6 +300,11 @@ export default function WorkspaceCoursesPage() {
 
   const filteredCourses = useMemo(() => courses.filter((course) => matchesCourseFilters(course, filters)), [courses, filters]);
   const rows = useMemo(() => filteredCourses.map(courseToRow), [filteredCourses]);
+  const selection = useBulkSelection(rows.map((row) => row.id));
+  const { pruneTo } = selection;
+  useEffect(() => {
+    pruneTo(rows.map((row) => row.id));
+  }, [rows, pruneTo]);
   const activeFilterSummary = useMemo(() => summarizeFilters(filters, groups, instructors, rooms), [filters, groups, instructors, rooms]);
 
   const statusOptions = useMemo(() => [
@@ -562,6 +572,59 @@ export default function WorkspaceCoursesPage() {
     toast('Exported filtered courses CSV (' + rows.length + ' session rows). Scope: ' + scopeLabel);
   };
 
+  const exportSelectedCoursesCsv = () => {
+    const selectedRows = rows.filter((row) => selection.selected.has(row.id));
+    if (!selectedRows.length) {
+      toast('Select at least one course first. This export only includes selected rows.', 'error');
+      return;
+    }
+    const header = ['course_code', 'course_title', 'status', 'group', 'instructor', 'room'];
+    const csvRows = selectedRows.map((row) => [row.code || '', row.courseName || row.course, row.status, row.group, row.instructor, row.room]);
+    const lines = [header.map(csvCell).join(','), ...csvRows.map((line) => line.map((cell) => csvCell(cell)).join(','))];
+    const dateTag = new Date().toISOString().slice(0, 10);
+    downloadFile(`courses-selected-${dateTag}.csv`, lines.join('\n'), 'text/csv;charset=utf-8');
+    toast(`Exported ${selectedRows.length} selected course row(s). Scope: selected items only.`);
+  };
+
+  const runBulkDelete = async () => {
+    const ids = Array.from(selection.selected);
+    if (!ids.length) return;
+    setSaving(true);
+    try {
+      const response = await fetch('/api/v1/courses/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ action: 'delete', ids }) });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.message || 'Bulk delete failed');
+      setBulkDeleteOpen(false);
+      setBulkConfirmText('');
+      selection.clear();
+      toast(`Bulk delete complete: ${payload.successCount}/${payload.requested} deleted.` + (payload.failed?.length ? ` Failed: ${payload.failed[0].reason}` : ''));
+      await load();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Bulk delete failed', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runBulkStatus = async (statusValue: 'ACTIVE' | 'DRAFT') => {
+    const ids = Array.from(selection.selected);
+    if (!ids.length) return;
+    setSaving(true);
+    try {
+      const response = await fetch('/api/v1/courses/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ action: 'status', ids, status: statusValue }) });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.message || 'Bulk status update failed');
+      setBulkStatusOpen(null);
+      selection.clear();
+      toast(`Bulk status complete: ${payload.successCount}/${payload.requested} updated to ${statusValue}.`);
+      await load();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Bulk status failed', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <AppShell title="Courses" subtitle="Manage and organize all university courses.">
       <div className="space-y-6">
@@ -689,6 +752,20 @@ export default function WorkspaceCoursesPage() {
           </div>
         ) : null}
 
+        {selection.selectedCount > 0 ? (
+          <BulkActionBar
+            selectedCount={selection.selectedCount}
+            onSelectVisible={selection.toggleVisible}
+            onClear={selection.clear}
+            onExport={exportSelectedCoursesCsv}
+            onDelete={access?.canWrite ? () => setBulkDeleteOpen(true) : undefined}
+            onStatusActive={access?.canWrite ? () => setBulkStatusOpen('ACTIVE') : undefined}
+            onStatusDraft={access?.canWrite ? () => setBulkStatusOpen('DRAFT') : undefined}
+            disabled={saving}
+            scopeLabel="Bulk actions affect selected items only"
+          />
+        ) : null}
+
         <CoursesView
           rows={rows}
           denseRows={false}
@@ -697,6 +774,10 @@ export default function WorkspaceCoursesPage() {
           onRowAction={handleRowAction}
           isLoading={status === 'loading' || loading}
           canCreate={Boolean(access?.canWrite)}
+          selectedIds={selection.selected}
+          onToggleRow={selection.toggleOne}
+          onToggleAllVisible={selection.toggleVisible}
+          allVisibleSelected={selection.allVisibleSelected}
           extraActions={
             access?.canImport ? (
               <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2 w-full sm:w-auto justify-center">
@@ -733,6 +814,39 @@ export default function WorkspaceCoursesPage() {
         rooms={rooms}
         onSave={saveCourse}
       />
+
+      <Modal
+        open={bulkDeleteOpen}
+        onClose={() => { if (!saving) { setBulkDeleteOpen(false); setBulkConfirmText(''); } }}
+        title="Delete Selected Courses"
+        subtitle="This permanently removes all selected courses and their sessions."
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => { setBulkDeleteOpen(false); setBulkConfirmText(''); }} disabled={saving}>Cancel</Button>
+            <Button variant="danger" onClick={() => void runBulkDelete()} disabled={saving || bulkConfirmText !== 'DELETE'}>{saving ? 'Deleting...' : `Delete ${selection.selectedCount} Selected`}</Button>
+          </>
+        }
+      >
+        <p className="text-sm text-[var(--text-secondary)]">Destructive action scope: <span className="font-semibold text-white">selected items only</span> ({selection.selectedCount} selected). Type <span className="font-bold text-white">DELETE</span> to confirm.</p>
+        <div className="mt-3">
+          <Input value={bulkConfirmText} onChange={(event) => setBulkConfirmText(event.target.value)} placeholder="Type DELETE" />
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(bulkStatusOpen)}
+        onClose={() => setBulkStatusOpen(null)}
+        title="Bulk Course Status Update"
+        subtitle="Apply a single status to all currently selected courses."
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setBulkStatusOpen(null)} disabled={saving}>Cancel</Button>
+            <Button variant="primary" onClick={() => bulkStatusOpen && void runBulkStatus(bulkStatusOpen)} disabled={saving}>{saving ? 'Applying...' : `Set ${selection.selectedCount} to ${bulkStatusOpen}`}</Button>
+          </>
+        }
+      >
+        <p className="text-sm text-[var(--text-secondary)]">Status target: <span className="font-semibold text-white">{bulkStatusOpen}</span>. Scope: selected courses only ({selection.selectedCount}).</p>
+      </Modal>
 
       <Modal
         open={Boolean(deleteTarget)}

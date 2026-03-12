@@ -12,6 +12,9 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { CsvImportModal } from '@/components/workspace/CsvImportModal';
 import { formatRoomLevel, groupRoomsByBuilding, normalizeRoomFields, roomDisplaySummary } from '@/lib/group-room-model';
+import { csvCell, downloadFile } from '@/lib/utils';
+import { BulkActionBar } from '@/components/workspace/BulkActionBar';
+import { useBulkSelection } from '@/components/workspace/useBulkSelection';
 import type { RoomApiItem } from '@/types';
 
 type WorkspaceAccess = {
@@ -52,6 +55,8 @@ export default function RoomsPage() {
   const [sectionDeleteLoadingKey, setSectionDeleteLoadingKey] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [access, setAccess] = useState<WorkspaceAccess | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkConfirmText, setBulkConfirmText] = useState('');
 
   const fetchRooms = async () => {
     try {
@@ -96,6 +101,38 @@ export default function RoomsPage() {
   }, [rooms, search]);
 
   const groupedRooms = useMemo(() => groupRoomsByBuilding(filteredRooms), [filteredRooms]);
+  const selection = useBulkSelection(filteredRooms.map((room) => room.id));
+
+  const exportSelectedCsv = () => {
+    const selectedRows = filteredRooms.filter((room) => selection.selected.has(room.id));
+    if (!selectedRows.length) return toast('Select rooms first. Export scope is selected rows only.', 'error');
+    const header = ['code', 'name', 'building_code', 'building_name', 'room_number', 'level', 'capacity'];
+    const lines = [header.map(csvCell).join(','), ...selectedRows.map((room) => [room.code, room.name, room.buildingCode || '', room.building || '', room.roomNumber || '', String(room.level ?? ''), String(room.capacity ?? '')].map(csvCell).join(','))];
+    const dateTag = new Date().toISOString().slice(0, 10);
+    downloadFile(`rooms-selected-${dateTag}.csv`, lines.join('\n'), 'text/csv;charset=utf-8');
+    toast(`Exported ${selectedRows.length} selected room(s). Scope: selected items only.`);
+  };
+
+  const runBulkDelete = async () => {
+    const ids = Array.from(selection.selected);
+    if (!ids.length) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch('/api/v1/rooms/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', ids }) });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.message || 'Bulk delete failed');
+      selection.clear();
+      setBulkDeleteOpen(false);
+      setBulkConfirmText('');
+      toast(`Bulk delete complete: ${payload.successCount}/${payload.requested} deleted.` + (payload.failed?.length ? ` First failure: ${payload.failed[0].reason}` : ''));
+      await fetchRooms();
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Bulk delete failed', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const selectedSection = useMemo(
     () => groupedRooms.find((section) => section.buildingCode === selectedSectionKey) ?? null,
     [groupedRooms, selectedSectionKey]
@@ -324,6 +361,18 @@ export default function RoomsPage() {
           </div>
         ) : null}
 
+        {selection.selectedCount > 0 ? (
+          <BulkActionBar
+            selectedCount={selection.selectedCount}
+            onSelectVisible={selection.toggleVisible}
+            onClear={selection.clear}
+            onExport={exportSelectedCsv}
+            onDelete={access?.canWrite ? () => setBulkDeleteOpen(true) : undefined}
+            disabled={actionLoading}
+            scopeLabel="Bulk actions affect selected rooms only"
+          />
+        ) : null}
+
         <div className="space-y-5">
           {loading ? (
             <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] p-6 shadow-[var(--shadow-lg)] space-y-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}</div>
@@ -395,6 +444,10 @@ export default function RoomsPage() {
                     <div className="p-4 md:p-6 grid gap-3">
                       {section.rooms.map((room) => (
                         <div key={room.id} className="rounded-[22px] border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
+                          <label className="mb-2 inline-flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                            <input type="checkbox" checked={selection.isSelected(room.id)} onChange={() => selection.toggleOne(room.id)} />
+                            Select
+                          </label>
                           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
@@ -550,6 +603,22 @@ export default function RoomsPage() {
           await fetchRooms();
         }}
       />
+
+      <Modal
+        open={bulkDeleteOpen}
+        onClose={() => { if (!actionLoading) { setBulkDeleteOpen(false); setBulkConfirmText(''); } }}
+        title="Delete Selected Rooms"
+        subtitle="This removes all selected rooms and clears room links from related sessions."
+        actions={
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => { setBulkDeleteOpen(false); setBulkConfirmText(''); }} disabled={actionLoading}>Cancel</Button>
+            <Button variant="danger" onClick={runBulkDelete} disabled={actionLoading || bulkConfirmText !== 'DELETE'}>{actionLoading ? 'Deleting...' : `Delete ${selection.selectedCount} Selected`}</Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-[var(--text-secondary)]">Destructive scope is selected rows only ({selection.selectedCount}). Type <span className="font-bold text-white">DELETE</span> to confirm.</p>
+        <div className="mt-3"><Input value={bulkConfirmText} onChange={(e) => setBulkConfirmText(e.target.value)} placeholder="Type DELETE" /></div>
+      </Modal>
 
       <Modal
         open={isSectionDeleteOpen}

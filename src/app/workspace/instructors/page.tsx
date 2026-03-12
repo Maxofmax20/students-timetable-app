@@ -13,7 +13,9 @@ import { Avatar } from '@/components/ui/Avatar';
 import { useToast } from '@/components/ui/Toast';
 import { CsvImportModal } from '@/components/workspace/CsvImportModal';
 import type { InstructorApiItem } from '@/types';
-import { cn } from '@/lib/utils';
+import { cn, csvCell, downloadFile } from '@/lib/utils';
+import { BulkActionBar } from '@/components/workspace/BulkActionBar';
+import { useBulkSelection } from '@/components/workspace/useBulkSelection';
 
 type WorkspaceAccess = {
   productRole: 'OWNER' | 'EDITOR' | 'VIEWER';
@@ -95,6 +97,8 @@ export default function InstructorsPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [deletingInstructorId, setDeletingInstructorId] = useState<string | null>(null);
   const [access, setAccess] = useState<WorkspaceAccess | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkConfirmText, setBulkConfirmText] = useState('');
 
   const fetchInstructors = async () => {
     try {
@@ -225,6 +229,38 @@ export default function InstructorsPage() {
     return (i.assignmentStatus || 'unassigned') === assignmentFilter;
   }), [instructors, search, assignmentFilter]);
 
+  const selection = useBulkSelection(filteredInstructors.map((item) => item.id));
+
+  const exportSelectedCsv = () => {
+    const selectedRows = filteredInstructors.filter((item) => selection.selected.has(item.id));
+    if (!selectedRows.length) return toast('Select instructors first. Export scope is selected rows only.', 'error');
+    const header = ['name', 'email', 'phone', 'assignment_status'];
+    const lines = [header.map(csvCell).join(','), ...selectedRows.map((i) => [i.name, i.email || '', i.phone || '', i.assignmentStatus || 'unassigned'].map(csvCell).join(','))];
+    const dateTag = new Date().toISOString().slice(0, 10);
+    downloadFile(`instructors-selected-${dateTag}.csv`, lines.join('\n'), 'text/csv;charset=utf-8');
+    toast(`Exported ${selectedRows.length} selected instructor(s). Scope: selected items only.`);
+  };
+
+  const runBulkDelete = async () => {
+    const ids = Array.from(selection.selected);
+    if (!ids.length) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch('/api/v1/instructors/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', ids }) });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.message || 'Bulk delete failed');
+      selection.clear();
+      setBulkDeleteOpen(false);
+      setBulkConfirmText('');
+      toast(`Bulk delete complete: ${payload.successCount}/${payload.requested} deleted.` + (payload.failed?.length ? ` First failure: ${payload.failed[0].reason}` : ''));
+      await fetchInstructors();
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Bulk delete failed', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const assignedCount = instructors.filter((item) => (item.assignmentStatus || 'unassigned') === 'assigned').length;
   const unassignedCount = instructors.length - assignedCount;
 
@@ -282,6 +318,18 @@ export default function InstructorsPage() {
             </div>
           ) : null}
 
+          {selection.selectedCount > 0 ? (
+            <BulkActionBar
+              selectedCount={selection.selectedCount}
+              onSelectVisible={selection.toggleVisible}
+              onClear={selection.clear}
+              onExport={exportSelectedCsv}
+              onDelete={access?.canWrite ? () => setBulkDeleteOpen(true) : undefined}
+              disabled={actionLoading}
+              scopeLabel="Bulk actions affect selected instructors only"
+            />
+          ) : null}
+
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">
             {loading ? (
               <div className="p-6 space-y-4">
@@ -296,6 +344,12 @@ export default function InstructorsPage() {
                       className={cn('rounded-2xl border p-3.5 transition-all cursor-pointer bg-[var(--bg-raised)]', selectedInstructor?.id === i.id ? 'border-[var(--gold)]/40 bg-[var(--gold-muted)]/25' : 'border-[var(--border)]')}
                       onClick={() => setSelectedInstructor(i)}
                     >
+                      <div className="mb-2">
+                        <label className="inline-flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                          <input type="checkbox" checked={selection.isSelected(i.id)} onChange={() => selection.toggleOne(i.id)} onClick={(e) => e.stopPropagation()} />
+                          Select
+                        </label>
+                      </div>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex items-center gap-3">
                           <Avatar name={i.name} size="sm" />
@@ -341,6 +395,7 @@ export default function InstructorsPage() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-[var(--bg-raised)]/50 text-[var(--text-secondary)] border-b border-[var(--border)]">
+                        <th className="px-4 py-4"><input type="checkbox" checked={selection.allVisibleSelected} onChange={() => selection.toggleVisible()} /></th>
                         <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Instructor</th>
                         <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Contact</th>
                         <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Assignments</th>
@@ -350,6 +405,7 @@ export default function InstructorsPage() {
                     <tbody className="divide-y divide-[var(--border-soft)]">
                       {filteredInstructors.map((i) => (
                         <tr key={i.id} className={cn('group/row hover:bg-[var(--surface-2)]/30 transition-all cursor-pointer', selectedInstructor?.id === i.id ? 'bg-[var(--gold-muted)]/40' : '')} onClick={() => setSelectedInstructor(i)}>
+                          <td className="px-4 py-4"><input type="checkbox" checked={selection.isSelected(i.id)} onChange={() => selection.toggleOne(i.id)} onClick={(e) => e.stopPropagation()} /></td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <Avatar name={i.name} size="sm" />
@@ -542,6 +598,22 @@ export default function InstructorsPage() {
             </div>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        open={bulkDeleteOpen}
+        onClose={() => { if (!actionLoading) { setBulkDeleteOpen(false); setBulkConfirmText(''); } }}
+        title="Delete Selected Instructors"
+        subtitle="This removes all selected instructors and clears their assignments from linked records."
+        actions={(
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => { setBulkDeleteOpen(false); setBulkConfirmText(''); }} disabled={actionLoading}>Cancel</Button>
+            <Button variant="danger" onClick={runBulkDelete} disabled={actionLoading || bulkConfirmText !== 'DELETE'}>{actionLoading ? 'Removing...' : `Delete ${selection.selectedCount} Selected`}</Button>
+          </div>
+        )}
+      >
+        <p className="text-sm text-[var(--text-secondary)]">Destructive scope is selected rows only ({selection.selectedCount}). Type <span className="font-bold text-white">DELETE</span> to confirm.</p>
+        <div className="mt-3"><Input value={bulkConfirmText} onChange={(e) => setBulkConfirmText(e.target.value)} placeholder="Type DELETE" /></div>
       </Modal>
 
       <Modal

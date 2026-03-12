@@ -13,6 +13,9 @@ import { useToast } from '@/components/ui/Toast';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { CsvImportModal } from '@/components/workspace/CsvImportModal';
 import { groupGroupsByRoot, groupHierarchyPath, groupKindLabel, sortGroupsForDisplay } from '@/lib/group-room-model';
+import { csvCell, downloadFile } from '@/lib/utils';
+import { BulkActionBar } from '@/components/workspace/BulkActionBar';
+import { useBulkSelection } from '@/components/workspace/useBulkSelection';
 import type { GroupApiItem } from '@/types';
 
 const GROUPS_TEMPLATE_CSV = `code,name,parentCode
@@ -50,6 +53,8 @@ export default function GroupsPage() {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [canWrite, setCanWrite] = useState(true);
   const [canImport, setCanImport] = useState(true);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkConfirmText, setBulkConfirmText] = useState('');
 
   const fetchGroups = async () => {
     try {
@@ -87,6 +92,42 @@ export default function GroupsPage() {
   }, [search, sortedGroups]);
 
   const groupedSections = useMemo(() => groupGroupsByRoot(filteredGroups), [filteredGroups]);
+  const selection = useBulkSelection(filteredGroups.map((group) => group.id));
+
+  const exportSelectedCsv = () => {
+    const selectedRows = filteredGroups.filter((group) => selection.selected.has(group.id));
+    if (!selectedRows.length) return toast('Select groups first. Export scope is selected rows only.', 'error');
+    const header = ['code', 'name', 'parent_code'];
+    const lines = [header.map(csvCell).join(','), ...selectedRows.map((group) => [group.code, group.name, group.parentGroup?.code || ''].map(csvCell).join(','))];
+    const dateTag = new Date().toISOString().slice(0, 10);
+    downloadFile(`groups-selected-${dateTag}.csv`, lines.join('\n'), 'text/csv;charset=utf-8');
+    toast(`Exported ${selectedRows.length} selected group row(s). Scope: selected items only.`);
+  };
+
+  const runBulkDelete = async () => {
+    const ids = Array.from(selection.selected);
+    if (!ids.length) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch('/api/v1/groups/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', ids }) });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.message || 'Bulk delete failed');
+      if (payload.failed?.length) {
+        const childBlocked = payload.failed.find((f: { reason: string }) => f.reason === 'GROUP_HAS_CHILDREN');
+        if (childBlocked) toast('Some selected groups were blocked because they still have child subgroups (GROUP_HAS_CHILDREN).', 'error');
+      }
+      selection.clear();
+      setBulkDeleteOpen(false);
+      setBulkConfirmText('');
+      toast(`Bulk delete complete: ${payload.successCount}/${payload.requested} deleted.`);
+      await fetchGroups();
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Bulk delete failed', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const selectedSection = useMemo(
     () => groupedSections.find((section) => section.rootCode === selectedSectionKey) ?? null,
     [groupedSections, selectedSectionKey]
@@ -315,6 +356,18 @@ export default function GroupsPage() {
           </div>
         ) : null}
 
+        {selection.selectedCount > 0 ? (
+          <BulkActionBar
+            selectedCount={selection.selectedCount}
+            onSelectVisible={selection.toggleVisible}
+            onClear={selection.clear}
+            onExport={exportSelectedCsv}
+            onDelete={canWrite ? () => setBulkDeleteOpen(true) : undefined}
+            disabled={actionLoading}
+            scopeLabel="Bulk actions affect selected groups only"
+          />
+        ) : null}
+
         <div className="space-y-5">
           {loading ? (
             <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] p-6 shadow-[var(--shadow-lg)] space-y-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}</div>
@@ -389,6 +442,12 @@ export default function GroupsPage() {
 
                   {!isCollapsed ? (
                     <div className="p-4 md:p-6 space-y-3">
+                      <div className="px-1">
+                        <label className="inline-flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                          <input type="checkbox" checked={selection.isSelected(root.id)} onChange={() => selection.toggleOne(root.id)} />
+                          Select root
+                        </label>
+                      </div>
                       <button
                         type="button"
                         onClick={() => toggleSection(section.rootCode)}
@@ -426,6 +485,10 @@ export default function GroupsPage() {
                         <div className="grid gap-3">
                           {subgroups.map((group) => (
                             <div key={group.id} className="rounded-[22px] border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
+                              <label className="mb-2 inline-flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                                <input type="checkbox" checked={selection.isSelected(group.id)} onChange={() => selection.toggleOne(group.id)} />
+                                Select
+                              </label>
                               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                                 <div className="min-w-0 flex-1">
                                   <div className="flex flex-wrap items-center gap-2">
@@ -539,6 +602,22 @@ export default function GroupsPage() {
           await fetchGroups();
         }}
       />
+
+      <Modal
+        open={bulkDeleteOpen}
+        onClose={() => { if (!actionLoading) { setBulkDeleteOpen(false); setBulkConfirmText(''); } }}
+        title="Delete Selected Groups"
+        subtitle="Selected groups are deleted only if safe. Groups with children are blocked and reported."
+        actions={
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => { setBulkDeleteOpen(false); setBulkConfirmText(''); }} disabled={actionLoading}>Cancel</Button>
+            <Button variant="danger" onClick={runBulkDelete} disabled={actionLoading || bulkConfirmText !== 'DELETE'}>{actionLoading ? 'Deleting...' : `Delete ${selection.selectedCount} Selected`}</Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-[var(--text-secondary)]">Destructive scope is selected rows only ({selection.selectedCount}). Any selected main group with children will be blocked safely. Type <span className="font-bold text-white">DELETE</span> to confirm.</p>
+        <div className="mt-3"><Input value={bulkConfirmText} onChange={(e) => setBulkConfirmText(e.target.value)} placeholder="Type DELETE" /></div>
+      </Modal>
 
       <Modal
         open={isSectionDeleteOpen}
