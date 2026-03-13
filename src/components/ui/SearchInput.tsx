@@ -42,12 +42,9 @@ export function SearchInput({
   };
 
   return (
-    <div className={cn('relative', containerClassName, className)}>
-      <div className="pointer-events-none absolute inset-y-0 left-3 flex items-center">
-        <span className="inline-flex h-6 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 text-[9px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">
-          <span className="material-symbols-outlined text-[12px]">search</span>
-          Find
-        </span>
+    <div className={cn('relative min-w-0', containerClassName, className)}>
+      <div className="pointer-events-none absolute inset-y-0 left-0 flex w-12 items-center justify-center text-[var(--text-muted)]">
+        <span className="material-symbols-outlined text-[20px]">search</span>
       </div>
       <input
         ref={inputRef}
@@ -56,15 +53,17 @@ export function SearchInput({
         onChange={onChange}
         placeholder={placeholder}
         className={cn(
-          'h-11 w-full rounded-2xl border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] pl-[4.5rem] pr-12 text-sm font-medium text-white shadow-[var(--shadow-sm)] outline-none transition-all placeholder:text-[var(--text-muted)] focus:border-[var(--gold)] focus:ring-4 focus:ring-[var(--focus-ring)] focus:shadow-[var(--shadow-md)]',
+          'h-11 w-full rounded-2xl border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] px-3.5 text-sm font-medium text-white shadow-[var(--shadow-sm)] outline-none transition-all placeholder:text-[var(--text-muted)] focus:border-[var(--gold)] focus:ring-4 focus:ring-[var(--focus-ring)] focus:shadow-[var(--shadow-md)]',
+          '[&::-webkit-search-decoration]:appearance-none [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-results-button]:appearance-none [&::-webkit-search-results-decoration]:appearance-none',
           inputClassName
         )}
+        style={{ paddingLeft: '3rem', paddingRight: '3rem' }}
       />
       {value ? (
         <button
           type="button"
           onClick={clearValue}
-          className="absolute right-2 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-secondary)] transition-all hover:border-[var(--text-muted)] hover:text-white"
+          className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-secondary)] transition-all hover:border-[var(--text-muted)] hover:text-white"
           aria-label="Clear search"
         >
           <span className="material-symbols-outlined text-[18px]">close_small</span>

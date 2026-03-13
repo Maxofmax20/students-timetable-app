@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "verify:smoke": "node scripts/verification/smoke.mjs",
+    "verify:health": "node scripts/verification/deploy-health.mjs",
+    "verify:release": "node scripts/verification/release-verify.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

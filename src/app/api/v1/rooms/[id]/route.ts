@@ -3,12 +3,16 @@ import { Prisma, WorkspaceRole } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { ApiError, requireSession, requireWorkspaceRole } from "@/lib/workspace-v1";
+import { normalizeRoomFields } from "@/lib/group-room-model";
+import { writeWorkspaceAudit } from '@/lib/workspace-audit';
 
 const patchSchema = z.object({
   code: z.string().min(1).max(32).optional(),
-  name: z.string().min(2).max(120).optional(),
+  name: z.string().min(1).max(120).optional(),
   capacity: z.number().int().positive().max(2000).nullable().optional(),
   building: z.string().max(80).nullable().optional(),
+  buildingCode: z.string().max(16).nullable().optional(),
+  roomNumber: z.string().max(16).nullable().optional(),
   color: z.string().max(32).nullable().optional()
 });
 
@@ -27,15 +31,29 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const current = await getRoomOrThrow(id);
     await requireWorkspaceRole(session.userId, current.workspaceId, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
 
-    const updated = await prisma.room.update({
-      where: { id },
-      data: {
-        code: body.code,
-        name: body.name,
-        capacity: body.capacity,
-        building: body.building,
-        color: body.color
-      }
+    const normalized = normalizeRoomFields({
+      code: body.code ?? current.code,
+      buildingCode: body.buildingCode === undefined ? current.buildingCode : body.buildingCode,
+      roomNumber: body.roomNumber === undefined ? current.roomNumber : body.roomNumber,
+      level: current.level
+    });
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const item = await tx.room.update({
+        where: { id },
+        data: {
+          code: normalized.code || undefined,
+          name: body.name?.trim(),
+          capacity: body.capacity,
+          building: body.building === undefined ? undefined : body.building?.trim() || null,
+          buildingCode: normalized.buildingCode,
+          roomNumber: normalized.roomNumber,
+          level: normalized.level,
+          color: body.color
+        }
+      });
+      await writeWorkspaceAudit({ tx, workspaceId: current.workspaceId, actorUserId: session.userId, entityType: 'ROOM', entityId: id, actionType: 'UPDATE', summary: `Updated room ${item.code}`, before: { code: current.code, name: current.name, buildingCode: current.buildingCode, roomNumber: current.roomNumber }, after: { code: item.code, name: item.name, buildingCode: item.buildingCode, roomNumber: item.roomNumber } });
+      return item;
     });
 
     return NextResponse.json({ ok: true, data: updated });
@@ -61,7 +79,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const current = await getRoomOrThrow(id);
     await requireWorkspaceRole(session.userId, current.workspaceId, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
 
-    await prisma.room.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      await tx.room.delete({ where: { id } });
+      await writeWorkspaceAudit({ tx, workspaceId: current.workspaceId, actorUserId: session.userId, entityType: 'ROOM', entityId: id, actionType: 'DELETE', summary: `Deleted room ${current.code}`, before: { code: current.code, name: current.name, buildingCode: current.buildingCode, roomNumber: current.roomNumber, capacity: current.capacity }, metadata: { restorable: true } });
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof ApiError) {

@@ -115,7 +115,7 @@ export function Header({ title, subtitle, onMenuClick, actions }: HeaderProps) {
                <Link href="/account">
                  <DropdownItem icon="person" onClick={() => {}}>Profile Settings</DropdownItem>
                </Link>
-               <Link href="/workspace?tab=Settings">
+               <Link href="/account">
                  <DropdownItem icon="settings_suggest" onClick={() => {}}>Preferences</DropdownItem>
                </Link>
                <div className="h-px bg-[var(--border-soft)] my-1 mx-1"></div>

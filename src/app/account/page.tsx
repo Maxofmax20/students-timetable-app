@@ -225,7 +225,7 @@ export default function AccountPage() {
 
   return (
     <AppShell title="Account Settings" subtitle="Manage your identity, security, and data export">
-      <div className="p-4 md:p-6 max-w-4xl mx-auto flex flex-col gap-8 w-full pb-24">
+      <div className="p-4 md:p-6 max-w-4xl mx-auto flex flex-col gap-6 md:gap-7 w-full pb-24">
         <section className="rounded-[32px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-5 shadow-[var(--shadow-sm)] md:p-6">
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div>
@@ -246,13 +246,16 @@ export default function AccountPage() {
           </div>
         </section>
 
-        <section className="flex flex-col gap-5">
-          <h3 className="text-xl font-bold text-[var(--gold-soft)] flex items-center gap-2">
-            <span className="material-symbols-outlined">person</span>
-            Public Profile
-          </h3>
-          <div className="bg-[var(--surface)] border border-[var(--border)] p-6 md:p-8 rounded-2xl flex flex-col sm:flex-row gap-8 items-start">
-            <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl bg-[var(--surface-3)] border-2 border-[var(--border)] flex items-center justify-center text-3xl font-bold text-[var(--gold)] shadow-inner shrink-0">
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg md:text-xl font-bold text-[var(--gold)] flex items-center gap-2">
+              <span className="material-symbols-outlined">person</span>
+              Public Profile
+            </h3>
+            <span className="polish-chip">Visible identity</span>
+          </div>
+          <div className="polish-section-shell p-4 md:p-7 flex flex-col sm:flex-row gap-5 md:gap-7 items-start">
+            <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-[var(--surface-3)] border-2 border-[var(--border)] flex items-center justify-center text-2xl md:text-3xl font-bold text-[var(--gold)] shadow-inner shrink-0">
               {(displayName || profile.email).charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 flex flex-col gap-4 w-full">
@@ -272,8 +275,8 @@ export default function AccountPage() {
                 helperText="Email is controlled by your active sign-in method."
                 containerClassName="max-w-md"
               />
-              <div className="pt-2">
-                <Button variant="primary" onClick={saveProfile} disabled={profileSaving}>
+              <div className="pt-1 flex justify-end sm:justify-start">
+                <Button variant="primary" onClick={saveProfile} disabled={profileSaving} className="w-full sm:w-auto">
                   {profileSaving ? 'Saving...' : 'Save Changes'}
                 </Button>
               </div>
@@ -281,12 +284,15 @@ export default function AccountPage() {
           </div>
         </section>
 
-        <section className="flex flex-col gap-5">
-          <h3 className="text-xl font-bold text-[var(--gold-soft)] flex items-center gap-2">
-            <span className="material-symbols-outlined">security</span>
-            Security & Sign In
-          </h3>
-          <div className="bg-[var(--surface)] border border-[var(--border)] p-6 md:p-8 rounded-2xl flex flex-col gap-6">
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg md:text-xl font-bold text-[var(--gold)] flex items-center gap-2">
+              <span className="material-symbols-outlined">security</span>
+              Security & Sign In
+            </h3>
+            <span className="polish-chip">Access controls</span>
+          </div>
+          <div className="polish-section-shell p-4 md:p-7 flex flex-col gap-5 md:gap-6">
             <div className="flex flex-col gap-3 border-b border-[var(--border)] pb-6">
               <div>
                 <h4 className="font-semibold text-white">Connected Sign-In Methods</h4>
@@ -309,7 +315,7 @@ export default function AccountPage() {
                   {profile.hasPassword ? 'Change your current password.' : 'Add a password so you can sign in without an external provider.'}
                 </p>
               </div>
-              <Button variant="secondary" onClick={() => setPasswordOpen(true)}>
+              <Button variant="secondary" onClick={() => setPasswordOpen(true)} className="w-full md:w-auto justify-center">
                 {profile.hasPassword ? 'Update Password' : 'Set Password'}
               </Button>
             </div>
@@ -319,35 +325,38 @@ export default function AccountPage() {
                 <h4 className="font-semibold text-white">Current Session</h4>
                 <p className="text-sm text-[var(--text-secondary)] mt-1">Sign out cleanly from this browser and clear compatibility cookies.</p>
               </div>
-              <Button variant="secondary" onClick={() => void signOutEverywhere()}>
+              <Button variant="secondary" onClick={() => void signOutEverywhere()} className="w-full md:w-auto justify-center">
                 Sign Out
               </Button>
             </div>
           </div>
         </section>
 
-        <section className="flex flex-col gap-5 mt-2">
-          <h3 className="text-xl font-bold text-[var(--danger)] flex items-center gap-2">
-            <span className="material-symbols-outlined">warning</span>
-            Data & Deletion
-          </h3>
-          <div className="bg-[linear-gradient(135deg,rgba(225,70,70,0.05),var(--surface))] border border-[var(--danger)]/30 p-6 md:p-8 rounded-2xl flex flex-col gap-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[var(--danger)]/20 pb-6">
+        <section className="flex flex-col gap-3 mt-1">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-lg md:text-xl font-bold text-[var(--warning)] flex items-center gap-2">
+              <span className="material-symbols-outlined">folder_managed</span>
+              Data & Deletion
+            </h3>
+            <span className="polish-chip">Export & retention</span>
+          </div>
+          <div className="polish-section-shell p-4 md:p-7 flex flex-col gap-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[var(--border)] pb-6">
               <div>
                 <h4 className="font-semibold text-white">Export Account Data</h4>
                 <p className="text-sm text-[var(--text-secondary)] mt-1">Download your account profile, workspaces, memberships, and linked data as JSON.</p>
               </div>
-              <Button variant="secondary" onClick={() => void exportAccount()} className="gap-2">
+              <Button variant="secondary" onClick={() => void exportAccount()} className="gap-2 w-full md:w-auto justify-center">
                 <span className="material-symbols-outlined text-[18px]">download</span>
                 Download Export
               </Button>
             </div>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
-                <h4 className="font-semibold text-[var(--danger)]">Delete Account</h4>
-                <p className="text-sm text-[var(--danger)]/70 mt-1">This permanently removes your account and associated owned data. This cannot be undone.</p>
+                <h4 className="font-semibold text-[var(--text)]">Delete Account</h4>
+                <p className="text-sm text-[var(--text-secondary)] mt-1">This permanently removes your account and associated owned data. This cannot be undone.</p>
               </div>
-              <Button variant="danger" onClick={() => setDeleteOpen(true)}>
+              <Button variant="ghost-danger" onClick={() => setDeleteOpen(true)} className="w-full md:w-auto justify-center">
                 Delete Account
               </Button>
             </div>

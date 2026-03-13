@@ -1,54 +1,85 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { cn } from '@/lib/utils';
+import { useEffect, useMemo, useState } from 'react';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
-import { Skeleton } from '@/components/ui/Skeleton';
-import type { Row, RowAction } from '@/types';
-import type { ScheduleItem } from '@/lib/schedule';
-import { formatMinute, getOrderedScheduleDays, getScheduleBounds, layoutDayItems } from '@/lib/schedule';
+import { Modal } from '@/components/ui/Modal';
+import { getOrderedScheduleDays, layoutDayItems, type TimetableLayoutItem } from '@/lib/schedule';
+import { cn } from '@/lib/utils';
+import type { Row, RowAction, WeekStartOption } from '@/types';
 
-type ViewMode = 'grid' | 'list';
+export type TimetableItem = {
+  id: string;
+  courseId: string;
+  code: string;
+  course: string;
+  type: string;
+  status: string;
+  group: string;
+  groupId?: string | null;
+  room: string;
+  roomId?: string | null;
+  instructor: string;
+  instructorId?: string | null;
+  day: string;
+  startMinute: number;
+  endMinute: number;
+  timeLabel: string;
+  conflictTypes?: string[];
+  conflictCount?: number;
+};
 
-interface TimetableViewProps {
-  items?: ScheduleItem[];
+type TimetableViewProps = {
+  items?: TimetableItem[];
   rows?: Row[];
   timeMode?: string;
-  weekStart: string;
+  weekStart?: WeekStartOption | string;
   focusDay?: string;
   onRowAction?: (action: RowAction, row: Row) => void;
-  onExportCalendar?: () => void;
+  onExportCalendar?: () => void | Promise<void>;
   isLoading?: boolean;
-}
+  showConflictLayer?: boolean;
+};
 
-const GRID_ROW_HEIGHT = 72;
-const GRID_TIME_RAIL_WIDTH = 72;
-const GRID_MIN_COLUMN_WIDTH = 96;
-const TIMETABLE_VIEW_KEY = 'students-timetable:view-mode';
+type CardPreset = 'rich' | 'comfortable' | 'compact' | 'micro';
+type ViewMode = 'grid' | 'list';
 
-function getItemTone(item: ScheduleItem) {
-  const variants = [
-    'border-blue-400/40 bg-blue-500/12',
-    'border-emerald-400/40 bg-emerald-500/12',
-    'border-rose-400/40 bg-rose-500/12',
-    'border-amber-400/40 bg-amber-500/12',
-    'border-purple-400/40 bg-purple-500/12'
-  ];
-
-  const seed = `${item.groupId ?? item.group}:${item.roomId ?? item.room}`;
-  const hash = seed.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return variants[hash % variants.length];
-}
-
-function buildHourMarks(startMinute: number, endMinute: number) {
-  const marks: number[] = [];
-  for (let minute = startMinute; minute <= endMinute; minute += 60) {
-    marks.push(minute);
+const DEFAULT_DAY_ORDER = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'] as const;
+const VIEW_MODE_KEY = 'students-timetable:view-mode';
+const TYPE_META: Record<string, { tone: string; short: string }> = {
+  Lecture: {
+    tone: 'border-[var(--gold)]/30 bg-[linear-gradient(135deg,var(--gold-muted),transparent)]',
+    short: 'Lec'
+  },
+  Section: {
+    tone: 'border-[var(--info)]/30 bg-[linear-gradient(135deg,var(--info-muted),transparent)]',
+    short: 'Sec'
+  },
+  Lab: {
+    tone: 'border-[var(--success)]/30 bg-[linear-gradient(135deg,var(--success-muted),transparent)]',
+    short: 'Lab'
+  },
+  Online: {
+    tone: 'border-[var(--accent)]/30 bg-[linear-gradient(135deg,var(--accent-muted),transparent)]',
+    short: 'Online'
+  },
+  Hybrid: {
+    tone: 'border-[var(--warning)]/30 bg-[linear-gradient(135deg,var(--warning-muted),transparent)]',
+    short: 'Hybrid'
   }
-  return marks;
+};
+
+function formatMinute(total: number) {
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
-function parseRowTimeToMinutes(value: string) {
+function compactTimeRange(start: number, end: number) {
+  return `${formatMinute(start)}–${formatMinute(end)}`;
+}
+
+function parseRowTime(value: string) {
   const parts = value.split(/\s*(?:→|->|–|—|-)\s*/).filter(Boolean);
   if (parts.length !== 2) return null;
 
@@ -66,18 +97,19 @@ function parseRowTimeToMinutes(value: string) {
   };
 }
 
-function rowToScheduleItem(row: Row): ScheduleItem | null {
-  const parsed = parseRowTimeToMinutes(row.time);
-  if (!parsed) return null;
+function rowToTimetableItem(row: Row): TimetableItem | null {
+  const parsed = parseRowTime(row.time);
+  if (!parsed || parsed.endMinute <= parsed.startMinute) return null;
 
   const [course, type] = row.course.split(' — ');
+
   return {
     id: row.id,
     courseId: row.id,
     code: row.code || row.id,
     course: course || row.course,
-    type: type || 'Session',
-    status: row.status.toUpperCase(),
+    type: type || 'Lecture',
+    status: row.status,
     group: row.group,
     groupId: row.groupId ?? null,
     room: row.room,
@@ -91,36 +123,411 @@ function rowToScheduleItem(row: Row): ScheduleItem | null {
   };
 }
 
-export function TimetableView({ items, rows = [], weekStart, focusDay, onExportCalendar, isLoading }: TimetableViewProps) {
+function getCardPreset({
+  height,
+  lanes,
+  density,
+  isMobile
+}: {
+  height: number;
+  lanes: number;
+  density: 'normal' | 'compact';
+  isMobile: boolean;
+}): CardPreset {
+  if (height <= 72 || lanes >= 4 || (isMobile && lanes >= 3)) return 'micro';
+  if (height <= 96 || lanes >= 3 || (density === 'compact' && height <= 116) || (isMobile && lanes >= 2)) return 'compact';
+  if (height <= 144 || density === 'compact' || isMobile) return 'comfortable';
+  return 'rich';
+}
+
+function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [mobileDay, setMobileDay] = useState<string>('');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-
     const media = window.matchMedia('(max-width: 767px)');
-    const stored = window.localStorage.getItem(TIMETABLE_VIEW_KEY);
-
-    if (stored === 'list' || stored === 'grid') {
-      setViewMode(stored);
-    }
-
-    const update = () => {
-      setIsMobile(media.matches);
-    };
-
+    const update = () => setIsMobile(media.matches);
     update();
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
   }, []);
 
-  const canonicalItems = useMemo(() => {
+  return isMobile;
+}
+
+function ViewToggle({
+  viewMode,
+  onChange
+}: {
+  viewMode: ViewMode;
+  onChange: (mode: ViewMode) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[var(--shadow-sm)]">
+      {(['grid', 'list'] as const).map((mode) => {
+        const active = mode === viewMode;
+        return (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => onChange(mode)}
+            className={cn(
+              'rounded-xl px-3 py-2 text-xs font-black uppercase tracking-[0.12em] transition-all',
+              active
+                ? 'bg-[var(--gold-muted)] text-[var(--gold)] shadow-[var(--shadow-sm)]'
+                : 'text-[var(--text-secondary)] hover:text-white'
+            )}
+          >
+            {mode === 'grid' ? 'Grid view' : 'List view'}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SessionCard({
+  item,
+  placement,
+  top,
+  height,
+  density,
+  isMobile,
+  showConflictLayer,
+  onOpen
+}: {
+  item: TimetableItem;
+  placement: TimetableLayoutItem;
+  top: number;
+  height: number;
+  density: 'normal' | 'compact';
+  isMobile: boolean;
+  showConflictLayer: boolean;
+  onOpen: (item: TimetableItem) => void;
+}) {
+  const gap = isMobile ? 6 : 8;
+  const width = `calc((100% - ${(placement.lanes - 1) * gap}px) / ${placement.lanes})`;
+  const left = `calc(${placement.lane} * (${width} + ${gap}px))`;
+  const preset = getCardPreset({ height, lanes: placement.lanes, density, isMobile });
+  const typeMeta = TYPE_META[item.type] || { tone: 'border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))]', short: item.type.slice(0, 3) };
+  const showConflict = Boolean(showConflictLayer && item.conflictTypes?.length);
+  const compactTime = compactTimeRange(item.startMinute, item.endMinute);
+  const primaryMeta = [item.group !== '-' ? `G ${item.group}` : null, item.room !== '-' ? item.room : null].filter(Boolean).join(' • ');
+  const showCourse = preset !== 'micro';
+  const showPrimaryMeta = preset === 'rich' || preset === 'comfortable';
+  const showInstructor = preset === 'rich';
+  const showConflictChips = showConflict && preset === 'rich';
+  const showConflictBadge = showConflict && preset !== 'rich';
+  const courseClass =
+    preset === 'rich'
+      ? 'line-clamp-3 text-[12px] font-medium leading-4'
+      : preset === 'comfortable'
+        ? 'line-clamp-2 text-[11px] font-medium leading-4'
+        : 'line-clamp-2 text-[10px] font-medium leading-[1.15]';
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(item)}
+      className={cn(
+        'absolute overflow-hidden rounded-[18px] border text-left shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]',
+        typeMeta.tone,
+        preset === 'micro' ? 'px-2 py-1.5' : preset === 'compact' ? 'px-2.5 py-2' : 'px-3 py-2.5',
+        showConflict ? 'ring-1 ring-[var(--danger)]/30' : ''
+      )}
+      style={{ top: `${top + 3}px`, left, width, height: `${height}px` }}
+      aria-label={`${item.code} ${item.type} ${item.timeLabel}`}
+      title={`${item.code} • ${item.course} • ${item.type} • ${item.timeLabel}`}
+    >
+      <div className="flex h-full flex-col justify-between gap-1.5 overflow-hidden">
+        <div className="flex items-start justify-between gap-1.5">
+          <span className={cn(
+            'max-w-full rounded-full border border-[var(--border)] bg-[var(--surface)] font-black uppercase tracking-[0.12em] text-[var(--gold)]',
+            preset === 'micro' ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-[10px]'
+          )}>
+            {preset === 'micro' || preset === 'compact' ? typeMeta.short : item.type}
+          </span>
+          {showConflictBadge ? (
+            <span className="shrink-0 rounded-full border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.1em] text-[var(--danger)]">
+              {item.conflictCount}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="min-w-0 space-y-1 overflow-hidden">
+          <div className={cn(
+            'truncate font-black text-white',
+            preset === 'micro' ? 'text-[11px]' : preset === 'compact' ? 'text-xs' : 'text-sm'
+          )}>
+            {item.code}
+          </div>
+          {showCourse ? (
+            <div className={cn('break-words text-white/88', courseClass)}>
+              {item.course}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-auto min-w-0 space-y-1 overflow-hidden">
+          <div className={cn(
+            'truncate font-semibold text-[var(--text-secondary)]',
+            preset === 'micro' ? 'text-[10px]' : 'text-[11px]'
+          )}>
+            {compactTime}
+          </div>
+          {showPrimaryMeta && primaryMeta ? (
+            <div className="truncate text-[10px] font-medium text-[var(--text-secondary)]">{primaryMeta}</div>
+          ) : null}
+          {showInstructor && item.instructor !== '-' ? (
+            <div className="truncate text-[10px] font-medium text-[var(--text-secondary)]">{item.instructor}</div>
+          ) : null}
+          {showConflictChips ? (
+            <div className="flex flex-wrap gap-1">
+              {item.conflictTypes?.map((conflict) => (
+                <span key={`${item.id}-${conflict}`} className="rounded-full border border-[var(--danger)]/25 bg-[var(--surface)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--danger)]">
+                  {conflict}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function SessionDetailsModal({
+  item,
+  open,
+  onClose
+}: {
+  item: TimetableItem | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  if (!item) return null;
+
+  return (
+    <Modal open={open} onClose={onClose} size="sm" title={`${item.code} • ${item.type}`} subtitle={item.course}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Time</div>
+          <div className="mt-1 text-sm font-semibold text-white">{item.timeLabel}</div>
+        </div>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Day</div>
+          <div className="mt-1 text-sm font-semibold text-white">{item.day}</div>
+        </div>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Group</div>
+          <div className="mt-1 text-sm font-semibold text-white">{item.group !== '-' ? item.group : 'Unassigned'}</div>
+        </div>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Room</div>
+          <div className="mt-1 text-sm font-semibold text-white">{item.room !== '-' ? item.room : 'Unassigned'}</div>
+        </div>
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:col-span-2">
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Instructor</div>
+          <div className="mt-1 text-sm font-semibold text-white">{item.instructor !== '-' ? item.instructor : 'Unassigned'}</div>
+        </div>
+        {item.conflictTypes?.length ? (
+          <div className="rounded-2xl border border-[var(--danger)]/30 bg-[var(--danger)]/10 p-4 sm:col-span-2">
+            <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--danger)]">Conflict visibility</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {item.conflictTypes.map((conflict) => (
+                <span key={conflict} className="rounded-full border border-[var(--danger)]/30 bg-[var(--surface)] px-2.5 py-1 text-[11px] font-bold text-[var(--danger)]">
+                  {conflict}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </Modal>
+  );
+}
+
+function DayBoard({
+  day,
+  placements,
+  minStart,
+  totalHours,
+  hourHeight,
+  slots,
+  density,
+  isMobile,
+  showConflictLayer,
+  onOpen
+}: {
+  day: string;
+  placements: TimetableLayoutItem[];
+  minStart: number;
+  totalHours: number;
+  hourHeight: number;
+  slots: number[];
+  density: 'normal' | 'compact';
+  isMobile: boolean;
+  showConflictLayer: boolean;
+  onOpen: (item: TimetableItem) => void;
+}) {
+  return (
+    <div className={cn(
+      'relative rounded-[28px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--bg-raised),var(--surface-2))] shadow-[var(--shadow-sm)]',
+      isMobile ? 'min-w-0' : ''
+    )} style={{ height: `${totalHours * hourHeight}px` }}>
+      {slots.slice(0, -1).map((slot, index) => (
+        <div key={`${day}-${slot}`} className="absolute left-0 right-0 border-t border-dashed border-[var(--border-soft)]" style={{ top: `${index * hourHeight}px` }} />
+      ))}
+      {placements.map((placement) => {
+        const durationHeight = ((placement.item.endMinute - placement.item.startMinute) / 60) * hourHeight - 8;
+        const minimumHeight = isMobile ? 34 : density === 'compact' ? 32 : 36;
+        const height = Math.max(minimumHeight, durationHeight);
+        const top = ((placement.item.startMinute - minStart) / 60) * hourHeight;
+        return (
+          <SessionCard
+            key={placement.item.id}
+            item={placement.item as TimetableItem}
+            placement={placement}
+            top={top}
+            height={height}
+            density={density}
+            isMobile={isMobile}
+            showConflictLayer={showConflictLayer}
+            onOpen={onOpen}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function ListSection({
+  day,
+  items,
+  onOpen,
+  showConflictLayer
+}: {
+  day: string;
+  items: TimetableItem[];
+  onOpen: (item: TimetableItem) => void;
+  showConflictLayer: boolean;
+}) {
+  if (!items.length) return null;
+
+  return (
+    <section className="overflow-hidden rounded-[28px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg-raised)] px-4 py-3 md:px-5">
+        <div>
+          <div className="text-sm font-black tracking-tight text-white">{day}</div>
+          <div className="text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">{items.length} session{items.length === 1 ? '' : 's'}</div>
+        </div>
+      </div>
+      <div className="divide-y divide-[var(--border)]/70">
+        {items.map((item) => {
+          const typeMeta = TYPE_META[item.type] || { tone: '', short: item.type };
+          const metaChips = [
+            item.group !== '-' ? `Group ${item.group}` : null,
+            item.room !== '-' ? `Room ${item.room}` : null,
+            item.instructor !== '-' ? item.instructor : null
+          ].filter(Boolean) as string[];
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onOpen(item)}
+              className="w-full px-4 py-4 text-left transition-colors hover:bg-[var(--bg-raised)]/60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)] md:px-5"
+              aria-label={`${item.code} ${item.type} ${item.timeLabel}`}
+            >
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
+                      {item.type}
+                    </span>
+                    <span className={cn('rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-white', typeMeta.tone)}>
+                      {item.code}
+                    </span>
+                    {showConflictLayer && item.conflictTypes?.length ? (
+                      <span className="rounded-full border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--danger)]">
+                        {item.conflictCount} clash{item.conflictCount === 1 ? '' : 'es'}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 line-clamp-2 text-base font-black leading-snug text-white md:text-lg" title={item.course}>{item.course}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {metaChips.map((chip) => (
+                      <span key={`${item.id}-${chip}`} className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-secondary)]">
+                        {chip}
+                      </span>
+                    ))}
+                  </div>
+                  {showConflictLayer && item.conflictTypes?.length ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {item.conflictTypes.map((conflict) => (
+                        <span key={`${item.id}-${conflict}`} className="rounded-full border border-[var(--danger)]/30 bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-bold text-[var(--danger)]">
+                          {conflict}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="shrink-0 rounded-[20px] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-left md:min-w-[148px]">
+                  <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Time</div>
+                  <div className="mt-1 text-sm font-semibold text-white">{item.timeLabel}</div>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+export function TimetableView({
+  items,
+  rows = [],
+  weekStart = 'SATURDAY',
+  focusDay,
+  onExportCalendar,
+  isLoading = false,
+  showConflictLayer = true
+}: TimetableViewProps) {
+  const isMobile = useIsMobile();
+  const [density, setDensity] = useState<'normal' | 'compact'>('normal');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [viewModeReady, setViewModeReady] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<TimetableItem | null>(null);
+  const [mobileDay, setMobileDay] = useState('');
+
+  const sourceItems = useMemo(() => {
     if (items?.length) return items;
-    return rows.map(rowToScheduleItem).filter(Boolean) as ScheduleItem[];
+    return rows.map(rowToTimetableItem).filter(Boolean) as TimetableItem[];
   }, [items, rows]);
 
-  const orderedDays = useMemo(() => getOrderedScheduleDays(weekStart, focusDay), [weekStart, focusDay]);
+  const orderedDays = useMemo(() => {
+    const days = getOrderedScheduleDays(weekStart, focusDay);
+    return days.length ? days : [...DEFAULT_DAY_ORDER];
+  }, [focusDay, weekStart]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || viewModeReady) return;
+    const stored = window.localStorage.getItem(VIEW_MODE_KEY);
+    if (stored === 'grid' || stored === 'list') {
+      setViewMode(stored);
+    } else {
+      setViewMode(isMobile ? 'list' : 'grid');
+    }
+    setViewModeReady(true);
+  }, [isMobile, viewModeReady]);
+
+  const updateViewMode = (nextMode: ViewMode) => {
+    setViewMode(nextMode);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(VIEW_MODE_KEY, nextMode);
+    }
+  };
 
   useEffect(() => {
     const preferredDay = focusDay?.trim().substring(0, 3);
@@ -129,424 +536,246 @@ export function TimetableView({ items, rows = [], weekStart, focusDay, onExportC
       return;
     }
 
-    const firstWithItems = orderedDays.find((day) => canonicalItems.some((item) => item.day === day));
-    setMobileDay(firstWithItems || orderedDays[0] || '');
-  }, [orderedDays, canonicalItems, focusDay]);
+    const firstDayWithItems = orderedDays.find((day) => sourceItems.some((item) => item.day === day));
+    setMobileDay((current) => (current && orderedDays.includes(current as (typeof orderedDays)[number]) ? current : firstDayWithItems || orderedDays[0] || ''));
+  }, [focusDay, orderedDays, sourceItems]);
 
-  const itemsByDay = useMemo(
-    () => Object.fromEntries(orderedDays.map((day) => [day, canonicalItems.filter((item) => item.day === day)])) as Record<string, ScheduleItem[]>,
-    [canonicalItems, orderedDays]
-  );
-  const hasItems = canonicalItems.length > 0;
-  const { startMinute, endMinute } = useMemo(() => getScheduleBounds(canonicalItems), [canonicalItems]);
-  const hourMarks = useMemo(() => buildHourMarks(startMinute, endMinute), [startMinute, endMinute]);
-  const totalHours = Math.max((endMinute - startMinute) / 60, 1);
+  const boardMetrics = useMemo(() => {
+    const minStart = sourceItems.length ? Math.max(360, Math.floor(Math.min(...sourceItems.map((item) => item.startMinute)) / 60) * 60 - 60) : 420;
+    const maxEnd = sourceItems.length ? Math.min(1320, Math.ceil(Math.max(...sourceItems.map((item) => item.endMinute)) / 60) * 60 + 60) : 1080;
+    const hourHeight = isMobile ? (density === 'compact' ? 52 : 60) : density === 'compact' ? 68 : 92;
+    const totalHours = Math.max(1, (maxEnd - minStart) / 60);
+    const slots = Array.from({ length: totalHours + 1 }, (_, index) => minStart + index * 60);
+    return { minStart, maxEnd, hourHeight, totalHours, slots };
+  }, [density, isMobile, sourceItems]);
 
-  const showDesktopGrid = !isMobile && viewMode === 'grid';
-  const showMobileGrid = isMobile && viewMode === 'grid';
-  const gridMinWidth = GRID_TIME_RAIL_WIDTH + orderedDays.length * GRID_MIN_COLUMN_WIDTH;
-  const selectedMobileDay = mobileDay && orderedDays.includes(mobileDay as (typeof orderedDays)[number]) ? mobileDay : orderedDays[0];
-  const selectedMobileIndex = Math.max(orderedDays.indexOf(selectedMobileDay as (typeof orderedDays)[number]), 0);
-  const selectedMobileItems = selectedMobileDay ? (itemsByDay[selectedMobileDay] || []) : [];
-  const mobilePlacements = layoutDayItems(selectedMobileItems);
-  const mobileTimeRailWidth = 56;
+  const dayBuckets = useMemo(() => orderedDays.map((day) => {
+    const dayItems = sourceItems.filter((item) => item.day === day);
+    return {
+      day,
+      items: dayItems,
+      total: dayItems.length,
+      placements: layoutDayItems(dayItems)
+    };
+  }), [orderedDays, sourceItems]);
 
-  const handleModeChange = (mode: ViewMode) => {
-    setViewMode(mode);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(TIMETABLE_VIEW_KEY, mode);
-    }
-  };
+  const visibleDayBuckets = useMemo(() => dayBuckets.filter((bucket) => bucket.total > 0), [dayBuckets]);
+
+  const activeMobileDay = orderedDays.includes(mobileDay as (typeof orderedDays)[number]) ? mobileDay : orderedDays[0] || '';
+  const mobileIndex = Math.max(orderedDays.indexOf(activeMobileDay as (typeof orderedDays)[number]), 0);
+  const mobileBucket = dayBuckets.find((bucket) => bucket.day === activeMobileDay) || dayBuckets[0];
 
   if (isLoading) {
     return (
-      <div className="flex h-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg)] shadow-[var(--shadow-md)] animate-panel-pop">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border-soft)] bg-[var(--bg-raised)]/50 p-4 md:p-6">
-          <div className="space-y-2">
-            <Skeleton className="h-8 w-40" />
-            <Skeleton className="h-4 w-64" />
+      <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-4 md:px-6">
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Timetable intelligence</div>
+            <h3 className="mt-1 text-xl font-black tracking-tight text-white">Weekly board</h3>
           </div>
-          <div className="flex gap-3">
-            <Skeleton className="h-10 w-28" />
-            <Skeleton className="h-10 w-32" />
-          </div>
+          <span className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+            Loading
+          </span>
         </div>
-        <div className="flex-1 p-4 md:p-6 lg:p-8">
-          <div className="space-y-4">
-            {[...Array(4)].map((_, index) => (
-              <div key={index} className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
-                <div className="flex items-center justify-between border-b border-[var(--border-soft)] bg-[var(--surface-2)] px-4 py-3">
-                  <Skeleton className="h-4 w-20" />
-                  <Skeleton className="h-3 w-12" />
-                </div>
-                <div className="space-y-3 p-3">
-                  <Skeleton className="h-28 w-full rounded-2xl" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <div className="px-4 py-10 text-center text-sm text-[var(--text-secondary)] md:px-6">Loading timetable sessions…</div>
       </div>
     );
   }
 
-  return (
-    <div className="flex h-full flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg)] shadow-[var(--shadow-md)] animate-panel-pop">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border-soft)] bg-[var(--bg-raised)]/50 p-4 md:p-6">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-xl font-bold tracking-tight text-white md:text-2xl">Timetable</h2>
-          <p className="text-sm text-[var(--text-secondary)]">
-            {isMobile
-              ? 'On phone, Grid shows one day at a time with clear day navigation. List stays available for scanning the whole week.'
-              : 'Switch between Grid and List on desktop using the same real schedule data.'}
-          </p>
-        </div>
-
-        <div className="flex w-full flex-col gap-3 sm:w-auto sm:items-end">
-          <div className="flex items-center justify-between gap-3 sm:justify-end">
-            <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-1 shadow-inner">
-              <button
-                type="button"
-                onClick={() => handleModeChange('grid')}
-                className={cn(
-                  'rounded-lg px-3 py-1.5 text-sm font-bold transition-all md:px-4',
-                  viewMode === 'grid' ? 'border border-[var(--border)] bg-[var(--surface-3)] text-white shadow-md' : 'text-[var(--text-muted)] hover:text-white'
-                )}
-              >
-                Grid
-              </button>
-              <button
-                type="button"
-                onClick={() => handleModeChange('list')}
-                className={cn(
-                  'rounded-lg px-3 py-1.5 text-sm font-bold transition-all md:px-4',
-                  viewMode === 'list' ? 'border border-[var(--border)] bg-[var(--surface-3)] text-white shadow-md' : 'text-[var(--text-muted)] hover:text-white'
-                )}
-              >
-                List
-              </button>
-            </div>
-
-            <Button variant="secondary" size="sm" className="gap-2" onClick={onExportCalendar}>
-              <span className="material-symbols-outlined text-[18px]">calendar_month</span>
-              <span className="hidden sm:inline">Export ICS</span>
-            </Button>
+  if (!sourceItems.length) {
+    return (
+      <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-4 md:px-6">
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Timetable intelligence</div>
+            <h3 className="mt-1 text-xl font-black tracking-tight text-white">Weekly board</h3>
           </div>
-
-          {isMobile ? (
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--gold)]">
-              {viewMode === 'grid' ? 'Mobile grid' : 'List view'}
-            </div>
-          ) : null}
+          <div className="flex items-center gap-2">
+            {onExportCalendar ? (
+              <Button variant="secondary" onClick={() => void onExportCalendar()} className="gap-2">
+                <span className="material-symbols-outlined text-[18px]">calendar_month</span>
+                Export calendar
+              </Button>
+            ) : null}
+            <ViewToggle viewMode={viewMode} onChange={updateViewMode} />
+          </div>
         </div>
+        <EmptyState
+          icon="calendar_month"
+          title="No timetable sessions match the current view"
+          description="Try broadening the active filters or reset the intelligence controls to bring sessions back into view."
+        />
       </div>
+    );
+  }
 
-      <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-        {!hasItems ? (
-          <div className="rounded-[var(--radius-xl)] border border-dashed border-[var(--border)] bg-[var(--surface)] p-8 text-center shadow-[var(--shadow-lg)]">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] text-[var(--gold)]">
-              <span className="material-symbols-outlined text-[26px]">event_busy</span>
-            </div>
-            <h3 className="mt-4 text-lg font-bold text-white">No scheduled sessions yet</h3>
-            <p className="mt-2 text-sm text-[var(--text-secondary)]">
-              Add real session day/time details in Courses and they will appear in both the list and grid timetable views.
+  const effectiveViewMode = viewModeReady ? viewMode : isMobile ? 'list' : 'grid';
+
+  return (
+    <>
+      <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
+        <div className="flex flex-col gap-3 border-b border-[var(--border)] px-4 py-4 md:flex-row md:items-center md:justify-between md:px-6">
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Timetable intelligence</div>
+            <h3 className="mt-1 text-xl font-black tracking-tight text-white">
+              {effectiveViewMode === 'list' ? 'List view' : 'Weekly board'}
+            </h3>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              {effectiveViewMode === 'list'
+                ? 'List View groups sessions by day and keeps full course names and fuller metadata readable on both desktop and mobile.'
+                : isMobile
+                  ? 'Grid View keeps a single focused day on mobile so dense schedules stay readable. Tap any session for full details.'
+                  : 'Grid View adapts card density so busy days stay readable without losing the timetable intelligence controls.'}
             </p>
           </div>
-        ) : showDesktopGrid ? (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow-lg)]">
-              <div>
-                <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--gold)]">Full week grid</div>
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                  All {orderedDays.length} days are rendered. On narrower desktop widths, scroll horizontally to reveal the full week.
-                </p>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
-                <span className="material-symbols-outlined text-[16px]">swap_horiz</span>
-                Horizontal scroll
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
-              <div className="overflow-x-auto overflow-y-hidden pb-2">
-                <div style={{ minWidth: `${gridMinWidth}px` }}>
-                  <div className="grid border-b border-[var(--border)] bg-[var(--surface-2)]" style={{ gridTemplateColumns: `${GRID_TIME_RAIL_WIDTH}px repeat(${orderedDays.length}, minmax(${GRID_MIN_COLUMN_WIDTH}px, 1fr))` }}>
-                    <div className="sticky left-0 z-20 border-r border-[var(--border)] bg-[var(--surface-2)]" />
-                    {orderedDays.map((day) => (
-                      <div key={day} className="border-r border-[var(--border-soft)] px-4 py-4 text-center text-xs font-bold uppercase tracking-[0.15em] text-[var(--gold)] last:border-r-0">
-                        {day}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="grid" style={{ gridTemplateColumns: `${GRID_TIME_RAIL_WIDTH}px repeat(${orderedDays.length}, minmax(${GRID_MIN_COLUMN_WIDTH}px, 1fr))` }}>
-                    <div className="sticky left-0 z-10 relative border-r border-[var(--border)] bg-[var(--surface)]">
-                      {hourMarks.map((mark, index) => (
-                        <div
-                          key={mark}
-                          className="absolute inset-x-0 px-3 text-right text-[11px] font-bold text-[var(--text-muted)]"
-                          style={{ top: `${index * GRID_ROW_HEIGHT - 8}px` }}
-                        >
-                          {formatMinute(mark)}
-                        </div>
-                      ))}
-                    </div>
-
-                    {orderedDays.map((day) => {
-                      const dayItems = itemsByDay[day] || [];
-                      const placements = layoutDayItems(dayItems);
-
-                      return (
-                        <div
-                          key={day}
-                          className="relative border-r border-[var(--border-soft)] last:border-r-0"
-                          style={{ minHeight: `${totalHours * GRID_ROW_HEIGHT}px` }}
-                        >
-                          {hourMarks.slice(0, -1).map((mark, index) => (
-                            <div
-                              key={mark}
-                              className="pointer-events-none absolute inset-x-0 border-t border-[var(--border-soft)]/70"
-                              style={{ top: `${index * GRID_ROW_HEIGHT}px` }}
-                            />
-                          ))}
-
-                          {dayItems.length === 0 ? (
-                            <div className="pointer-events-none absolute inset-x-3 top-3 rounded-xl border border-dashed border-[var(--border)]/80 bg-[var(--surface-2)]/70 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
-                              No sessions
-                            </div>
-                          ) : null}
-
-                          {placements.map(({ item, lane, lanes }) => {
-                            const top = ((item.startMinute - startMinute) / 60) * GRID_ROW_HEIGHT;
-                            const height = Math.max(((item.endMinute - item.startMinute) / 60) * GRID_ROW_HEIGHT, 56);
-                            const width = `calc(${100 / lanes}% - 8px)`;
-                            const left = `calc(${(lane * 100) / lanes}% + 4px)`;
-                            const tone = getItemTone(item);
-
-                            return (
-                              <article
-                                key={item.id}
-                                className={cn('absolute overflow-hidden rounded-2xl border px-3 py-2 shadow-[var(--shadow-md)] transition-transform hover:scale-[1.01]', tone)}
-                                style={{ top: `${top + 4}px`, left, width, height: `${height - 8}px` }}
-                              >
-                                <div className="flex h-full flex-col justify-between gap-2">
-                                  <div className="space-y-1 min-w-0">
-                                    <div className="truncate text-xs font-bold text-white">{item.course}</div>
-                                    <div className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-white/80">{item.type}</div>
-                                  </div>
-
-                                  <div className="space-y-1 text-[10px] text-white/85">
-                                    <div className="truncate font-semibold">{item.group}</div>
-                                    <div className="truncate">{item.room}</div>
-                                    <div className="truncate">{formatMinute(item.startMinute)} → {formatMinute(item.endMinute)}</div>
-                                    {height >= 96 ? <div className="truncate text-white/70">{item.instructor}</div> : null}
-                                  </div>
-                                </div>
-                              </article>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="flex flex-wrap gap-2">
+            {onExportCalendar ? (
+              <Button variant="secondary" onClick={() => void onExportCalendar()} className="gap-2">
+                <span className="material-symbols-outlined text-[18px]">calendar_month</span>
+                Export calendar
+              </Button>
+            ) : null}
+            <ViewToggle viewMode={effectiveViewMode} onChange={updateViewMode} />
+            {effectiveViewMode === 'grid' ? (
+              <Button variant={density === 'compact' ? 'primary' : 'secondary'} onClick={() => setDensity((current) => current === 'compact' ? 'normal' : 'compact')} className="gap-2">
+                <span className="material-symbols-outlined text-[18px]">{density === 'compact' ? 'density_small' : 'unfold_more'}</span>
+                {density === 'compact' ? 'Compact on' : 'Compact off'}
+              </Button>
+            ) : null}
+            <span className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
+              {sourceItems.length} session{sourceItems.length === 1 ? '' : 's'} visible
+            </span>
           </div>
-        ) : showMobileGrid ? (
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-lg)]">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--gold)]">Mobile grid</div>
-                  <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                    One day at a time, placed by real start/end times.
-                  </p>
-                </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">
-                  {selectedMobileIndex + 1} / {orderedDays.length}
-                </div>
-              </div>
+        </div>
 
-              <div className="mt-4 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setMobileDay(orderedDays[Math.max(selectedMobileIndex - 1, 0)])}
-                  disabled={selectedMobileIndex === 0}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-2)] text-white disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label="Previous day"
-                >
-                  <span className="material-symbols-outlined text-[20px]">chevron_left</span>
-                </button>
-
-                <div className="min-w-0 flex-1 overflow-x-auto">
-                  <div className="flex min-w-max gap-2 pr-1">
-                    {orderedDays.map((day) => {
-                      const isActive = day === selectedMobileDay;
-                      const count = itemsByDay[day]?.length || 0;
-                      return (
-                        <button
-                          key={day}
-                          type="button"
-                          onClick={() => setMobileDay(day)}
-                          className={cn(
-                            'rounded-xl border px-3 py-2 text-left transition-all',
-                            isActive
-                              ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-white shadow-[var(--shadow-sm)]'
-                              : 'border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-secondary)]'
-                          )}
-                        >
-                          <div className="text-xs font-bold uppercase tracking-[0.12em]">{day}</div>
-                          <div className="mt-0.5 text-[11px]">{count} item{count === 1 ? '' : 's'}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setMobileDay(orderedDays[Math.min(selectedMobileIndex + 1, orderedDays.length - 1)])}
-                  disabled={selectedMobileIndex === orderedDays.length - 1}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-2)] text-white disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label="Next day"
-                >
-                  <span className="material-symbols-outlined text-[20px]">chevron_right</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
-              <div className="grid border-b border-[var(--border)] bg-[var(--surface-2)]" style={{ gridTemplateColumns: `${mobileTimeRailWidth}px 1fr` }}>
-                <div className="border-r border-[var(--border)]" />
-                <div className="px-4 py-4 text-center text-sm font-bold uppercase tracking-[0.15em] text-[var(--gold)]">{selectedMobileDay}</div>
-              </div>
-
-              <div className="grid" style={{ gridTemplateColumns: `${mobileTimeRailWidth}px 1fr` }}>
-                <div className="relative border-r border-[var(--border)] bg-[var(--surface)]">
-                  {hourMarks.map((mark, index) => (
-                    <div
-                      key={mark}
-                      className="absolute inset-x-0 px-2 text-right text-[10px] font-bold text-[var(--text-muted)]"
-                      style={{ top: `${index * GRID_ROW_HEIGHT - 7}px` }}
-                    >
-                      {formatMinute(mark)}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="relative" style={{ minHeight: `${totalHours * GRID_ROW_HEIGHT}px` }}>
-                  {hourMarks.slice(0, -1).map((mark, index) => (
-                    <div
-                      key={mark}
-                      className="pointer-events-none absolute inset-x-0 border-t border-[var(--border-soft)]/70"
-                      style={{ top: `${index * GRID_ROW_HEIGHT}px` }}
-                    />
-                  ))}
-
-                  {selectedMobileItems.length === 0 ? (
-                    <div className="absolute inset-x-3 top-3 rounded-xl border border-dashed border-[var(--border)]/80 bg-[var(--surface-2)]/70 px-3 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
-                      No sessions scheduled for {selectedMobileDay}
-                    </div>
-                  ) : null}
-
-                  {mobilePlacements.map(({ item, lane, lanes }) => {
-                    const top = ((item.startMinute - startMinute) / 60) * GRID_ROW_HEIGHT;
-                    const height = Math.max(((item.endMinute - item.startMinute) / 60) * GRID_ROW_HEIGHT, 68);
-                    const width = `calc(${100 / lanes}% - 8px)`;
-                    const left = `calc(${(lane * 100) / lanes}% + 4px)`;
-                    const tone = getItemTone(item);
-
+        {effectiveViewMode === 'list' ? (
+          <div className="space-y-4 px-4 py-4 md:px-6">
+            {visibleDayBuckets.map((bucket) => (
+              <ListSection
+                key={bucket.day}
+                day={bucket.day}
+                items={bucket.items}
+                onOpen={setSelectedItem}
+                showConflictLayer={showConflictLayer}
+              />
+            ))}
+          </div>
+        ) : isMobile ? (
+          <div className="space-y-4 px-4 py-4 md:px-6">
+            <div className="flex items-center justify-between gap-3 rounded-[24px] border border-[var(--border)] bg-[var(--bg-raised)] p-3 shadow-[var(--shadow-sm)]">
+              <Button
+                variant="secondary"
+                onClick={() => setMobileDay(orderedDays[Math.max(mobileIndex - 1, 0)])}
+                disabled={mobileIndex === 0}
+                className="h-11 w-11 min-w-11 justify-center rounded-2xl px-0"
+              >
+                <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+              </Button>
+              <div className="min-w-0 flex-1 overflow-x-auto">
+                <div className="flex min-w-max gap-2 pr-1">
+                  {dayBuckets.map((bucket) => {
+                    const active = bucket.day === activeMobileDay;
                     return (
-                      <article
-                        key={item.id}
-                        className={cn('absolute overflow-hidden rounded-2xl border px-3 py-3 shadow-[var(--shadow-md)] active:scale-[0.99]', tone)}
-                        style={{ top: `${top + 4}px`, left, width, height: `${height - 8}px` }}
+                      <button
+                        key={bucket.day}
+                        type="button"
+                        onClick={() => setMobileDay(bucket.day)}
+                        className={cn(
+                          'rounded-2xl border px-3 py-2 text-left transition-all',
+                          active
+                            ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-white shadow-[var(--shadow-sm)]'
+                            : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]'
+                        )}
                       >
-                        <div className="flex h-full flex-col justify-between gap-2">
-                          <div className="space-y-1 min-w-0">
-                            <div className="line-clamp-2 text-sm font-bold leading-snug text-white">{item.course}</div>
-                            <div className="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-white/80">{item.type}</div>
-                          </div>
-                          <div className="space-y-1 text-[11px] text-white/90">
-                            <div className="truncate font-semibold">{item.group}</div>
-                            <div className="truncate">{item.room}</div>
-                            <div className="truncate">{formatMinute(item.startMinute)} → {formatMinute(item.endMinute)}</div>
-                          </div>
-                        </div>
-                      </article>
+                        <div className="text-xs font-black uppercase tracking-[0.12em]">{bucket.day}</div>
+                        <div className="mt-0.5 text-[10px] font-semibold">{bucket.total} session{bucket.total === 1 ? '' : 's'}</div>
+                      </button>
                     );
                   })}
                 </div>
               </div>
+              <Button
+                variant="secondary"
+                onClick={() => setMobileDay(orderedDays[Math.min(mobileIndex + 1, orderedDays.length - 1)])}
+                disabled={mobileIndex === orderedDays.length - 1}
+                className="h-11 w-11 min-w-11 justify-center rounded-2xl px-0"
+              >
+                <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-[58px_minmax(0,1fr)] gap-3">
+              <div className="relative">
+                <div style={{ height: `${boardMetrics.totalHours * boardMetrics.hourHeight}px` }} className="relative">
+                  {boardMetrics.slots.slice(0, -1).map((slot, index) => (
+                    <div key={slot} className="absolute left-0 right-0" style={{ top: `${index * boardMetrics.hourHeight}px` }}>
+                      <div className="pr-2 text-right text-[10px] font-semibold text-[var(--text-secondary)]">{formatMinute(slot)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {mobileBucket ? (
+                <DayBoard
+                  day={mobileBucket.day}
+                  placements={mobileBucket.placements}
+                  minStart={boardMetrics.minStart}
+                  totalHours={boardMetrics.totalHours}
+                  hourHeight={boardMetrics.hourHeight}
+                  slots={boardMetrics.slots}
+                  density={density}
+                  isMobile
+                  showConflictLayer={showConflictLayer}
+                  onOpen={setSelectedItem}
+                />
+              ) : null}
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-lg)]">
-              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--gold)]">Weekly agenda</div>
-              <p className="mt-2 text-sm text-[var(--text-secondary)]">
-                The same real schedule items are grouped day by day here for easier scanning.
-              </p>
-            </div>
-
-            {orderedDays.map((day) => {
-              const dayItems = [...(itemsByDay[day] || [])].sort((a, b) => a.startMinute - b.startMinute);
-
-              return (
-                <section key={day} className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
-                  <div className="flex items-center justify-between gap-3 border-b border-[var(--border-soft)] bg-[var(--surface-2)] px-4 py-3">
-                    <div className="text-xs font-bold uppercase tracking-[0.15em] text-[var(--gold)]">{day}</div>
-                    <div className="text-[11px] text-[var(--text-muted)]">{dayItems.length} item{dayItems.length === 1 ? '' : 's'}</div>
+          <div className="overflow-x-auto">
+            <div className="min-w-[1080px] px-4 py-4 md:px-6 xl:min-w-[1180px]">
+              <div className="grid grid-cols-[76px_repeat(7,minmax(132px,1fr))] gap-3 text-center text-[11px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                <div className="rounded-2xl border border-transparent px-2 py-3 text-left">Time</div>
+                {dayBuckets.map((bucket) => (
+                  <div key={bucket.day} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-3">
+                    <div className="text-sm font-black tracking-normal text-white">{bucket.day}</div>
+                    <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-secondary)]">{bucket.total} session{bucket.total === 1 ? '' : 's'}</div>
                   </div>
+                ))}
+              </div>
 
-                  {dayItems.length ? (
-                    <div className="space-y-3 p-3">
-                      {dayItems.map((item) => {
-                        const isConflict = item.status === 'CONFLICT';
-                        return (
-                          <article
-                            key={item.id}
-                            className={cn('rounded-2xl border bg-[var(--bg-raised)] p-4 transition-all hover:shadow-[var(--shadow-md)]', isConflict ? 'border-[var(--danger)]/40' : 'border-[var(--border)]')}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0 flex-1">
-                                <div className="break-words text-sm font-bold leading-snug text-white">{item.course}</div>
-                                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-                                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 font-semibold text-[var(--gold-soft)]">{item.type}</span>
-                                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 font-semibold text-white">{item.group}</span>
-                                </div>
-                              </div>
-                              {isConflict ? <span className="material-symbols-outlined shrink-0 text-lg text-[var(--danger)]">warning</span> : null}
-                            </div>
+              <div className="mt-3 grid grid-cols-[76px_repeat(7,minmax(132px,1fr))] gap-3">
+                <div className="relative">
+                  <div style={{ height: `${boardMetrics.totalHours * boardMetrics.hourHeight}px` }} className="relative">
+                    {boardMetrics.slots.slice(0, -1).map((slot, index) => (
+                      <div key={slot} className="absolute left-0 right-0" style={{ top: `${index * boardMetrics.hourHeight}px` }}>
+                        <div className="pr-2 text-right text-[11px] font-semibold text-[var(--text-secondary)]">{formatMinute(slot)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
-                            <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-                              <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2">
-                                <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Time</div>
-                                <div className="mt-1 font-semibold text-white">{formatMinute(item.startMinute)} → {formatMinute(item.endMinute)}</div>
-                              </div>
-                              <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2">
-                                <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Room</div>
-                                <div className="mt-1 font-semibold text-white">{item.room}</div>
-                              </div>
-                              <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2 sm:col-span-2">
-                                <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Instructor</div>
-                                <div className="mt-1 break-words font-semibold text-white">{item.instructor}</div>
-                              </div>
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="p-4 text-sm text-[var(--text-secondary)]">No scheduled classes for {day}.</div>
-                  )}
-                </section>
-              );
-            })}
+                {dayBuckets.map((bucket) => (
+                  <DayBoard
+                    key={bucket.day}
+                    day={bucket.day}
+                    placements={bucket.placements}
+                    minStart={boardMetrics.minStart}
+                    totalHours={boardMetrics.totalHours}
+                    hourHeight={boardMetrics.hourHeight}
+                    slots={boardMetrics.slots}
+                    density={density}
+                    isMobile={false}
+                    showConflictLayer={showConflictLayer}
+                    onOpen={setSelectedItem}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
-    </div>
+
+      <SessionDetailsModal item={selectedItem} open={Boolean(selectedItem)} onClose={() => setSelectedItem(null)} />
+    </>
   );
 }

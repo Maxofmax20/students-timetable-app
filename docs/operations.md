@@ -5,10 +5,14 @@
 - App service: `students-timetable.service`
 - Reverse proxy: Caddy
 - App path: `/home/ubuntu/.openclaw/workspace/students-timetable-app`
+- Canonical repo path: `/home/ubuntu/.openclaw/workspace/students-timetable-app`
+
+> Safety note: do not treat `/home/ubuntu/timetable` as the live production source of truth.
 
 ## Canonical architecture
-- Product model: Workspace / Course / Group / Instructor / Room
-- Auth: NextAuth credentials-only (OAuth providers currently disabled intentionally)
+- Product model: Workspace / Course / SessionEntry / Group / Instructor / Room
+- Auth: NextAuth credentials-based auth
+- Email flows: SMTP-backed verification / reset / OTP support
 - DB: PostgreSQL
 - Realtime: deferred/removed from live path for this release
 
@@ -16,8 +20,11 @@
 Active env file:
 - `/home/ubuntu/.openclaw/workspace/students-timetable-app/.env`
 
-Current permission target:
-- `600`
+Environment template:
+- `/home/ubuntu/.openclaw/workspace/students-timetable-app/.env.example`
+
+Recommended file permissions:
+- `.env`: `600`
 - owner: `ubuntu:ubuntu`
 
 ## Build / deploy
@@ -38,11 +45,41 @@ curl -I https://demostb.duckdns.org/auth
 curl -I https://demostb.duckdns.org/workspace
 ```
 
+Batch 9 canonical verification commands:
+```bash
+npm run verify:health
+npm run verify:smoke
+npm run verify:release
+```
+
+Command intent:
+- `verify:health`: service status + `/api/health` + key route reachability + local build freshness checks.
+- `verify:smoke`: focused route/API smoke checks; includes authenticated checks only if `ST_VERIFY_EMAIL` + `ST_VERIFY_PASSWORD` are provided at runtime.
+- `verify:release`: post-deploy gate that composes health then smoke and fails fast on errors.
+
+Limitations (explicit):
+- Runtime commit hash is not currently exposed by the app; stale-runtime detection is limited to build freshness and live reachability behavior.
+- Legacy `scripts/batch7_closeout_verify.mjs` is deprecated and intentionally non-runnable.
+
 ## Database
 - Runtime DB: PostgreSQL
 - Host: `127.0.0.1:5432`
 - DB name: `students_timetable`
 - DB user: `students_timetable_app`
+
+## Bulk import operations note
+Current CSV import flows are available inside the product for:
+- Rooms
+- Groups
+- Courses + Sessions
+
+They are intentionally:
+- preview-first
+- create-only
+- duplicate-explicit
+- non-destructive
+
+See `docs/import-csv.md` for format details.
 
 ## Backups
 Backup script:
@@ -84,10 +121,13 @@ Do not re-enable until:
 - end-to-end login/logout/session tests pass in production
 - logs stay clean
 
-## GitHub sync status
-The local repo is committed, but push from this VPS is currently blocked because GitHub credentials are not configured on the machine.
+## Git / sync expectations
+The expected steady state is:
+- local repo clean
+- GitHub remote up to date
+- VPS runtime built from the canonical live repo path
 
 ## Recommended next maintenance tasks
-- configure authenticated Git push from VPS or push from a trusted local environment
-- review and remove legacy timetable data structures once no longer needed
-- add automated regression coverage for auth, CRUD, and account flows
+- add automated regression coverage for auth, CRUD, timetable, and import flows
+- consider bulk instructor import if operationally needed
+- review legacy timetable-era schema only in a deliberate future cleanup phase

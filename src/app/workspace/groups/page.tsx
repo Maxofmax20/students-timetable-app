@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Modal } from '@/components/ui/Modal';
@@ -13,7 +13,20 @@ import { useToast } from '@/components/ui/Toast';
 import { BulkActionBar } from '@/components/workspace/BulkActionBar';
 import { useBulkSelection } from '@/hooks/useBulkSelection';
 import type { GroupApiItem } from '@/types';
-import { cn } from '@/lib/utils';
+
+const GROUPS_TEMPLATE_CSV = `code,name,parentCode
+A,Main Group A,
+A1,Subgroup A1,A
+A2,Subgroup A2,A
+B,Main Group B,
+B1,Subgroup B1,B`;
+
+const GROUPS_IMPORT_HELP = [
+  'Supported columns: code, optional name, and optional parentCode/mainGroupCode. Code-only rows are also accepted.',
+  'If a subgroup code looks like A1 or B2 and parentCode is omitted, the import safely infers the main group code from the subgroup code.',
+  'Subgroups must resolve to an existing main group or a main-group row inside the same CSV preview. Orphan subgroup imports are rejected.',
+  'Choose import mode: create only, update existing, or create + update. Preview clearly shows each row outcome before confirmation.'
+];
 
 export default function GroupsPage() {
   const { status } = useSession({ required: true, onUnauthenticated() { window.location.href = '/auth'; } });
@@ -23,12 +36,12 @@ export default function GroupsPage() {
   const [groups, setGroups] = useState<GroupApiItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<GroupApiItem | null>(null);
-  const [formData, setFormData] = useState({ code: '', name: '' });
+  const [formData, setFormData] = useState({ code: '', name: '', parentGroupId: '__none__' });
   const [actionLoading, setActionLoading] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState('');
@@ -39,7 +52,9 @@ export default function GroupsPage() {
       const res = await fetch('/api/v1/groups');
       const data = await res.json();
       setGroups(data.data?.items || []);
-    } catch (err) {
+      setCanWrite(Boolean(data.data?.access?.canWrite ?? true));
+      setCanImport(Boolean(data.data?.access?.canImport ?? true));
+    } catch {
       toast('Failed to load groups', 'error');
     } finally {
       setLoading(false);
@@ -48,14 +63,97 @@ export default function GroupsPage() {
 
   useEffect(() => {
     if (status === 'authenticated') {
-      fetchGroups();
+      void fetchGroups();
     }
   }, [status]);
 
-  const handleSave = async () => {
-    if (!formData.code || !formData.name) return toast('Code and name are required', 'error');
+  const sortedGroups = useMemo(() => sortGroupsForDisplay(groups), [groups]);
+  const filteredGroups = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return sortedGroups;
+    return sortedGroups.filter((group) => {
+      const parentBits = `${group.parentGroup?.code || ''} ${group.parentGroup?.name || ''}`.toLowerCase();
+      return (
+        group.code.toLowerCase().includes(q) ||
+        group.name.toLowerCase().includes(q) ||
+        parentBits.includes(q) ||
+        groupKindLabel(group).toLowerCase().includes(q)
+      );
+    });
+  }, [search, sortedGroups]);
+
+  const groupedSections = useMemo(() => groupGroupsByRoot(filteredGroups), [filteredGroups]);
+  const selection = useBulkSelection(filteredGroups.map((group) => group.id));
+
+  const exportSelectedCsv = () => {
+    const selectedRows = filteredGroups.filter((group) => selection.selected.has(group.id));
+    if (!selectedRows.length) return toast('Select groups first. Export scope is selected rows only.', 'error');
+    const header = ['code', 'name', 'parent_code'];
+    const lines = [header.map(csvCell).join(','), ...selectedRows.map((group) => [group.code, group.name, group.parentGroup?.code || ''].map(csvCell).join(','))];
+    const dateTag = new Date().toISOString().slice(0, 10);
+    downloadFile(`groups-selected-${dateTag}.csv`, lines.join('\n'), 'text/csv;charset=utf-8');
+    toast(`Exported ${selectedRows.length} selected group row(s). Scope: selected items only.`);
+  };
+
+  const runBulkDelete = async () => {
+    const ids = Array.from(selection.selected);
+    if (!ids.length) return;
     setActionLoading(true);
-    
+    try {
+      const res = await fetch('/api/v1/groups/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', ids }) });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.message || 'Bulk delete failed');
+      if (payload.failed?.length) {
+        const childBlocked = payload.failed.find((f: { reason: string }) => f.reason === 'GROUP_HAS_CHILDREN');
+        if (childBlocked) toast('Some selected groups were blocked because they still have child subgroups (GROUP_HAS_CHILDREN).', 'error');
+      }
+      selection.clear();
+      setBulkDeleteOpen(false);
+      setBulkConfirmText('');
+      toast(`Bulk delete complete: ${payload.successCount}/${payload.requested} deleted.`);
+      await fetchGroups();
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Bulk delete failed', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const selectedSection = useMemo(
+    () => groupedSections.find((section) => section.rootCode === selectedSectionKey) ?? null,
+    [groupedSections, selectedSectionKey]
+  );
+
+  const toggleSection = (key: string) => {
+    if (search.trim()) return;
+    setCollapsedSections((current) => ({
+      ...current,
+      [key]: !(current[key] ?? true)
+    }));
+  };
+
+  const mainGroupOptions = useMemo(() => [
+    { value: '__none__', label: 'Main group', description: 'Top-level group with no parent' },
+    ...sortedGroups
+      .filter((group) => !group.parentGroupId)
+      .map((group) => ({
+        value: group.id,
+        label: group.code,
+        description: group.name,
+        keywords: `${group.code} ${group.name}`
+      }))
+  ], [sortedGroups]);
+
+  const handleSave = async () => {
+    if (!canWrite) {
+      toast('Viewer mode: group updates are disabled.', 'error');
+      return;
+    }
+    if (!formData.code.trim() || !formData.name.trim()) {
+      return toast('Code and name are required', 'error');
+    }
+
+    setActionLoading(true);
     const isEdit = modalMode === 'edit';
     const url = isEdit ? `/api/v1/groups/${selectedGroup?.id}` : '/api/v1/groups';
     const method = isEdit ? 'PATCH' : 'POST';
@@ -64,14 +162,18 @@ export default function GroupsPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          code: formData.code.trim().toUpperCase(),
+          name: formData.name.trim(),
+          parentGroupId: formData.parentGroupId === '__none__' ? null : formData.parentGroupId
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || `Failed to ${modalMode} group`);
-      
+
       toast(`Group ${isEdit ? 'updated' : 'created'} successfully`);
       setIsModalOpen(false);
-      fetchGroups();
+      await fetchGroups();
     } catch (err: unknown) {
       toast(err instanceof Error ? err.message : 'Request failed', 'error');
     } finally {
@@ -80,32 +182,112 @@ export default function GroupsPage() {
   };
 
   const handleDelete = async () => {
+    if (!canWrite) {
+      toast('Viewer mode: group deletion is disabled.', 'error');
+      return;
+    }
     if (!selectedGroup) return;
+    const groupToDelete = selectedGroup;
     setActionLoading(true);
+    setDeletingGroupId(groupToDelete.id);
     try {
-      const res = await fetch(`/api/v1/groups/${selectedGroup.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/v1/groups/${groupToDelete.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to delete group');
-      
-      toast('Group deleted successfully');
+
+      setGroups((current) => {
+        const next = current.filter((group) => group.id !== groupToDelete.id);
+        if (!groupToDelete.parentGroupId) return next;
+        return next.map((group) => group.id === groupToDelete.parentGroupId
+          ? { ...group, childCount: Math.max(0, (group.childCount || 0) - 1) }
+          : group);
+      });
+      toast('Group deleted');
       setIsDeleteOpen(false);
-      fetchGroups();
+      setSelectedGroup(null);
     } catch (err: unknown) {
       toast(err instanceof Error ? err.message : 'Request failed', 'error');
     } finally {
       setActionLoading(false);
+      setDeletingGroupId(null);
     }
   };
 
-  const openEdit = (g: GroupApiItem) => {
-    setSelectedGroup(g);
-    setFormData({ code: g.code, name: g.name });
+  const openSectionDelete = (rootCode: string) => {
+    if (!canWrite) {
+      toast('Viewer mode: group deletion is disabled.', 'error');
+      return;
+    }
+    if (search.trim()) {
+      toast('Clear search before deleting a full group section so no hidden rows are skipped.', 'error');
+      return;
+    }
+    setSelectedSectionKey(rootCode);
+    setIsSectionDeleteOpen(true);
+  };
+
+  const handleSectionDelete = async () => {
+    if (!canWrite) return toast('Viewer mode: group deletion is disabled.', 'error');
+    if (!selectedSection) return;
+
+    const root = selectedSection.root || selectedSection.items.find((item) => !item.parentGroupId) || selectedSection.items[0];
+    if (!root) {
+      toast('Section root could not be resolved safely.', 'error');
+      return;
+    }
+
+    const subgroups = selectedSection.items.filter((item) => item.id !== root.id);
+    setSectionDeleteLoadingKey(selectedSection.rootCode);
+
+    try {
+      for (const subgroup of subgroups) {
+        const subgroupRes = await fetch(`/api/v1/groups/${subgroup.id}`, { method: 'DELETE' });
+        if (!subgroupRes.ok) {
+          const data = await subgroupRes.json().catch(() => ({}));
+          throw new Error(`Subgroup ${subgroup.code} could not be deleted: ${data?.message || 'delete failed'}`);
+        }
+      }
+
+      const rootRes = await fetch(`/api/v1/groups/${root.id}`, { method: 'DELETE' });
+      if (!rootRes.ok) {
+        const data = await rootRes.json().catch(() => ({}));
+        throw new Error(`Main group ${root.code} could not be deleted: ${data?.message || 'delete failed'}`);
+      }
+
+      const idsToRemove = new Set(selectedSection.items.map((item) => item.id));
+      setGroups((current) => current.filter((group) => !idsToRemove.has(group.id)));
+      toast(`Deleted section ${selectedSection.rootCode} (${selectedSection.items.length} row${selectedSection.items.length === 1 ? '' : 's'})`);
+      setIsSectionDeleteOpen(false);
+      setSelectedSectionKey(null);
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Section delete failed', 'error');
+    } finally {
+      setSectionDeleteLoadingKey(null);
+    }
+  };
+
+  const openEdit = (group: GroupApiItem) => {
+    if (!canWrite) {
+      toast('Viewer mode: editing is disabled.', 'error');
+      return;
+    }
+    setSelectedGroup(group);
+    setFormData({
+      code: group.code,
+      name: group.name,
+      parentGroupId: group.parentGroupId || '__none__'
+    });
     setModalMode('edit');
     setIsModalOpen(true);
   };
 
   const openCreate = () => {
-    setFormData({ code: '', name: '' });
+    if (!canWrite) {
+      toast('Viewer mode: group creation is disabled.', 'error');
+      return;
+    }
+    setSelectedGroup(null);
+    setFormData({ code: '', name: '', parentGroupId: '__none__' });
     setModalMode('create');
     setIsModalOpen(true);
   };
@@ -159,39 +341,39 @@ export default function GroupsPage() {
   };
 
   return (
-    <AppShell title="Student Groups" subtitle="Manage cohorts and academic groups">
-       <div className="flex flex-col gap-6 p-1 md:p-6 lg:p-8 animate-panel-pop">
-          
-          <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
-             <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex flex-col gap-1">
-                   <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Resource directory</div>
-                   <h2 className="text-3xl font-bold text-white tracking-tight">Groups</h2>
-                   <p className="text-[var(--text-secondary)] text-sm">Organize students into trackable cohorts and keep assignments tidy.</p>
-                </div>
-                
-                <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                   <SearchInput 
-                     placeholder="Search groups..." 
-                     value={search}
-                     onChange={(e) => setSearch(e.target.value)}
-                     onClear={() => setSearch('')}
-                     className="w-full sm:w-[320px]"
-                   />
-                   <Button onClick={openCreate} variant="primary" className="gap-2">
-                     <span className="material-symbols-outlined text-[20px]">add</span>
-                     New Group
-                   </Button>
-                </div>
-             </div>
-             <div className="mt-4 flex flex-wrap gap-2">
-               <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]">
-                 {groups.length} total groups
-               </span>
-               <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--gold)]">
-                 {search ? `${filteredGroups.length} matching search` : 'Create, rename, or retire cohorts'}
-               </span>
-             </div>
+    <AppShell title="Student Groups" subtitle="Manage main groups and subgroup hierarchy">
+      <div className="flex flex-col gap-6 p-1 md:p-6 lg:p-8 animate-panel-pop">
+        <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-col gap-1">
+              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Academic structure</div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Groups</h2>
+              <p className="text-[var(--text-secondary)] text-sm">Support whole main groups like A or targeted subgroups like A1 without losing the hierarchy.</p>
+            </div>
+
+            <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <SearchInput
+                placeholder="Search groups, parents, or subgroup codes..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onClear={() => setSearch('')}
+                className="w-full sm:w-[360px]"
+              />
+              {canImport ? (
+                <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2">
+                  <span className="material-symbols-outlined text-[20px]">upload_file</span>
+                  Import CSV
+                </Button>
+              ) : null}
+              {canWrite ? (
+                <Button onClick={openCreate} variant="primary" className="gap-2">
+                  <span className="material-symbols-outlined text-[20px]">add</span>
+                  New Group
+                </Button>
+              ) : (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]">Viewer mode</div>
+              )}
+            </div>
           </div>
 
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">
@@ -264,7 +446,7 @@ export default function GroupsPage() {
                />
              )}
           </div>
-       </div>
+        </div>
 
        {/* Bulk action bar */}
        <BulkActionBar
@@ -305,16 +487,26 @@ export default function GroupsPage() {
                 placeholder="e.g. CS-2024" 
                 helperText="Short academic identifier used across the workspace."
               />
-              <Input 
-                label="Group Name" 
-                value={formData.name} 
-                onChange={e => setFormData({...formData, name: e.target.value})} 
-                placeholder="e.g. Computer Science Freshman" 
-                helperText="A clearer title makes course assignment faster later on."
+              <Input
+                label="Group name"
+                value={formData.name}
+                onChange={(e) => setFormData((current) => ({ ...current, name: e.target.value }))}
+                placeholder="Main Group A or Subgroup A1"
+                helperText="Keep the human-readable name aligned with the code hierarchy."
               />
             </div>
-         </div>
-       </Modal>
+            <AppSelect
+              label="Parent main group"
+              value={formData.parentGroupId}
+              onChange={(value) => setFormData((current) => ({ ...current, parentGroupId: value }))}
+              options={mainGroupOptions.filter((option) => option.value === '__none__' || option.value !== selectedGroup?.id)}
+              searchable
+              searchPlaceholder="Find main group"
+              helperText="Choose a parent only for subgroups like A1, A2, or B3. Leave as Main group for top-level cohorts like A or B."
+            />
+          </div>
+        </div>
+      </Modal>
 
        {/* Single delete Modal */}
        <Modal 

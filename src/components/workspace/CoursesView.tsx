@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, type ReactNode } from 'react';
 import { DataTable } from "@/components/workspace/DataTable";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Button } from "@/components/ui/Button";
@@ -62,10 +62,10 @@ export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, 
   );
 
   return (
-     <div className="flex flex-col gap-6 p-1 md:p-6 flex-1 min-h-0 animate-panel-pop">
+     <div className="flex flex-col gap-4 md:gap-6 p-1 md:p-6 flex-1 min-h-0 animate-panel-pop">
         <div className="flex flex-wrap items-center justify-between gap-4 px-2">
            <div className="flex flex-col gap-1">
-              <h2 className="text-3xl font-bold text-white tracking-tight">Courses</h2>
+              <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight">Courses</h2>
               <p className="text-[var(--text-secondary)] text-sm">Manage and organize all university courses.</p>
            </div>
            
@@ -76,10 +76,15 @@ export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, 
                 onChange={(e) => setSearch(e.target.value)}
                 containerClassName="w-full sm:w-auto sm:min-w-[300px]"
               />
-              <Button onClick={() => onAction('New')} variant="primary" className="gap-2 w-full sm:w-auto justify-center">
-                <span className="material-symbols-outlined text-[20px]">add</span>
-                Add Course
-              </Button>
+              {extraActions}
+              {canCreate ? (
+                <Button onClick={() => onAction('New')} variant="primary" className="gap-2 w-full sm:w-auto justify-center">
+                  <span className="material-symbols-outlined text-[20px]">add</span>
+                  Add Course
+                </Button>
+              ) : (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]">Viewer mode</div>
+              )}
            </div>
         </div>
 
@@ -101,9 +106,9 @@ export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, 
                description={search ? `No results for "${search}". Try a different term or clear the search.` : "You haven't added any courses to this workspace yet."}
                action={search ? (
                  <Button variant="ghost" onClick={() => setSearch('')}>Clear Search</Button>
-               ) : (
+               ) : canCreate ? (
                  <Button variant="primary" onClick={() => onAction('New')}>Create Your First Course</Button>
-               )}
+               ) : undefined}
              />
            )}
         </div>

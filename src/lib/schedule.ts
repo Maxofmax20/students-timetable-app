@@ -1,5 +1,6 @@
 import type { CourseApiItem } from '@/types';
 import { downloadIcsFile, type IcsRow } from '@/lib/ics';
+import { formatSessionType, inferLegacySessionType, stripLegacySessionSuffix } from '@/lib/course-sessions';
 
 export const scheduleDayOrder = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'] as const;
 
@@ -24,8 +25,10 @@ export type ScheduleItem = {
   timeLabel: string;
 };
 
+export type ScheduleConflictKind = 'room' | 'instructor' | 'group';
+
 export type ScheduleConflict = {
-  kind: 'room' | 'instructor';
+  kind: ScheduleConflictKind;
   key: string;
   day: string;
   startMinute: number;
@@ -34,13 +37,12 @@ export type ScheduleConflict = {
   items: ScheduleItem[];
 };
 
-function splitCourseTitle(title: string) {
-  const [course, type] = title.split(' — ');
-  return {
-    course: course?.trim() || title,
-    type: type?.trim() || 'Session'
-  };
-}
+export type ScheduleConflictReport = {
+  conflicts: ScheduleConflict[];
+  conflictMap: Map<string, Set<ScheduleConflictKind>>;
+  sessionsWithConflicts: number;
+  bucketsByKind: Record<ScheduleConflictKind, number>;
+};
 
 export function formatMinute(total: number) {
   const hours = Math.floor(total / 60);
@@ -50,19 +52,21 @@ export function formatMinute(total: number) {
 
 export function buildScheduleItems(courses: CourseApiItem[]) {
   const items: ScheduleItem[] = courses.flatMap((course) => {
-    const titleBits = splitCourseTitle(course.title);
+    const normalizedCourseTitle = stripLegacySessionSuffix(course.title);
 
     return (course.sessions || []).flatMap((session) => {
       if (!session.day || session.startMinute == null || session.endMinute == null || session.endMinute <= session.startMinute) {
         return [];
       }
 
+      const sessionType = formatSessionType(session.type || inferLegacySessionType(course.title, course.code));
+
       return [{
         id: `${course.id}:${session.id}`,
         courseId: course.id,
         code: course.code,
-        course: titleBits.course,
-        type: titleBits.type,
+        course: normalizedCourseTitle,
+        type: sessionType,
         status: course.status,
         group: session.group?.code || course.group?.code || '-',
         groupId: session.groupId ?? course.groupId ?? null,
@@ -110,45 +114,149 @@ export function downloadScheduleCalendar(items: ScheduleItem[], filename = 'stud
   return { ok: true as const, count: calendarRows.length };
 }
 
-export function buildScheduleConflicts(items: ScheduleItem[]) {
-  const buckets = new Map<string, ScheduleItem[]>();
+const overlapKinds: Array<{
+  kind: ScheduleConflictKind;
+  idOf: (item: ScheduleItem) => string | null;
+  labelOf: (item: ScheduleItem) => string;
+}> = [
+  {
+    kind: 'room',
+    idOf: (item) => item.roomId || (item.room && item.room !== '-' ? `label:${item.room.toLowerCase()}` : null),
+    labelOf: (item) => item.room
+  },
+  {
+    kind: 'instructor',
+    idOf: (item) => item.instructorId || (item.instructor && item.instructor !== '-' ? `label:${item.instructor.toLowerCase()}` : null),
+    labelOf: (item) => item.instructor
+  },
+  {
+    kind: 'group',
+    idOf: (item) => item.groupId || (item.group && item.group !== '-' ? `label:${item.group.toLowerCase()}` : null),
+    labelOf: (item) => item.group
+  }
+];
+
+function overlap(left: ScheduleItem, right: ScheduleItem) {
+  return left.startMinute < right.endMinute && right.startMinute < left.endMinute;
+}
+
+function compareConflict(a: ScheduleConflict, b: ScheduleConflict) {
+  const dayDiff = scheduleDayOrder.indexOf(a.day as ScheduleDay) - scheduleDayOrder.indexOf(b.day as ScheduleDay);
+  if (dayDiff !== 0) return dayDiff;
+  if (a.startMinute !== b.startMinute) return a.startMinute - b.startMinute;
+  if (a.endMinute !== b.endMinute) return a.endMinute - b.endMinute;
+  if (a.kind !== b.kind) return a.kind.localeCompare(b.kind);
+  return a.label.localeCompare(b.label);
+}
+
+export function buildScheduleConflictReport(items: ScheduleItem[]): ScheduleConflictReport {
+  const conflicts: ScheduleConflict[] = [];
+  const conflictMap = new Map<string, Set<ScheduleConflictKind>>();
 
   for (const item of items) {
-    if (item.room && item.room !== '-') {
-      const roomKey = `room:${item.day}:${item.startMinute}:${item.endMinute}:${item.room.toLowerCase()}`;
-      buckets.set(roomKey, [...(buckets.get(roomKey) || []), item]);
+    conflictMap.set(item.id, new Set());
+  }
+
+  for (const { kind, idOf, labelOf } of overlapKinds) {
+    const resourceBuckets = new Map<string, ScheduleItem[]>();
+
+    for (const item of items) {
+      const id = idOf(item);
+      if (!id) continue;
+      const key = `${item.day}:${id}`;
+      resourceBuckets.set(key, [...(resourceBuckets.get(key) || []), item]);
     }
 
-    if (item.instructor && item.instructor !== '-') {
-      const instructorKey = `instructor:${item.day}:${item.startMinute}:${item.endMinute}:${item.instructor.toLowerCase()}`;
-      buckets.set(instructorKey, [...(buckets.get(instructorKey) || []), item]);
+    for (const [resourceKey, bucket] of resourceBuckets.entries()) {
+      if (bucket.length < 2) continue;
+      const sorted = [...bucket].sort((a, b) => {
+        if (a.startMinute !== b.startMinute) return a.startMinute - b.startMinute;
+        if (a.endMinute !== b.endMinute) return a.endMinute - b.endMinute;
+        return a.id.localeCompare(b.id);
+      });
+
+      let cluster: ScheduleItem[] = [];
+      let clusterEnd = -1;
+      let clusterStart = -1;
+      let clusterIndex = 0;
+
+      const pushCluster = () => {
+        if (cluster.length < 2) {
+          cluster = [];
+          return;
+        }
+
+        const first = cluster[0];
+        const key = `${kind}:${first.day}:${resourceKey}:${clusterStart}:${clusterEnd}:${clusterIndex}`;
+        conflicts.push({
+          kind,
+          key,
+          day: first.day,
+          startMinute: clusterStart,
+          endMinute: clusterEnd,
+          label: labelOf(first),
+          items: [...cluster]
+        });
+
+        for (const conflictItem of cluster) {
+          conflictMap.get(conflictItem.id)?.add(kind);
+        }
+
+        cluster = [];
+        clusterIndex += 1;
+      };
+
+      for (const entry of sorted) {
+        if (!cluster.length) {
+          cluster = [entry];
+          clusterStart = entry.startMinute;
+          clusterEnd = entry.endMinute;
+          continue;
+        }
+
+        if (entry.startMinute < clusterEnd) {
+          cluster.push(entry);
+          clusterEnd = Math.max(clusterEnd, entry.endMinute);
+          continue;
+        }
+
+        pushCluster();
+        cluster = [entry];
+        clusterStart = entry.startMinute;
+        clusterEnd = entry.endMinute;
+      }
+
+      pushCluster();
     }
   }
 
-  const conflicts: ScheduleConflict[] = [];
+  conflicts.sort(compareConflict);
 
-  for (const [key, bucket] of buckets.entries()) {
-    if (bucket.length < 2) continue;
-    const [kind] = key.split(':');
-    const first = bucket[0];
-    conflicts.push({
-      kind: kind === 'room' ? 'room' : 'instructor',
-      key,
-      day: first.day,
-      startMinute: first.startMinute,
-      endMinute: first.endMinute,
-      label: kind === 'room' ? first.room : first.instructor,
-      items: bucket
-    });
-  }
+  const sessionsWithConflicts = [...conflictMap.values()].filter((set) => set.size > 0).length;
+  const bucketsByKind: Record<ScheduleConflictKind, number> = {
+    room: conflicts.filter((item) => item.kind === 'room').length,
+    instructor: conflicts.filter((item) => item.kind === 'instructor').length,
+    group: conflicts.filter((item) => item.kind === 'group').length
+  };
 
-  conflicts.sort((a, b) => {
-    const dayDiff = scheduleDayOrder.indexOf(a.day as ScheduleDay) - scheduleDayOrder.indexOf(b.day as ScheduleDay);
-    if (dayDiff !== 0) return dayDiff;
-    return a.startMinute - b.startMinute;
-  });
+  return {
+    conflicts,
+    conflictMap,
+    sessionsWithConflicts,
+    bucketsByKind
+  };
+}
 
-  return conflicts;
+export function buildScheduleConflicts(items: ScheduleItem[]) {
+  return buildScheduleConflictReport(items).conflicts;
+}
+
+export function getScheduleConflictLabels(conflictKinds: Set<ScheduleConflictKind>) {
+  const labels: string[] = [];
+  if (conflictKinds.has('group')) labels.push('Group clash');
+  if (conflictKinds.has('room')) labels.push('Room clash');
+  if (conflictKinds.has('instructor')) labels.push('Instructor clash');
+  return labels;
 }
 
 export function getDayLabel(day: string) {

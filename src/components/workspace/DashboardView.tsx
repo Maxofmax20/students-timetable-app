@@ -1,236 +1,319 @@
-import type { ActionLabel, RowData } from "@/types";
-import { Button } from "@/components/ui/Button";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { cn } from "@/lib/utils";
+import Link from 'next/link';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { Button } from '@/components/ui/Button';
+import { cn } from '@/lib/utils';
+import type { ActionLabel, RowData } from '@/types';
+import type { ScheduleItem } from '@/lib/schedule';
+
+export type DashboardStatItem = {
+  label: string;
+  value: number;
+  icon: string;
+  tone: 'neutral' | 'warning';
+};
+
+export type DashboardLinkItem = {
+  label: string;
+  href: string;
+};
+
+export interface DashboardViewModel {
+  now: { day: string; minute: number };
+  overviewStats: DashboardStatItem[];
+  todaySessions: ScheduleItem[];
+  nextSession: ScheduleItem | null;
+  quality: {
+    conflicts: number;
+    conflictSessions: number;
+    roomConflicts: number;
+    instructorConflicts: number;
+    groupConflicts: number;
+    missingRoomCount: number;
+    missingInstructorCount: number;
+    missingGroupCount: number;
+    unresolvedCount: number;
+  };
+  insights: {
+    sessionsByType: [string, number][];
+    roomsByBuilding: { label: string; value: number }[];
+    groupsByRoot: { label: string; value: number }[];
+    deliverySplit: { physical: number; online: number; hybrid: number };
+    busiestDay: [string, number] | null;
+    busiestRoom: [string, number] | null;
+    busiestInstructor: [string, number] | null;
+    mostActiveGroup: [string, number] | null;
+  };
+  quickLinks: DashboardLinkItem[];
+}
 
 export interface DashboardViewProps {
-  rows: RowData[];
-  conflictsCount: number;
-  groupsCount: number;
-  instructorsCount: number;
+  model?: DashboardViewModel;
+  rows?: RowData[];
+  conflictsCount?: number;
+  groupsCount?: number;
+  instructorsCount?: number;
   roomsCount?: number;
   onAction: (actionName: ActionLabel) => void;
+  onSelectSession?: (item: ScheduleItem) => void;
   onPreviewSelect?: (row: RowData) => void;
   isLoading?: boolean;
 }
 
-export function DashboardView({ 
-  rows, 
-  conflictsCount, 
-  groupsCount, 
-  instructorsCount,
-  roomsCount,
-  onAction,
-  onPreviewSelect,
-  isLoading
-}: DashboardViewProps) {
-  // Show first 4 courses as a quick preview
-  const previewCourses = rows.slice(0, 4);
+function minutesToTimeLabel(total: number) {
+  const hour = Math.floor(total / 60);
+  const minute = total % 60;
+  return `${hour}:${`${minute}`.padStart(2, '0')}`;
+}
+
+export function DashboardView({ model, rows, conflictsCount, groupsCount, instructorsCount, roomsCount, onAction, onSelectSession, onPreviewSelect, isLoading }: DashboardViewProps) {
+  const fallbackModel: DashboardViewModel = {
+    now: { day: 'Sat', minute: 0 },
+    overviewStats: [
+      { label: 'Total Courses', value: rows?.length || 0, icon: 'menu_book', tone: 'neutral' },
+      { label: 'Total Sessions', value: rows?.length || 0, icon: 'calendar_view_week', tone: 'neutral' },
+      { label: 'Groups', value: groupsCount || 0, icon: 'groups', tone: 'neutral' },
+      { label: 'Rooms', value: roomsCount || 0, icon: 'meeting_room', tone: 'neutral' },
+      { label: 'Instructors', value: instructorsCount || 0, icon: 'school', tone: 'neutral' }
+    ],
+    todaySessions: [],
+    nextSession: null,
+    quality: {
+      conflicts: conflictsCount || 0,
+      conflictSessions: conflictsCount || 0,
+      roomConflicts: 0,
+      instructorConflicts: 0,
+      groupConflicts: 0,
+      missingRoomCount: 0,
+      missingInstructorCount: 0,
+      missingGroupCount: 0,
+      unresolvedCount: conflictsCount || 0
+    },
+    insights: {
+      sessionsByType: [],
+      roomsByBuilding: [],
+      groupsByRoot: [],
+      deliverySplit: { physical: 0, online: 0, hybrid: 0 },
+      busiestDay: null,
+      busiestRoom: null,
+      busiestInstructor: null,
+      mostActiveGroup: null
+    },
+    quickLinks: []
+  };
+
+  const effectiveModel = model || fallbackModel;
 
   if (isLoading) {
     return (
-      <div className="flex flex-col gap-8 pb-20 animate-panel-pop">
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-10 w-48" />
-          <Skeleton className="h-5 w-96" />
+      <div className="flex flex-col gap-6 pb-16">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          {[...Array(5)].map((_, i) => (
-             <div key={i} className="p-6 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)]">
-                <div className="flex justify-between items-start mb-4">
-                   <div className="space-y-2">
-                      <Skeleton className="h-4 w-24" />
-                      <Skeleton className="h-10 w-16" />
-                   </div>
-                   <Skeleton className="w-10 h-10 rounded-xl" />
-                </div>
-             </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 flex flex-col gap-4">
-             <Skeleton className="h-4 w-32 ml-1" />
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {[...Array(4)].map((_, i) => (
-                   <div key={i} className="p-5 rounded-[var(--radius-lg)] bg-[var(--surface)] border border-[var(--border)] flex items-center gap-4">
-                      <Skeleton className="w-12 h-12 rounded-2xl" />
-                      <div className="flex flex-col gap-2">
-                         <Skeleton className="h-4 w-28" />
-                         <Skeleton className="h-3 w-40" />
-                      </div>
-                   </div>
-                ))}
-             </div>
-          </div>
-          <div className="flex flex-col gap-4">
-             <Skeleton className="h-4 w-36 ml-1" />
-             <div className="flex-1 p-6 rounded-[var(--radius-lg)] bg-[var(--surface)] border border-[var(--border)] space-y-4">
-                {[...Array(3)].map((_, i) => (
-                   <div key={i} className="p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border-soft)] flex items-center gap-3">
-                      <Skeleton className="w-1.5 h-10 rounded-full" />
-                      <div className="flex-1 space-y-2">
-                         <Skeleton className="h-4 w-3/4" />
-                         <Skeleton className="h-3 w-1/2" />
-                      </div>
-                   </div>
-                ))}
-             </div>
-          </div>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-52 rounded-2xl" />)}
         </div>
       </div>
     );
   }
-  return (
-    <div className="flex flex-col gap-8 pb-20 animate-panel-pop">
-      {/* Welcome Section */}
-      <div className="flex flex-col gap-1">
-        <h2 className="text-3xl font-bold text-white tracking-tight">Overview</h2>
-        <p className="text-[var(--text-secondary)]">Manage your workspace and monitor university scheduling health.</p>
-      </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {[
-          { label: 'Total Courses', value: rows.length, icon: 'calendar_view_week', color: 'var(--gold)' },
-          { label: 'Active Conflicts', value: conflictsCount, icon: 'warning', color: 'var(--danger)', isAlert: conflictsCount > 0 },
-          { label: 'Student Groups', value: groupsCount, icon: 'group_work', color: 'var(--success)' },
-          { label: 'Instructors', value: instructorsCount, icon: 'school', color: 'var(--info)' },
-          { label: 'Rooms', value: roomsCount ?? 0, icon: 'meeting_room', color: 'var(--warning)' },
-        ].map((stat) => (
-          <div 
-            key={stat.label}
-            className={cn(
-              "p-6 rounded-[var(--radius-lg)] border bg-[var(--surface)] transition-all duration-300 relative overflow-hidden group hover:shadow-[var(--shadow-md)]",
-              stat.isAlert ? "border-[var(--danger)]/30 shadow-[0_0_20px_rgba(229,72,77,0.05)]" : "border-[var(--border)] hover:border-[var(--text-muted)]"
-            )}
-          >
-            {stat.isAlert && <div className="absolute inset-0 bg-[var(--danger)]/5 animate-pulse"></div>}
-            <div className="flex items-start justify-between relative z-10">
-              <div className="flex flex-col gap-1">
-                <span className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">{stat.label}</span>
-                <span className={cn(
-                  "text-4xl font-bold tracking-tight",
-                  stat.isAlert ? "text-[var(--danger)]" : "text-white"
-                )}>
-                  {stat.value}
-                </span>
+  const inProgressNow = effectiveModel.todaySessions.find((session) => session.startMinute <= effectiveModel.now.minute && effectiveModel.now.minute < session.endMinute) || null;
+
+  return (
+    <div className="animate-panel-pop flex flex-col gap-4 md:gap-6 pb-12 md:pb-16">
+      <section className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
+        <div className="mb-3 text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Workspace overview</div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          {effectiveModel.overviewStats.map((stat) => (
+            <article key={stat.label} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)]">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">{stat.label}</p>
+                <span className="material-symbols-outlined text-[18px] text-[var(--text-secondary)]">{stat.icon}</span>
               </div>
-              <div 
-                className="w-10 h-10 rounded-xl flex items-center justify-center border border-[var(--border)] bg-[var(--surface-2)] group-hover:scale-110 transition-transform"
-                style={{ color: stat.color }}
-              >
-                <span className="material-symbols-outlined text-xl">{stat.icon}</span>
-              </div>
+              <p className="mt-3 text-3xl font-black tracking-tight text-white">{stat.value}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <article className="rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-lg)]">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Today</p>
+              <h3 className="text-lg font-black tracking-tight text-white">Sessions ({effectiveModel.now.day})</h3>
             </div>
-            {stat.isAlert && (
-              <div className="mt-4 flex items-center gap-2 text-xs font-semibold text-[var(--danger)] relative z-10">
-                <span className="material-symbols-outlined text-sm">error</span>
-                Requires immediate resolution
+            {inProgressNow ? <span className="rounded-full border border-[var(--success)]/30 bg-[var(--success-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--success)]">In progress now</span> : null}
+          </div>
+          {effectiveModel.todaySessions.length ? (
+            <div className="space-y-2">
+              {effectiveModel.todaySessions.slice(0, 6).map((session) => (
+                <button
+                  key={session.id}
+                  type="button"
+                  onClick={() => {
+                    if (onSelectSession) {
+                      onSelectSession(session);
+                      return;
+                    }
+                    if (onPreviewSelect && rows?.length) {
+                      const previewRow = rows.find((row) => row.day === session.day && row.course === session.course);
+                      if (previewRow) onPreviewSelect(previewRow);
+                    }
+                  }}
+                  className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-3 text-left shadow-[var(--shadow-sm)] transition-all hover:-translate-y-[1px] hover:border-[var(--text-muted)] hover:shadow-[var(--shadow-md)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]"
+                >
+                  <p className="truncate text-sm font-black text-white">{session.course}</p>
+                  <p className="text-xs font-medium text-[var(--text-secondary)]">{session.timeLabel} • {session.room}</p>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-raised)] p-4 text-sm text-[var(--text-secondary)]">No sessions scheduled today.</p>
+          )}
+        </article>
+
+        <article className="rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-lg)]">
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Upcoming</p>
+          <h3 className="text-lg font-black tracking-tight text-white">Next session</h3>
+          {effectiveModel.nextSession ? (
+            <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
+              <p className="text-base font-black text-white">{effectiveModel.nextSession.course}</p>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">{effectiveModel.nextSession.day} • {effectiveModel.nextSession.timeLabel}</p>
+              <p className="mt-2 text-xs text-[var(--text-muted)]">{effectiveModel.nextSession.group} • {effectiveModel.nextSession.instructor} • {effectiveModel.nextSession.room}</p>
+            </div>
+          ) : (
+            <p className="mt-4 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-raised)] p-4 text-sm text-[var(--text-secondary)]">No upcoming sessions found.</p>
+          )}
+
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+            {[
+              { label: 'Now', value: minutesToTimeLabel(effectiveModel.now.minute) },
+              { label: 'Day', value: effectiveModel.now.day },
+              { label: 'Unresolved', value: String(effectiveModel.quality.unresolvedCount) }
+            ].map((item) => (
+              <div key={item.label} className="rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.1em] text-[var(--text-muted)]">{item.label}</p>
+                <p className="mt-1 font-bold text-white">{item.value}</p>
               </div>
-            )}
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <article className="rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-lg)]">
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Health</p>
+          <h3 className="text-lg font-black tracking-tight text-white">Quality checks</h3>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            {[
+              ['Conflict buckets', effectiveModel.quality.conflicts],
+              ['Affected sessions', effectiveModel.quality.conflictSessions],
+              ['Missing rooms', effectiveModel.quality.missingRoomCount],
+              ['Missing instructors', effectiveModel.quality.missingInstructorCount],
+              ['Missing groups', effectiveModel.quality.missingGroupCount]
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">{label}</p>
+                <p className={cn('mt-1 text-2xl font-black', Number(value) > 0 ? 'text-[var(--danger)]' : 'text-white')}>{value}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-sm text-[var(--text-secondary)]">
+            {`Room: ${effectiveModel.quality.roomConflicts}, Instructor: ${effectiveModel.quality.instructorConflicts}, Group: ${effectiveModel.quality.groupConflicts} conflict bucket${effectiveModel.quality.conflicts === 1 ? '' : 's'}.`}
+          </p>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            {effectiveModel.quality.unresolvedCount > 0
+              ? `${effectiveModel.quality.unresolvedCount} unresolved issue${effectiveModel.quality.unresolvedCount === 1 ? '' : 's'} need attention.`
+              : 'No unresolved issues detected in current timetable data.'}
+          </p>
+        </article>
+
+        <article className="rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-lg)]">
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Action center</p>
+          <h3 className="text-lg font-black tracking-tight text-white">Quick actions & links</h3>
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {[
+              { id: 'New', label: 'New course' },
+              { id: 'Conflicts', label: 'Scan conflicts' },
+              { id: 'Export', label: 'Export calendar' }
+            ].map((action) => (
+              <Button
+                key={action.id}
+                variant="secondary"
+                size="sm"
+                onClick={() => onAction(action.id as ActionLabel)}
+                className="justify-center"
+              >
+                {action.label}
+              </Button>
+            ))}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {effectiveModel.quickLinks.map((link) => (
+              <Link
+                key={`${link.label}-${link.href}`}
+                href={link.href}
+                className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[11px] font-semibold text-[var(--text-secondary)] transition-colors hover:border-[var(--text-muted)] hover:text-white"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </article>
+      </section>
+
+      <section className="rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-lg)]">
+        <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Insights</p>
+        <h3 className="text-lg font-black tracking-tight text-white">Schedule distribution</h3>
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <Insight label="Busiest day" value={effectiveModel.insights.busiestDay ? `${effectiveModel.insights.busiestDay[0]} (${effectiveModel.insights.busiestDay[1]})` : '—'} />
+          <Insight label="Busiest room" value={effectiveModel.insights.busiestRoom ? `${effectiveModel.insights.busiestRoom[0]} (${effectiveModel.insights.busiestRoom[1]})` : '—'} />
+          <Insight label="Busiest instructor" value={effectiveModel.insights.busiestInstructor ? `${effectiveModel.insights.busiestInstructor[0]} (${effectiveModel.insights.busiestInstructor[1]})` : '—'} />
+          <Insight label="Most active group" value={effectiveModel.insights.mostActiveGroup ? `${effectiveModel.insights.mostActiveGroup[0]} (${effectiveModel.insights.mostActiveGroup[1]})` : '—'} />
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <ListInsight title="Sessions by type" items={effectiveModel.insights.sessionsByType.map(([label, value]) => ({ label, value }))} />
+          <ListInsight title="Rooms by building" items={effectiveModel.insights.roomsByBuilding} />
+          <ListInsight title="Groups by root" items={effectiveModel.insights.groupsByRoot} />
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2 text-xs">
+          <Chip label="Physical" value={effectiveModel.insights.deliverySplit.physical} />
+          <Chip label="Online" value={effectiveModel.insights.deliverySplit.online} />
+          <Chip label="Hybrid" value={effectiveModel.insights.deliverySplit.hybrid} />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function Insight({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-3">
+      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-muted)]">{label}</p>
+      <p className="mt-1 truncate text-sm font-bold text-white">{value}</p>
+    </div>
+  );
+}
+
+function ListInsight({ title, items }: { title: string; items: { label: string; value: number }[] }) {
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-raised)] p-3">
+      <p className="text-sm font-black text-white">{title}</p>
+      <div className="mt-2 space-y-1.5">
+        {(items.length ? items.slice(0, 5) : [{ label: 'No data', value: 0 }]).map((item) => (
+          <div key={`${title}-${item.label}`} className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
+            <span className="truncate">{item.label}</span>
+            <span className="font-semibold text-white">{item.value}</span>
           </div>
         ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Quick Actions */}
-        <div className="lg:col-span-2 flex flex-col gap-4">
-          <h3 className="text-sm font-bold text-[var(--text-secondary)] uppercase tracking-[0.1em] ml-1">Quick Actions</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-             {[
-               { id: 'New', label: 'New Course', desc: 'Create a new schedule entry', icon: 'add_box', color: 'var(--gold)' },
-               { id: 'Conflicts', label: 'Scan Integrity', desc: 'Verify scheduling logic', icon: 'rule', color: 'var(--danger)' },
-               { id: 'Export', label: 'Export Calendar', desc: 'Download an ICS calendar file', icon: 'cloud_download', color: 'var(--info)' },
-             ].map((action) => (
-               <button 
-                 key={action.id}
-                 onClick={() => onAction(action.id as ActionLabel)} 
-                 className="p-5 rounded-[var(--radius-lg)] bg-[var(--surface)] border border-[var(--border)] hover:border-[var(--text-muted)] text-left flex items-center gap-4 transition-all group shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)]"
-               >
-                 <div className="w-12 h-12 rounded-2xl bg-[var(--surface-2)] flex items-center justify-center border border-[var(--border)] group-hover:scale-110 transition-transform" style={{ color: action.color }}>
-                   <span className="material-symbols-outlined text-2xl">{action.icon}</span>
-                 </div>
-                 <div className="flex flex-col">
-                   <span className="font-bold text-white text-base">{action.label}</span>
-                   <span className="text-xs text-[var(--text-secondary)]">{action.desc}</span>
-                 </div>
-               </button>
-             ))}
-          </div>
-        </div>
-
-        {/* Status/Activity */}
-        <div className="flex flex-col gap-4">
-          <h3 className="text-sm font-bold text-[var(--text-secondary)] uppercase tracking-[0.1em] ml-1">Schedule Preview</h3>
-          <div className="flex-1 p-6 rounded-[var(--radius-lg)] bg-[var(--surface)] border border-[var(--border)] flex flex-col gap-4">
-            {previewCourses.length > 0 ? (
-              <div className="space-y-3">
-                {previewCourses.map((row, i) => {
-                  const content = (
-                    <>
-                      <div className="w-1.5 h-10 rounded-full bg-[var(--gold)]"></div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-white truncate">{row.course}</p>
-                        <p className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wider">{row.day} • {row.time}</p>
-                      </div>
-                      <span className="material-symbols-outlined text-[var(--text-muted)] group-hover:text-white transition-colors">chevron_right</span>
-                    </>
-                  );
-
-                  if (onPreviewSelect) {
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => onPreviewSelect(row)}
-                        className="group flex w-full items-center gap-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-2)] p-3 text-left transition-all hover:border-[var(--text-muted)]"
-                      >
-                        {content}
-                      </button>
-                    );
-                  }
-
-                  return (
-                    <div key={i} className="group p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border-soft)] hover:border-[var(--text-muted)] transition-all flex items-center gap-3">
-                      {content}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[var(--bg-raised)]/50 rounded-xl border border-[var(--border)] border-dashed">
-                 <span className="material-symbols-outlined text-4xl text-[var(--text-muted)] mb-3">event_busy</span>
-                 <p className="text-[var(--text-secondary)] text-sm font-medium">No classes today</p>
-                 <p className="text-[var(--text-muted)] text-[10px] mt-1 text-center">Your schedule is clear</p>
-              </div>
-            )}
-            
-            <div className="mt-auto pt-4 border-t border-[var(--border-soft)]">
-              <HealthItem label="Workspace Sync" status="Operational" color="var(--success)" progress={100} />
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
 }
 
-
-function HealthItem({ label, status, color, progress }: { label: string, status: string, color: string, progress: number }) {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-xs font-bold">
-        <span className="text-[var(--text-secondary)] uppercase tracking-wider">{label}</span>
-        <span style={{ color }}>{status}</span>
-      </div>
-      <div className="h-1.5 w-full bg-[var(--surface-2)] rounded-full overflow-hidden">
-        <div 
-          className="h-full rounded-full transition-all duration-1000" 
-          style={{ width: `${progress}%`, backgroundColor: color }}
-        />
-      </div>
-    </div>
-  );
+function Chip({ label, value }: { label: string; value: number }) {
+  return <span className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">{label}: {value}</span>;
 }

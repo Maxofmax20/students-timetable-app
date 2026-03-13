@@ -33,14 +33,20 @@ export type RowData = Row;
 
 export type RowUpdatePayload = Partial<Omit<Row, 'id' | 'source'>>;
 
+export type SessionTypeValue = 'LECTURE' | 'SECTION' | 'LAB' | 'ONLINE' | 'HYBRID';
+
 export type SessionApiItem = {
   id: string;
+  type?: SessionTypeValue | null;
   day: string;
   startMinute: number;
   endMinute: number;
   groupId?: string | null;
   instructorId?: string | null;
   roomId?: string | null;
+  onlinePlatform?: string | null;
+  onlineLink?: string | null;
+  note?: string | null;
   group?: { id?: string; code?: string | null; name?: string | null } | null;
   instructor?: { id?: string; name?: string | null } | null;
   room?: { id?: string; code?: string | null; name?: string | null } | null;
@@ -66,6 +72,9 @@ export type GroupApiItem = {
   name: string;
   yearLabel?: string | null;
   color?: string | null;
+  parentGroupId?: string | null;
+  parentGroup?: { id?: string; code?: string | null; name?: string | null } | null;
+  childCount?: number;
 };
 
 export type InstructorApiItem = {
@@ -73,6 +82,10 @@ export type InstructorApiItem = {
   name: string;
   email?: string | null;
   phone?: string | null;
+  color?: string | null;
+  courseCount?: number;
+  sessionCount?: number;
+  assignmentStatus?: 'assigned' | 'unassigned';
 };
 
 export type RoomApiItem = {
@@ -81,6 +94,9 @@ export type RoomApiItem = {
   name: string;
   capacity?: number | null;
   building?: string | null;
+  buildingCode?: string | null;
+  roomNumber?: string | null;
+  level?: number | null;
 };
 
 export type ListPayload<T> = {
@@ -98,6 +114,20 @@ export type SinglePayload<T> = {
   data?: T;
 };
 
+export type CourseSessionWritePayload = {
+  id?: string;
+  type?: SessionTypeValue;
+  day?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  groupId?: string | null;
+  instructorId?: string | null;
+  roomId?: string | null;
+  onlinePlatform?: string | null;
+  onlineLink?: string | null;
+  note?: string | null;
+};
+
 export type CourseWritePayload = {
   code?: string;
   title?: string;
@@ -107,4 +137,5 @@ export type CourseWritePayload = {
   roomId?: string | null;
   day?: string | null;
   time?: string | null;
+  sessions?: CourseSessionWritePayload[];
 };

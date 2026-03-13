@@ -41,6 +41,7 @@ model User {
   workspaceShares      WorkspaceShareLink[] @relation("WorkspaceShareCreator")
   workspaceRevisions   WorkspaceRevision[]  @relation("WorkspaceRevisionAuthor")
   otpCodes             OtpCode[]
+  savedViews           SavedView[]
 
   // NextAuth relations
   accounts Account[]
@@ -195,6 +196,19 @@ enum WorkspaceShareVisibility {
   PRIVATE
 }
 
+enum SessionType {
+  LECTURE
+  SECTION
+  LAB
+  ONLINE
+  HYBRID
+}
+
+enum SavedViewSurface {
+  COURSES
+  TIMETABLE
+}
+
 model Workspace {
   id           String               @id @default(cuid())
   ownerId      String
@@ -221,6 +235,8 @@ model Workspace {
   sessions     SessionEntry[]
   shares       WorkspaceShareLink[]
   revisions    WorkspaceRevision[]
+  savedViews   SavedView[]
+  auditEntries WorkspaceAuditEntry[]
 
   @@index([ownerId, createdAt])
 }
@@ -240,20 +256,24 @@ model WorkspaceMember {
 }
 
 model AcademicGroup {
-  id          String         @id @default(cuid())
-  workspaceId String
-  code        String
-  name        String
-  yearLabel   String?
-  color       String?        @default("#2563eb")
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  courses     Course[]
-  sessions    SessionEntry[]
+  id            String          @id @default(cuid())
+  workspaceId   String
+  parentGroupId String?
+  code          String
+  name          String
+  yearLabel     String?
+  color         String?         @default("#2563eb")
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  workspace     Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parentGroup   AcademicGroup?  @relation("AcademicGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: SetNull)
+  childGroups   AcademicGroup[] @relation("AcademicGroupHierarchy")
+  courses       Course[]
+  sessions      SessionEntry[]
 
   @@unique([workspaceId, code])
   @@index([workspaceId, name])
+  @@index([workspaceId, parentGroupId])
 }
 
 model Instructor {
@@ -273,21 +293,25 @@ model Instructor {
 }
 
 model Room {
-  id          String         @id @default(cuid())
-  workspaceId String
-  code        String
-  name        String
-  capacity    Int?
-  building    String?
-  color       String?        @default("#22c55e")
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  courses     Course[]
-  sessions    SessionEntry[]
+  id           String         @id @default(cuid())
+  workspaceId  String
+  code         String
+  name         String
+  capacity     Int?
+  building     String?
+  buildingCode String?
+  roomNumber   String?
+  level        Int?
+  color        String?        @default("#22c55e")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  courses      Course[]
+  sessions     SessionEntry[]
 
   @@unique([workspaceId, code])
   @@index([workspaceId, name])
+  @@index([workspaceId, buildingCode, roomNumber])
 }
 
 model Course {
@@ -314,18 +338,21 @@ model Course {
 }
 
 model SessionEntry {
-  id           String         @id @default(cuid())
-  workspaceId  String
-  courseId     String
-  groupId      String?
-  instructorId String?
-  roomId       String?
-  day          String
-  startMinute  Int
-  endMinute    Int
-  note         String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  workspaceId    String
+  courseId       String
+  groupId        String?
+  instructorId   String?
+  roomId         String?
+  type           SessionType    @default(LECTURE)
+  day            String
+  startMinute    Int
+  endMinute      Int
+  onlinePlatform String?
+  onlineLink     String?
+  note           String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
   workspace    Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   course       Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
   group        AcademicGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
@@ -335,6 +362,22 @@ model SessionEntry {
   @@index([workspaceId, day, startMinute])
   @@index([workspaceId, roomId, day, startMinute])
   @@index([workspaceId, instructorId, day, startMinute])
+}
+
+model SavedView {
+  id          String           @id @default(cuid())
+  userId      String
+  workspaceId String
+  surface     SavedViewSurface
+  name        String
+  stateJson   Json
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId, surface, name])
+  @@index([userId, workspaceId, surface, updatedAt])
 }
 
 model WorkspaceShareLink {
@@ -364,6 +407,24 @@ model WorkspaceRevision {
   createdBy   User?     @relation("WorkspaceRevisionAuthor", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, createdAt])
+}
+
+model WorkspaceAuditEntry {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  actorUserId  String?
+  entityType   String
+  entityId     String?
+  actionType   String
+  summary      String
+  beforeJson   Json?
+  afterJson    Json?
+  metadataJson Json?
+  createdAt    DateTime  @default(now())
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@index([workspaceId, entityType, entityId, createdAt(sort: Desc)])
 }
 
 model OtpCode {

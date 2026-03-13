@@ -7,34 +7,59 @@ import { Input } from '@/components/ui/Input';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { TimeRangeField } from '@/components/ui/TimeRangeField';
 import { cn } from '@/lib/utils';
-import type { GroupApiItem, InstructorApiItem, RoomApiItem, Row } from '@/types';
+import {
+  formatSessionType,
+  SESSION_TYPE_OPTIONS,
+  sessionSupportsOnline,
+  sessionSupportsRoom,
+  stripLegacySessionSuffix
+} from '@/lib/course-sessions';
+import { groupHierarchyPath, groupKindLabel, roomDisplaySummary, sortGroupsForDisplay } from '@/lib/group-room-model';
+import type {
+  CourseSessionWritePayload,
+  GroupApiItem,
+  InstructorApiItem,
+  RoomApiItem,
+  Row,
+  SessionTypeValue
+} from '@/types';
 
 export type EditCourseMode = 'create' | 'title' | 'time' | 'room' | 'full' | 'duplicate';
+
+export type EditCourseInitialData = Partial<Row> & {
+  sessions?: CourseSessionWritePayload[];
+};
+
+export type EditCourseSubmitData = Partial<Row> & {
+  sessions: CourseSessionWritePayload[];
+};
 
 type EditCourseModalProps = {
   open: boolean;
   onClose: () => void;
   mode: EditCourseMode;
-  initialData?: Partial<Row>;
+  initialData?: EditCourseInitialData;
   groups: GroupApiItem[];
   instructors: InstructorApiItem[];
   rooms: RoomApiItem[];
-  onSave: (data: Partial<Row>, originalId?: string) => Promise<void>;
+  onSave: (data: EditCourseSubmitData, originalId?: string) => Promise<void>;
 };
 
-type FormState = {
-  code: string;
-  course: string;
-  status: Row['status'];
+type SessionFormState = {
+  id?: string;
+  type: SessionTypeValue;
   day: string;
   start: string;
   end: string;
   groupId: string;
   instructorId: string;
   roomId: string;
+  onlinePlatform: string;
+  onlineLink: string;
+  note: string;
 };
 
-type FieldErrors = Partial<Record<'code' | 'course' | 'day' | 'time' | 'groupId' | 'instructorId' | 'roomId', string>>;
+type FieldErrors = Partial<Record<'code' | 'course' | 'sessions', string>>;
 
 type ModeMeta = {
   title: string;
@@ -63,32 +88,32 @@ const STATUS_OPTIONS: { value: Row['status']; label: string; description: string
 const MODE_META: Record<EditCourseMode, ModeMeta> = {
   create: {
     title: 'Create Course',
-    subtitle: 'Build a course with schedule and assignments in one connected flow.',
+    subtitle: 'Create one course, then add all lecture, section, lab, online, or hybrid sessions inside it.',
     saveLabel: 'Create Course'
   },
   title: {
     title: 'Rename Course',
-    subtitle: 'Update the course identity students will see across the workspace.',
+    subtitle: 'Update the shared course identity without recreating its sessions.',
     saveLabel: 'Save Title'
   },
   time: {
-    title: 'Update Schedule',
-    subtitle: 'Adjust the day and time with a cleaner, app-native picker flow.',
-    saveLabel: 'Save Schedule'
+    title: 'Update Course Sessions',
+    subtitle: 'Adjust the schedule for the sessions already attached to this course.',
+    saveLabel: 'Save Sessions'
   },
   room: {
-    title: 'Change Room',
-    subtitle: 'Reassign this course to a different room without touching other details.',
-    saveLabel: 'Save Room'
+    title: 'Update Course Sessions',
+    subtitle: 'Adjust session-level room and delivery details without splitting the course into duplicates.',
+    saveLabel: 'Save Sessions'
   },
   full: {
     title: 'Edit Course',
-    subtitle: 'Refine the course details, schedule, and assignments together.',
+    subtitle: 'Manage the course once, then organize all of its sessions in one connected flow.',
     saveLabel: 'Save Changes'
   },
   duplicate: {
     title: 'Duplicate Course',
-    subtitle: 'Create a copy you can adjust before it goes live.',
+    subtitle: 'Create a copy of the course with its sessions so you can adjust it safely.',
     saveLabel: 'Create Duplicate'
   }
 };
@@ -98,20 +123,6 @@ function parseTimeRange(value?: string) {
   const parts = value.split(/\s*(?:→|->|–|—|-)\s*/).filter(Boolean);
   if (parts.length !== 2) return { start: '09:00', end: '10:00' };
   return { start: parts[0].trim(), end: parts[1].trim() };
-}
-
-function emptyForm(): FormState {
-  return {
-    code: '',
-    course: '',
-    status: 'Active',
-    day: 'Sat',
-    start: '09:00',
-    end: '10:00',
-    groupId: NONE_VALUE,
-    instructorId: NONE_VALUE,
-    roomId: NONE_VALUE
-  };
 }
 
 function optionOrNone<T extends { id: string }>(items: T[], map: (item: T) => { value: string; label: string; description?: string; keywords?: string }) {
@@ -125,51 +136,71 @@ function sanitizeOptionalValue(value: string) {
   return value === NONE_VALUE ? null : value;
 }
 
-function DayPicker({ value, onChange, errorText }: { value: string; onChange: (next: string) => void; errorText?: string }) {
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <label className="block text-[11px] font-black uppercase tracking-[0.16em] text-[var(--text-muted)]">Day</label>
-        <span className="text-[11px] text-[var(--text-secondary)]">Best for fast taps on phone</span>
-      </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
-        {DAY_OPTIONS.map((day) => {
-          const active = value === day.value;
-          return (
-            <button
-              key={day.value}
-              type="button"
-              onClick={() => onChange(day.value)}
-              aria-pressed={active}
-              className={cn(
-                'rounded-2xl border px-3 py-3 text-left transition-all',
-                active
-                  ? 'border-[var(--gold)] bg-[linear-gradient(180deg,var(--gold-muted),color-mix(in srgb,var(--gold-muted) 72%,transparent))] text-white shadow-[var(--shadow-sm)]'
-                  : 'border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-white'
-              )}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-sm font-bold">{day.badge}</div>
-                {active ? <span className="material-symbols-outlined text-[18px] text-white">check_circle</span> : null}
-              </div>
-              <div className={cn('mt-1 text-[11px]', active ? 'text-white/80' : 'text-[var(--text-secondary)]')}>{day.label}</div>
-            </button>
-          );
-        })}
-      </div>
-      {errorText ? <div className="text-[11px] font-semibold text-[var(--danger)]">{errorText}</div> : null}
-    </div>
-  );
+function emptySession(seed?: Partial<SessionFormState>): SessionFormState {
+  return {
+    id: seed?.id,
+    type: seed?.type || 'LECTURE',
+    day: seed?.day || 'Sat',
+    start: seed?.start || '09:00',
+    end: seed?.end || '10:00',
+    groupId: seed?.groupId || NONE_VALUE,
+    instructorId: seed?.instructorId || NONE_VALUE,
+    roomId: seed?.roomId || NONE_VALUE,
+    onlinePlatform: seed?.onlinePlatform || '',
+    onlineLink: seed?.onlineLink || '',
+    note: seed?.note || ''
+  };
 }
 
-function SummaryPill({ icon, label, value, highlight }: { icon: string; label: string; value: string; highlight?: boolean }) {
+function getCommonValue(values: Array<string | null>) {
+  const normalized = Array.from(new Set(values.map((value) => value ?? null)));
+  return normalized.length === 1 ? normalized[0] : null;
+}
+
+function serializeSessions(sessions: SessionFormState[]): CourseSessionWritePayload[] {
+  return sessions.map((session) => ({
+    id: session.id,
+    type: session.type,
+    day: session.day,
+    startTime: session.start,
+    endTime: session.end,
+    groupId: sanitizeOptionalValue(session.groupId),
+    instructorId: sanitizeOptionalValue(session.instructorId),
+    roomId: sessionSupportsRoom(session.type) ? sanitizeOptionalValue(session.roomId) : null,
+    onlinePlatform: sessionSupportsOnline(session.type) ? session.onlinePlatform.trim() || null : null,
+    onlineLink: sessionSupportsOnline(session.type) ? session.onlineLink.trim() || null : null,
+    note: session.note.trim() || null
+  }));
+}
+
+function formatSessionSummary(count: number) {
+  if (count <= 0) return 'No sessions yet';
+  if (count === 1) return '1 session';
+  return `${count} sessions`;
+}
+
+function DayPicker({ value, onChange }: { value: string; onChange: (next: string) => void }) {
   return (
-    <div className={cn('rounded-2xl border px-3 py-3', highlight ? 'border-[var(--gold)]/25 bg-[var(--gold-muted)]' : 'border-[var(--border)] bg-[var(--surface)]')}>
-      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">
-        <span className="material-symbols-outlined text-[14px]">{icon}</span>
-        {label}
-      </div>
-      <div className={cn('mt-2 text-sm font-semibold', highlight ? 'text-[var(--gold)]' : 'text-white')}>{value}</div>
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">
+      {DAY_OPTIONS.map((day) => {
+        const active = value === day.value;
+        return (
+          <button
+            key={day.value}
+            type="button"
+            onClick={() => onChange(day.value)}
+            aria-pressed={active}
+            className={cn(
+              'rounded-2xl border px-3 py-2 text-center text-sm font-bold transition-all',
+              active
+                ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-[var(--gold)] shadow-[var(--shadow-sm)]'
+                : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-white'
+            )}
+          >
+            {day.badge}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -188,37 +219,68 @@ function SectionCard({ eyebrow, title, description, children }: { eyebrow: strin
 }
 
 export function EditCourseModal({ open, onClose, mode, initialData, groups, instructors, rooms, onSave }: EditCourseModalProps) {
-  const [form, setForm] = useState<FormState>(emptyForm());
+  const [courseCode, setCourseCode] = useState('');
+  const [courseTitle, setCourseTitle] = useState('');
+  const [status, setStatus] = useState<Row['status']>('Active');
+  const [sessions, setSessions] = useState<SessionFormState[]>([emptySession()]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   useEffect(() => {
     if (!open) return;
-    const times = parseTimeRange(initialData?.time);
-    setForm({
-      code: initialData?.code || '',
-      course: initialData?.course || '',
-      status: (initialData?.status as Row['status']) || 'Active',
-      day: initialData?.day?.substring(0, 3) || 'Sat',
-      start: times.start,
-      end: times.end,
-      groupId: initialData?.groupId || NONE_VALUE,
-      instructorId: initialData?.instructorId || NONE_VALUE,
-      roomId: initialData?.roomId || NONE_VALUE
-    });
+
+    const initialSessions = initialData?.sessions?.length
+      ? initialData.sessions.map((session) => {
+          const start = session.startTime || '09:00';
+          const end = session.endTime || '10:00';
+          return emptySession({
+            id: session.id,
+            type: session.type || 'LECTURE',
+            day: session.day || 'Sat',
+            start,
+            end,
+            groupId: session.groupId || initialData.groupId || NONE_VALUE,
+            instructorId: session.instructorId || initialData.instructorId || NONE_VALUE,
+            roomId: session.roomId || initialData.roomId || NONE_VALUE,
+            onlinePlatform: session.onlinePlatform || '',
+            onlineLink: session.onlineLink || '',
+            note: session.note || ''
+          });
+        })
+      : [(() => {
+          const times = parseTimeRange(initialData?.time);
+          return emptySession({
+            type: 'LECTURE',
+            day: initialData?.day?.substring(0, 3) || 'Sat',
+            start: times.start,
+            end: times.end,
+            groupId: initialData?.groupId || NONE_VALUE,
+            instructorId: initialData?.instructorId || NONE_VALUE,
+            roomId: initialData?.roomId || NONE_VALUE
+          });
+        })()];
+
+    setCourseCode(initialData?.code || '');
+    setCourseTitle(stripLegacySessionSuffix(initialData?.course || initialData?.courseName || ''));
+    setStatus((initialData?.status as Row['status']) || 'Active');
+    setSessions(initialSessions);
     setSaving(false);
     setError('');
     setFieldErrors({});
   }, [open, initialData, mode]);
 
+  const meta = MODE_META[mode];
+  const showBasics = mode !== 'time' && mode !== 'room';
+  const showStatus = mode === 'create' || mode === 'full' || mode === 'duplicate';
+
   const groupOptions = useMemo(
     () =>
-      optionOrNone(groups, (group) => ({
+      optionOrNone(sortGroupsForDisplay(groups), (group) => ({
         value: group.id,
-        label: group.code || group.name || 'Group',
-        description: group.name || undefined,
-        keywords: `${group.code || ''} ${group.name || ''}`
+        label: group.parentGroupId ? `${group.code} — ${groupKindLabel(group)}` : `${group.code} — Main group`,
+        description: `${groupHierarchyPath(group)} • ${group.name}`,
+        keywords: `${group.code || ''} ${group.name || ''} ${group.parentGroup?.code || ''} ${group.parentGroup?.name || ''}`
       })),
     [groups]
   );
@@ -239,33 +301,46 @@ export function EditCourseModal({ open, onClose, mode, initialData, groups, inst
       optionOrNone(rooms, (room) => ({
         value: room.id,
         label: room.code || room.name || 'Room',
-        description: [room.name, room.building].filter(Boolean).join(' • ') || undefined,
-        keywords: `${room.code || ''} ${room.name || ''} ${room.building || ''}`
+        description: roomDisplaySummary(room),
+        keywords: `${room.code || ''} ${room.name || ''} ${room.building || ''} ${room.buildingCode || ''} ${room.roomNumber || ''} ${room.level ?? ''}`
       })),
     [rooms]
   );
 
-  const meta = MODE_META[mode];
-  const showBasics = mode === 'create' || mode === 'title' || mode === 'full' || mode === 'duplicate';
-  const showSchedule = mode === 'create' || mode === 'time' || mode === 'full' || mode === 'duplicate';
-  const showAssignments = mode === 'create' || mode === 'room' || mode === 'full' || mode === 'duplicate';
-  const showStatus = mode === 'create' || mode === 'full' || mode === 'duplicate';
-  const dayLabel = DAY_OPTIONS.find((option) => option.value === form.day)?.label ?? 'Choose day';
-  const groupLabel = groupOptions.find((option) => option.value === form.groupId)?.label ?? 'Unassigned';
-  const instructorLabel = instructorOptions.find((option) => option.value === form.instructorId)?.label ?? 'Unassigned';
-  const roomLabel = roomOptions.find((option) => option.value === form.roomId)?.label ?? 'Unassigned';
+  const sessionSummary = useMemo(() => formatSessionSummary(sessions.length), [sessions.length]);
+
+  const updateSession = (index: number, patch: Partial<SessionFormState>) => {
+    setSessions((current) => current.map((session, sessionIndex) => (sessionIndex === index ? { ...session, ...patch } : session)));
+  };
+
+  const addSession = (seed?: Partial<SessionFormState>) => {
+    setSessions((current) => [...current, emptySession(seed)]);
+  };
+
+  const duplicateSession = (index: number) => {
+    const source = sessions[index];
+    addSession({ ...source, id: undefined, note: '' });
+  };
+
+  const removeSession = (index: number) => {
+    setSessions((current) => (current.length > 1 ? current.filter((_, sessionIndex) => sessionIndex !== index) : current));
+  };
 
   const validate = () => {
     const nextErrors: FieldErrors = {};
 
     if (showBasics) {
-      if (!form.course.trim()) nextErrors.course = 'Course title is required.';
-      if ((mode === 'create' || mode === 'full' || mode === 'duplicate') && !form.code.trim()) nextErrors.code = 'Course code is required.';
+      if (!courseTitle.trim()) nextErrors.course = 'Course title is required.';
+      if ((mode === 'create' || mode === 'full' || mode === 'duplicate') && !courseCode.trim()) nextErrors.code = 'Course code is required.';
     }
 
-    if (showSchedule) {
-      if (!form.day) nextErrors.day = 'Choose a day.';
-      if (form.start >= form.end) nextErrors.time = 'End time must be after the start time.';
+    if (!sessions.length) {
+      nextErrors.sessions = 'Add at least one session.';
+    }
+
+    const hasSessionError = sessions.some((session) => !session.day || session.start >= session.end);
+    if (hasSessionError) {
+      nextErrors.sessions = 'Each session needs a valid day and time range.';
     }
 
     setFieldErrors(nextErrors);
@@ -281,19 +356,26 @@ export function EditCourseModal({ open, onClose, mode, initialData, groups, inst
   const handleSave = async () => {
     if (!validate()) return;
 
+    const serializedSessions = serializeSessions(sessions);
+    const commonGroupId = getCommonValue(serializedSessions.map((session) => session.groupId ?? null));
+    const commonInstructorId = getCommonValue(serializedSessions.map((session) => session.instructorId ?? null));
+    const commonRoomId = getCommonValue(serializedSessions.map((session) => session.roomId ?? null));
+    const primarySession = serializedSessions[0];
+
     setSaving(true);
     setError('');
     try {
       await onSave(
         {
-          code: form.code.trim(),
-          course: form.course.trim(),
-          status: form.status,
-          day: form.day,
-          time: `${form.start} → ${form.end}`,
-          groupId: sanitizeOptionalValue(form.groupId),
-          instructorId: sanitizeOptionalValue(form.instructorId),
-          roomId: sanitizeOptionalValue(form.roomId)
+          code: courseCode.trim(),
+          course: courseTitle.trim(),
+          status,
+          groupId: commonGroupId,
+          instructorId: commonInstructorId,
+          roomId: commonRoomId,
+          day: primarySession?.day ?? undefined,
+          time: primarySession?.startTime && primarySession?.endTime ? `${primarySession.startTime} → ${primarySession.endTime}` : undefined,
+          sessions: serializedSessions
         },
         initialData?.id
       );
@@ -326,138 +408,203 @@ export function EditCourseModal({ open, onClose, mode, initialData, groups, inst
       <div className="space-y-5 pb-1">
         <section className="grid gap-3 rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:grid-cols-[1.25fr_0.95fr] md:p-5">
           <div>
-            <div className="text-[11px] font-black uppercase tracking-[0.18em] text-[var(--gold)]">Scheduling flow</div>
-            <h3 className="mt-1 text-lg font-black tracking-tight text-white">Build the course in one connected pass</h3>
+            <div className="text-[11px] font-black uppercase tracking-[0.18em] text-[var(--gold)]">Course architecture</div>
+            <h3 className="mt-1 text-lg font-black tracking-tight text-white">One course, many sessions</h3>
             <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
-              Fill the essentials first, then refine schedule and assignments. Required fields are highlighted when you try to save, while room, group, and instructor can stay flexible until planning is final.
+              Keep the course identity once, then attach lecture, section, lab, online, or hybrid sessions under it. This avoids duplicate course rows and keeps the timetable mapping clean.
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-full border border-[var(--gold)]/25 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--gold)]">Primary CTA stays pinned</span>
-              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]">Optional assignments can be added later</span>
-            </div>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
-            <SummaryPill icon="calendar_today" label="Day" value={dayLabel} highlight={showSchedule} />
-            <SummaryPill icon="schedule" label="Time" value={`${form.start} → ${form.end}`} highlight={showSchedule} />
-            <SummaryPill icon="groups" label="Group" value={groupLabel} />
-            <SummaryPill icon="school" label="Instructor" value={instructorLabel} />
-            <SummaryPill icon="meeting_room" label="Room" value={roomLabel} />
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Sessions</div>
+              <div className="mt-2 text-sm font-semibold text-white">{sessionSummary}</div>
+            </div>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+              <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Delivery mix</div>
+              <div className="mt-2 text-sm font-semibold text-white">
+                {Array.from(new Set(sessions.map((session) => formatSessionType(session.type)))).join(' • ')}
+              </div>
+            </div>
           </div>
         </section>
 
         {showBasics ? (
           <SectionCard
             eyebrow="Course identity"
-            title={mode === 'title' ? 'Rename this course' : 'Course basics'}
-            description="Start with the name and code students will recognize in the timetable and exports."
+            title={mode === 'duplicate' ? 'Duplicate course basics' : 'Course basics'}
+            description="Define the course once, then manage all of its sessions below."
           >
             <div className="grid gap-4 md:grid-cols-[220px_1fr]">
               <Input
                 label="Course code"
-                value={form.code}
-                onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))}
+                value={courseCode}
+                onChange={(event) => setCourseCode(event.target.value)}
                 placeholder="MATH-201"
                 error={fieldErrors.code}
-                helperText={mode === 'title' ? 'Code stays visible for reference even if you are only renaming.' : 'Use the short academic code used in your institution.'}
+                helperText="Use the shared academic code for the whole course."
               />
               <Input
                 label="Course title"
-                value={form.course}
-                onChange={(event) => setForm((current) => ({ ...current, course: event.target.value }))}
+                value={courseTitle}
+                onChange={(event) => setCourseTitle(event.target.value)}
                 placeholder="Electrical Machines & Industrial Electronics"
                 error={fieldErrors.course}
-                helperText="This is the primary label students will see across the workspace."
+                helperText="Lecture/section/lab names belong in session type, not in the course title."
               />
             </div>
-          </SectionCard>
-        ) : null}
 
-        {showSchedule ? (
-          <SectionCard
-            eyebrow="Schedule"
-            title={mode === 'time' ? 'Pick the session slot' : 'Day and time'}
-            description="Use a tap-friendly day picker and quick time controls so scheduling works well on both phone and desktop."
-          >
-            <div className="space-y-4">
-              <DayPicker value={form.day} onChange={(day) => setForm((current) => ({ ...current, day }))} errorText={fieldErrors.day} />
-              <TimeRangeField
-                start={form.start}
-                end={form.end}
-                onStartChange={(value) => setForm((current) => ({ ...current, start: value, end: current.end <= value ? '10:00' : current.end }))}
-                onEndChange={(value) => setForm((current) => ({ ...current, end: value }))}
-                helperText="Quarter-hour increments keep timetable placement cleaner and reduce overlap mistakes."
-                errorText={fieldErrors.time}
-              />
-              {showStatus ? (
-                <AppSelect
-                  label="Course status"
-                  value={form.status}
-                  onChange={(value) => setForm((current) => ({ ...current, status: value as Row['status'] }))}
-                  options={STATUS_OPTIONS}
-                  helperText="Use Draft while you are still refining the course before publishing it as active."
-                />
-              ) : null}
-            </div>
-          </SectionCard>
-        ) : null}
-
-        {showAssignments ? (
-          <SectionCard
-            eyebrow="Assignments"
-            title={mode === 'room' ? 'Room assignment' : 'Group, instructor, and room'}
-            description={
-              mode === 'room'
-                ? 'Move the course to another room or leave it unassigned until the final slot is confirmed.'
-                : 'Choose who teaches the course, where it happens, and which group it belongs to.'
-            }
-          >
-            {mode === 'room' ? (
+            {showStatus ? (
               <AppSelect
-                label="Room"
-                value={form.roomId}
-                onChange={(value) => setForm((current) => ({ ...current, roomId: value }))}
-                options={roomOptions}
-                placeholder="Choose a room"
-                searchable
-                searchPlaceholder="Find room"
-                helperText="You can keep the course unassigned while room planning is still in progress."
+                label="Course status"
+                value={status}
+                onChange={(value) => setStatus(value as Row['status'])}
+                options={STATUS_OPTIONS}
+                helperText="Use Draft while you are still refining the course before publishing it as active."
               />
-            ) : (
-              <div className="grid gap-4 md:grid-cols-3">
-                <AppSelect
-                  label="Group"
-                  value={form.groupId}
-                  onChange={(value) => setForm((current) => ({ ...current, groupId: value }))}
-                  options={groupOptions}
-                  placeholder="Choose a group"
-                  searchable
-                  searchPlaceholder="Find group"
-                  helperText="Optional — leave unassigned if the group is not finalized yet."
-                />
-                <AppSelect
-                  label="Instructor"
-                  value={form.instructorId}
-                  onChange={(value) => setForm((current) => ({ ...current, instructorId: value }))}
-                  options={instructorOptions}
-                  placeholder="Choose an instructor"
-                  searchable
-                  searchPlaceholder="Find instructor"
-                  helperText="Optional — assign later if staffing is still in flux."
-                />
-                <AppSelect
-                  label="Room"
-                  value={form.roomId}
-                  onChange={(value) => setForm((current) => ({ ...current, roomId: value }))}
-                  options={roomOptions}
-                  placeholder="Choose a room"
-                  searchable
-                  searchPlaceholder="Find room"
-                  helperText="Optional — useful for drafts before room allocation is final."
-                />
-              </div>
-            )}
+            ) : null}
           </SectionCard>
         ) : null}
+
+        <SectionCard
+          eyebrow="Sessions"
+          title="Manage all sessions here"
+          description="Each session can carry its own type, time, room, group, instructor, and online details."
+        >
+          <div className="space-y-4">
+            {sessions.map((session, index) => {
+              const supportsOnline = sessionSupportsOnline(session.type);
+              const supportsRoom = sessionSupportsRoom(session.type);
+              const groupLabel = groupOptions.find((option) => option.value === session.groupId)?.label ?? 'Unassigned';
+              const instructorLabel = instructorOptions.find((option) => option.value === session.instructorId)?.label ?? 'Unassigned';
+              const roomLabel = roomOptions.find((option) => option.value === session.roomId)?.label ?? 'Unassigned';
+
+              return (
+                <section key={session.id || `session-${index}`} className="rounded-[24px] border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
+                  <div className="flex flex-col gap-3 border-b border-[var(--border-soft)] pb-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Session {index + 1}</div>
+                      <h4 className="mt-1 text-base font-black text-white">{formatSessionType(session.type)}</h4>
+                      <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                        {session.day} • {session.start} → {session.end} • {groupLabel} • {instructorLabel} • {supportsRoom ? roomLabel : 'Online only'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button type="button" variant="ghost" onClick={() => duplicateSession(index)} className="gap-2">
+                        <span className="material-symbols-outlined text-[18px]">content_copy</span>
+                        Duplicate
+                      </Button>
+                      <Button type="button" variant="ghost-danger" onClick={() => removeSession(index)} disabled={sessions.length === 1} className="gap-2">
+                        <span className="material-symbols-outlined text-[18px]">delete</span>
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-4">
+                    <div className="grid gap-4 md:grid-cols-[220px_1fr]">
+                      <AppSelect
+                        label="Session type"
+                        value={session.type}
+                        onChange={(value) => updateSession(index, { type: value as SessionTypeValue, roomId: value === 'ONLINE' ? NONE_VALUE : session.roomId })}
+                        options={SESSION_TYPE_OPTIONS}
+                        helperText="Use the session type instead of encoding it into the course name."
+                      />
+                      <div className="space-y-2">
+                        <label className="block text-[11px] font-black uppercase tracking-[0.16em] text-[var(--text-muted)]">Day</label>
+                        <DayPicker value={session.day} onChange={(day) => updateSession(index, { day })} />
+                      </div>
+                    </div>
+
+                    <TimeRangeField
+                      start={session.start}
+                      end={session.end}
+                      onStartChange={(value) => updateSession(index, { start: value, end: session.end <= value ? '10:00' : session.end })}
+                      onEndChange={(value) => updateSession(index, { end: value })}
+                      helperText="Quarter-hour increments keep timetable placement cleaner and reduce overlap mistakes."
+                    />
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <AppSelect
+                        label="Group"
+                        value={session.groupId}
+                        onChange={(value) => updateSession(index, { groupId: value })}
+                        options={groupOptions}
+                        placeholder="Choose a group"
+                        searchable
+                        searchPlaceholder="Find group"
+                        helperText="Optional — assign only if this session belongs to a specific cohort."
+                      />
+                      <AppSelect
+                        label="Instructor"
+                        value={session.instructorId}
+                        onChange={(value) => updateSession(index, { instructorId: value })}
+                        options={instructorOptions}
+                        placeholder="Choose an instructor"
+                        searchable
+                        searchPlaceholder="Find instructor"
+                        helperText="Optional — useful when lecture and lab are taught by different instructors."
+                      />
+                      <AppSelect
+                        label={supportsRoom ? 'Room' : 'Room (not needed for online)'}
+                        value={supportsRoom ? session.roomId : NONE_VALUE}
+                        onChange={(value) => updateSession(index, { roomId: value })}
+                        options={roomOptions}
+                        placeholder={supportsRoom ? 'Choose a room' : 'Online only'}
+                        searchable
+                        searchPlaceholder="Find room"
+                        helperText={supportsRoom ? 'Optional — leave unassigned until room planning is finalized.' : 'Online sessions do not need a physical room.'}
+                        disabled={!supportsRoom}
+                      />
+                    </div>
+
+                    {supportsOnline ? (
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <Input
+                          label="Online platform"
+                          value={session.onlinePlatform}
+                          onChange={(event) => updateSession(index, { onlinePlatform: event.target.value })}
+                          placeholder="Zoom, Google Meet, Teams..."
+                          helperText="Useful for online and hybrid sessions."
+                        />
+                        <Input
+                          label="Online link"
+                          value={session.onlineLink}
+                          onChange={(event) => updateSession(index, { onlineLink: event.target.value })}
+                          placeholder="https://..."
+                          helperText="Optional join link or platform URL."
+                        />
+                      </div>
+                    ) : null}
+
+                    <div className="space-y-2">
+                      <label className="block text-[11px] font-black uppercase tracking-[0.16em] text-[var(--text-muted)]">Session notes</label>
+                      <textarea
+                        value={session.note}
+                        onChange={(event) => updateSession(index, { note: event.target.value })}
+                        placeholder="Optional notes for this session"
+                        rows={3}
+                        className="w-full rounded-[24px] border border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] px-4 py-3 text-sm text-white outline-none transition-all placeholder:text-[var(--text-muted)] focus:border-[var(--gold)] focus:ring-4 focus:ring-[var(--focus-ring)]"
+                      />
+                    </div>
+                  </div>
+                </section>
+              );
+            })}
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-semibold text-white">Add another session</div>
+                <div className="text-sm text-[var(--text-secondary)]">Lecture, section, lab, online, and hybrid sessions can all live under the same course.</div>
+              </div>
+              <Button type="button" variant="secondary" onClick={() => addSession({ groupId: sessions[sessions.length - 1]?.groupId, instructorId: sessions[sessions.length - 1]?.instructorId, roomId: sessions[sessions.length - 1]?.roomId })} className="gap-2">
+                <span className="material-symbols-outlined text-[18px]">add</span>
+                Add Session
+              </Button>
+            </div>
+
+            {fieldErrors.sessions ? <div className="text-[11px] font-semibold text-[var(--danger)]">{fieldErrors.sessions}</div> : null}
+          </div>
+        </SectionCard>
 
         {error ? (
           <div className="flex items-start gap-3 rounded-[24px] border border-[var(--danger)]/50 bg-[linear-gradient(135deg,var(--danger-muted),transparent)] px-4 py-3 text-sm font-semibold text-[var(--danger)]">

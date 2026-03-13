@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Modal } from '@/components/ui/Modal';
@@ -13,7 +13,24 @@ import { useToast } from '@/components/ui/Toast';
 import { BulkActionBar } from '@/components/workspace/BulkActionBar';
 import { useBulkSelection } from '@/hooks/useBulkSelection';
 import type { RoomApiItem } from '@/types';
-import { cn } from '@/lib/utils';
+
+type WorkspaceAccess = {
+  productRole: 'OWNER' | 'EDITOR' | 'VIEWER';
+  canWrite: boolean;
+  canImport: boolean;
+};
+
+const ROOMS_TEMPLATE_CSV = `buildingCode,roomNumber,name,buildingName,capacity
+E,119,Room E119,Main Engineering Building,40
+E,226,Room E226,,25
+E,412,Room E412,,60`;
+
+const ROOMS_IMPORT_HELP = [
+  'Supported columns: buildingCode + roomNumber, or a single code/fullCode column. buildingName and capacity are optional.',
+  'Level is derived automatically from the room number using the university rule already used by the product.',
+  'Choose import mode: create only, update existing, or create + update. Preview clearly shows each row outcome before confirmation.',
+  'If name is omitted, the import uses a safe default like "Room E119" so invalid blank-name rows are never created.'
+];
 
 export default function RoomsPage() {
   const { status } = useSession({ required: true, onUnauthenticated() { window.location.href = '/auth'; } });
@@ -23,12 +40,12 @@ export default function RoomsPage() {
   const [rooms, setRooms] = useState<RoomApiItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<RoomApiItem | null>(null);
-  const [formData, setFormData] = useState({ code: '', name: '', capacity: '', building: '' });
+  const [formData, setFormData] = useState({ code: '', name: '', capacity: '', building: '', buildingCode: '', roomNumber: '' });
   const [actionLoading, setActionLoading] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState('');
@@ -39,7 +56,8 @@ export default function RoomsPage() {
       const res = await fetch('/api/v1/rooms');
       const data = await res.json();
       setRooms(data.data?.items || []);
-    } catch (err) {
+      setAccess(data.data?.access || null);
+    } catch {
       toast('Failed to load rooms', 'error');
     } finally {
       setLoading(false);
@@ -48,21 +66,119 @@ export default function RoomsPage() {
 
   useEffect(() => {
     if (status === 'authenticated') {
-      fetchRooms();
+      void fetchRooms();
     }
   }, [status]);
 
-  const getPayload = () => ({
+  const normalizedPreview = useMemo(() => normalizeRoomFields({
     code: formData.code,
-    name: formData.name,
+    buildingCode: formData.buildingCode,
+    roomNumber: formData.roomNumber
+  }), [formData.buildingCode, formData.code, formData.roomNumber]);
+
+  const filteredRooms = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rooms;
+    return rooms.filter((room) => {
+      const haystack = [
+        room.code,
+        room.name,
+        room.building,
+        room.buildingCode,
+        room.roomNumber,
+        room.level != null ? `level ${room.level}` : null,
+        room.level === 0 ? 'ground' : null
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [rooms, search]);
+
+  const groupedRooms = useMemo(() => groupRoomsByBuilding(filteredRooms), [filteredRooms]);
+  const selection = useBulkSelection(filteredRooms.map((room) => room.id));
+
+  const exportSelectedCsv = () => {
+    const selectedRows = filteredRooms.filter((room) => selection.selected.has(room.id));
+    if (!selectedRows.length) return toast('Select rooms first. Export scope is selected rows only.', 'error');
+    const header = ['code', 'name', 'building_code', 'building_name', 'room_number', 'level', 'capacity'];
+    const lines = [header.map(csvCell).join(','), ...selectedRows.map((room) => [room.code, room.name, room.buildingCode || '', room.building || '', room.roomNumber || '', String(room.level ?? ''), String(room.capacity ?? '')].map(csvCell).join(','))];
+    const dateTag = new Date().toISOString().slice(0, 10);
+    downloadFile(`rooms-selected-${dateTag}.csv`, lines.join('\n'), 'text/csv;charset=utf-8');
+    toast(`Exported ${selectedRows.length} selected room(s). Scope: selected items only.`);
+  };
+
+  const runBulkDelete = async () => {
+    const ids = Array.from(selection.selected);
+    if (!ids.length) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch('/api/v1/rooms/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', ids }) });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.message || 'Bulk delete failed');
+      selection.clear();
+      setBulkDeleteOpen(false);
+      setBulkConfirmText('');
+      toast(`Bulk delete complete: ${payload.successCount}/${payload.requested} deleted.` + (payload.failed?.length ? ` First failure: ${payload.failed[0].reason}` : ''));
+      await fetchRooms();
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : 'Bulk delete failed', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const selectedSection = useMemo(
+    () => groupedRooms.find((section) => section.buildingCode === selectedSectionKey) ?? null,
+    [groupedRooms, selectedSectionKey]
+  );
+
+  const toggleSection = (key: string) => {
+    if (search.trim()) return;
+    setCollapsedSections((current) => ({
+      ...current,
+      [key]: !(current[key] ?? true)
+    }));
+  };
+
+  const handleCodeChange = (value: string) => {
+    const normalized = normalizeRoomFields({ code: value });
+    setFormData((current) => ({
+      ...current,
+      code: value.toUpperCase(),
+      buildingCode: normalized.buildingCode || current.buildingCode,
+      roomNumber: normalized.roomNumber || current.roomNumber
+    }));
+  };
+
+  const handleStructuredChange = (patch: Partial<typeof formData>) => {
+    setFormData((current) => {
+      const next = { ...current, ...patch };
+      const normalized = normalizeRoomFields({
+        code: next.code,
+        buildingCode: next.buildingCode,
+        roomNumber: next.roomNumber
+      });
+      return {
+        ...next,
+        code: normalized.code || next.code
+      };
+    });
+  };
+
+  const getPayload = () => ({
+    code: normalizedPreview.code || formData.code.trim().toUpperCase(),
+    name: formData.name.trim(),
     capacity: formData.capacity ? parseInt(formData.capacity, 10) : null,
-    building: formData.building || null
+    building: formData.building.trim() || null,
+    buildingCode: normalizedPreview.buildingCode,
+    roomNumber: normalizedPreview.roomNumber
   });
 
   const handleSave = async () => {
-    if (!formData.code || !formData.name) return toast('Code and name are required', 'error');
+    if (!access?.canWrite) return toast('Viewer mode: room changes are disabled.', 'error');
+    if (!formData.name.trim()) return toast('Room name is required', 'error');
+    if (!getPayload().code) return toast('Room code or structured building + room number is required', 'error');
+
     setActionLoading(true);
-    
     const isEdit = modalMode === 'edit';
     const url = isEdit ? `/api/v1/rooms/${selectedRoom?.id}` : '/api/v1/rooms';
     const method = isEdit ? 'PATCH' : 'POST';
@@ -75,10 +191,10 @@ export default function RoomsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || `Failed to ${modalMode} room`);
-      
+
       toast(`Room ${isEdit ? 'updated' : 'added'} successfully`);
       setIsModalOpen(false);
-      fetchRooms();
+      await fetchRooms();
     } catch (err: unknown) {
       toast(err instanceof Error ? err.message : 'Request failed', 'error');
     } finally {
@@ -87,37 +203,104 @@ export default function RoomsPage() {
   };
 
   const handleDelete = async () => {
+    if (!access?.canWrite) return toast('Viewer mode: room deletion is disabled.', 'error');
     if (!selectedRoom) return;
+    const roomToDelete = selectedRoom;
     setActionLoading(true);
+    setDeletingRoomId(roomToDelete.id);
     try {
-      const res = await fetch(`/api/v1/rooms/${selectedRoom.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/v1/rooms/${roomToDelete.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to remove room');
-      
-      toast('Room removed successfully');
+
+      setRooms((current) => current.filter((room) => room.id !== roomToDelete.id));
+      toast('Room deleted');
       setIsDeleteOpen(false);
-      fetchRooms();
+      setSelectedRoom(null);
     } catch (err: unknown) {
       toast(err instanceof Error ? err.message : 'Request failed', 'error');
     } finally {
       setActionLoading(false);
+      setDeletingRoomId(null);
     }
   };
 
-  const openEdit = (r: RoomApiItem) => {
-    setSelectedRoom(r);
-    setFormData({ 
-      code: r.code, 
-      name: r.name, 
-      capacity: r.capacity?.toString() || '', 
-      building: r.building || '' 
+  const openSectionDelete = (buildingCode: string) => {
+    if (!access?.canWrite) {
+      toast('Viewer mode: room deletion is disabled.', 'error');
+      return;
+    }
+    if (search.trim()) {
+      toast('Clear search before deleting a full building section so no hidden rooms are skipped.', 'error');
+      return;
+    }
+    setSelectedSectionKey(buildingCode);
+    setIsSectionDeleteOpen(true);
+  };
+
+  const handleSectionDelete = async () => {
+    if (!access?.canWrite) return toast('Viewer mode: room deletion is disabled.', 'error');
+    if (!selectedSection) return;
+
+    const roomIds = selectedSection.rooms.map((room) => room.id);
+    if (!roomIds.length) {
+      setIsSectionDeleteOpen(false);
+      setSelectedSectionKey(null);
+      return;
+    }
+
+    setSectionDeleteLoadingKey(selectedSection.buildingCode);
+    try {
+      const failures: string[] = [];
+      for (const room of selectedSection.rooms) {
+        const res = await fetch(`/api/v1/rooms/${room.id}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          failures.push(`${room.code}: ${data?.message || 'delete failed'}`);
+        }
+      }
+
+      if (failures.length) {
+        toast(`Stopped: ${failures.length} room delete(s) failed in ${selectedSection.buildingCode}. ${failures[0]}`, 'error');
+        return;
+      }
+
+      setRooms((current) => current.filter((room) => !roomIds.includes(room.id)));
+      toast(`Deleted ${roomIds.length} room${roomIds.length === 1 ? '' : 's'} from ${selectedSection.buildingCode === '—' ? 'Unstructured rooms' : `Building ${selectedSection.buildingCode}`}`);
+      setIsSectionDeleteOpen(false);
+      setSelectedSectionKey(null);
+    } catch {
+      toast('Section delete failed', 'error');
+    } finally {
+      setSectionDeleteLoadingKey(null);
+    }
+  };
+
+  const openEdit = (room: RoomApiItem) => {
+    if (!access?.canWrite) {
+      toast('Viewer mode: editing rooms is disabled.', 'error');
+      return;
+    }
+    setSelectedRoom(room);
+    setFormData({
+      code: room.code,
+      name: room.name,
+      capacity: room.capacity?.toString() || '',
+      building: room.building || '',
+      buildingCode: room.buildingCode || '',
+      roomNumber: room.roomNumber || ''
     });
     setModalMode('edit');
     setIsModalOpen(true);
   };
 
   const openCreate = () => {
-    setFormData({ code: '', name: '', capacity: '', building: '' });
+    if (!access?.canWrite) {
+      toast('Viewer mode: adding rooms is disabled.', 'error');
+      return;
+    }
+    setSelectedRoom(null);
+    setFormData({ code: '', name: '', capacity: '', building: '', buildingCode: '', roomNumber: '' });
     setModalMode('create');
     setIsModalOpen(true);
   };
@@ -172,39 +355,33 @@ export default function RoomsPage() {
   };
 
   return (
-    <AppShell title="Campus Facilities" subtitle="Manage rooms, labs, and lecture halls">
-       <div className="flex flex-col gap-6 p-1 md:p-6 lg:p-8 animate-panel-pop">
-          
-          <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
-             <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex flex-col gap-1">
-                   <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Facility directory</div>
-                   <h2 className="text-3xl font-bold text-white tracking-tight">Rooms</h2>
-                   <p className="text-[var(--text-secondary)] text-sm">Manage classrooms, labs, and lecture halls with clearer capacity and building context.</p>
-                </div>
-                
-                <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                   <SearchInput 
-                     placeholder="Search rooms or buildings..." 
-                     value={search}
-                     onChange={(e) => setSearch(e.target.value)}
-                     onClear={() => setSearch('')}
-                     className="w-full sm:w-[340px]"
-                   />
-                   <Button onClick={openCreate} variant="primary" className="gap-2">
-                     <span className="material-symbols-outlined text-[20px]">meeting_room</span>
-                     Add Room
-                   </Button>
-                </div>
-             </div>
-             <div className="mt-4 flex flex-wrap gap-2">
-               <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]">
-                 {rooms.length} spaces tracked
-               </span>
-               <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--gold)]">
-                 {search ? `${filteredRooms.length} matching search` : 'Code, capacity, and building in one place'}
-               </span>
-             </div>
+    <AppShell title="Campus Facilities" subtitle="Manage structured rooms and building layout">
+      <div className="flex flex-col gap-6 p-1 md:p-6 lg:p-8 animate-panel-pop">
+        <div className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-4 shadow-[var(--shadow-sm)] md:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-col gap-1">
+              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Facility structure</div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Rooms</h2>
+              <p className="text-[var(--text-secondary)] text-sm">Track building letter, room number, and derived level so scheduling uses real campus structure instead of flat codes only.</p>
+            </div>
+
+            <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <SearchInput
+                placeholder="Search rooms, buildings, or levels..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onClear={() => setSearch('')}
+                className="w-full sm:w-[360px]"
+              />
+              <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2" disabled={!access?.canImport}>
+                <span className="material-symbols-outlined text-[20px]">upload_file</span>
+                Import CSV
+              </Button>
+              <Button onClick={openCreate} variant="primary" className="gap-2" disabled={!access?.canWrite}>
+                <span className="material-symbols-outlined text-[20px]">meeting_room</span>
+                Add Room
+              </Button>
+            </div>
           </div>
 
           <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] overflow-hidden shadow-[var(--shadow-lg)]">
@@ -345,26 +522,51 @@ export default function RoomsPage() {
                    />
                  </div>
               </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <Input 
-                  label="Building" 
-                  value={formData.building} 
-                  onChange={e => setFormData({...formData, building: e.target.value})} 
-                  placeholder="Engineering Block" 
-                  helperText="Optional"
-                />
-                <Input 
-                  label="Capacity" 
-                  type="number"
-                  value={formData.capacity} 
-                  onChange={e => setFormData({...formData, capacity: e.target.value})} 
-                  placeholder="Number of seats" 
-                  helperText="Optional"
+            </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <Input
+                label="Room code"
+                value={formData.code}
+                onChange={(e) => handleCodeChange(e.target.value)}
+                placeholder="E412"
+                helperText="Full scheduling code. If building letter + room number are set, this syncs automatically."
+              />
+              <div className="md:col-span-2">
+                <Input
+                  label="Room name"
+                  value={formData.name}
+                  onChange={(e) => setFormData((current) => ({ ...current, name: e.target.value }))}
+                  placeholder="Electronics Lab"
+                  helperText="Human-readable room name used across the workspace."
                 />
               </div>
             </div>
-         </div>
-       </Modal>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Input
+                label="Building name"
+                value={formData.building}
+                onChange={(e) => setFormData((current) => ({ ...current, building: e.target.value }))}
+                placeholder="Engineering Block"
+                helperText="Optional descriptive building name."
+              />
+              <Input
+                label="Capacity"
+                type="number"
+                value={formData.capacity}
+                onChange={(e) => setFormData((current) => ({ ...current, capacity: e.target.value }))}
+                placeholder="40"
+                helperText="Optional seat capacity for planning."
+              />
+            </div>
+            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--bg-raised)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+              Preview: <span className="font-semibold text-white">{normalizedPreview.code || formData.code || '—'}</span>
+              {normalizedPreview.buildingCode || normalizedPreview.roomNumber ? (
+                <span> • {roomDisplaySummary({ code: normalizedPreview.code || formData.code, building: formData.building || null, buildingCode: normalizedPreview.buildingCode, roomNumber: normalizedPreview.roomNumber, level: normalizedPreview.level })}</span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </Modal>
 
        {/* Single delete Modal */}
        <Modal 

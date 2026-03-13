@@ -8,6 +8,8 @@ import {
   requireSession,
   requireWorkspaceRole
 } from "@/lib/workspace-v1";
+import { requireWorkspaceReadAccess } from "@/lib/workspace-access";
+import { writeWorkspaceAudit } from '@/lib/workspace-audit';
 
 const createSchema = z.object({
   workspaceId: z.string().cuid().optional(),
@@ -18,31 +20,56 @@ const createSchema = z.object({
 });
 
 async function resolveWorkspace(userId: string, workspaceId?: string) {
-  if (!workspaceId) return getOrCreatePersonalWorkspace(userId);
+  if (!workspaceId) {
+    const workspace = await getOrCreatePersonalWorkspace(userId);
+    const access = await requireWorkspaceReadAccess(userId, workspace.id);
+    return { workspace, access };
+  }
 
-  await requireWorkspaceRole(userId, workspaceId, [
-    WorkspaceRole.OWNER,
-    WorkspaceRole.TEACHER,
-    WorkspaceRole.STUDENT,
-    WorkspaceRole.VIEWER
-  ]);
+  const access = await requireWorkspaceReadAccess(userId, workspaceId);
   const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } });
   if (!workspace) throw new ApiError(404, "WORKSPACE_NOT_FOUND");
-  return workspace;
+  return { workspace, access };
+}
+
+function normalizeEmail(email?: string | null) {
+  return email?.trim().toLowerCase() || null;
 }
 
 export async function GET(request: NextRequest) {
   try {
     const session = await requireSession(request);
     const workspaceId = request.nextUrl.searchParams.get("workspaceId") ?? undefined;
-    const workspace = await resolveWorkspace(session.userId, workspaceId);
+    const { workspace, access } = await resolveWorkspace(session.userId, workspaceId);
 
-    const items = await prisma.instructor.findMany({
-      where: { workspaceId: workspace.id },
-      orderBy: { name: "asc" }
-    });
+    const [items, courseCounts, sessionCounts] = await Promise.all([
+      prisma.instructor.findMany({
+        where: { workspaceId: workspace.id },
+        orderBy: { name: "asc" }
+      }),
+      prisma.course.groupBy({
+        by: ["instructorId"],
+        where: { workspaceId: workspace.id, instructorId: { not: null } },
+        _count: { _all: true }
+      }),
+      prisma.sessionEntry.groupBy({
+        by: ["instructorId"],
+        where: { workspaceId: workspace.id, instructorId: { not: null } },
+        _count: { _all: true }
+      })
+    ]);
 
-    return NextResponse.json({ ok: true, data: { workspaceId: workspace.id, items } });
+    const courseCountMap = new Map(courseCounts.map((entry) => [entry.instructorId, entry._count._all]));
+    const sessionCountMap = new Map(sessionCounts.map((entry) => [entry.instructorId, entry._count._all]));
+
+    const enriched = items.map((item) => ({
+      ...item,
+      courseCount: courseCountMap.get(item.id) || 0,
+      sessionCount: sessionCountMap.get(item.id) || 0,
+      assignmentStatus: (sessionCountMap.get(item.id) || 0) > 0 || (courseCountMap.get(item.id) || 0) > 0 ? 'assigned' : 'unassigned'
+    }));
+
+    return NextResponse.json({ ok: true, data: { workspaceId: workspace.id, access, items: enriched } });
   } catch (error) {
     if (error instanceof ApiError) {
       return NextResponse.json({ ok: false, message: error.message }, { status: error.status });
@@ -55,18 +82,33 @@ export async function POST(request: NextRequest) {
   try {
     const session = await requireSession(request);
     const body = createSchema.parse(await request.json());
-    const workspace = await resolveWorkspace(session.userId, body.workspaceId);
+    const { workspace } = await resolveWorkspace(session.userId, body.workspaceId);
 
     await requireWorkspaceRole(session.userId, workspace.id, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
 
-    const created = await prisma.instructor.create({
-      data: {
-        workspaceId: workspace.id,
-        name: body.name,
-        email: body.email || null,
-        phone: body.phone ?? null,
-        color: body.color ?? "#0ea5e9"
+    const normalizedEmail = normalizeEmail(body.email);
+    if (normalizedEmail) {
+      const exists = await prisma.instructor.findFirst({
+        where: { workspaceId: workspace.id, email: { equals: normalizedEmail, mode: 'insensitive' } },
+        select: { id: true }
+      });
+      if (exists) {
+        throw new ApiError(409, 'INSTRUCTOR_EMAIL_EXISTS');
       }
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const item = await tx.instructor.create({
+        data: {
+          workspaceId: workspace.id,
+          name: body.name.trim(),
+          email: normalizedEmail,
+          phone: body.phone?.trim() || null,
+          color: body.color ?? "#0ea5e9"
+        }
+      });
+      await writeWorkspaceAudit({ tx, workspaceId: workspace.id, actorUserId: session.userId, entityType: 'INSTRUCTOR', entityId: item.id, actionType: 'CREATE', summary: `Created instructor ${item.name}`, after: { name: item.name, email: item.email, phone: item.phone } });
+      return item;
     });
 
     return NextResponse.json({ ok: true, data: created }, { status: 201 });
