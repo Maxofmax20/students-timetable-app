@@ -11,12 +11,15 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Avatar } from '@/components/ui/Avatar';
 import { useToast } from '@/components/ui/Toast';
+import { BulkActionBar } from '@/components/workspace/BulkActionBar';
+import { useBulkSelection } from '@/hooks/useBulkSelection';
 import type { InstructorApiItem } from '@/types';
 import { cn } from '@/lib/utils';
 
 export default function InstructorsPage() {
   const { status } = useSession({ required: true, onUnauthenticated() { window.location.href = '/auth'; } });
   const { toast } = useToast();
+  const bulk = useBulkSelection();
   
   const [instructors, setInstructors] = useState<InstructorApiItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,6 +31,9 @@ export default function InstructorsPage() {
   const [selectedInstructor, setSelectedInstructor] = useState<InstructorApiItem | null>(null);
   const [formData, setFormData] = useState({ name: '', email: '', phone: '' });
   const [actionLoading, setActionLoading] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState('');
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const fetchInstructors = async () => {
     try {
@@ -110,6 +116,49 @@ export default function InstructorsPage() {
     (i.email && i.email.toLowerCase().includes(search.toLowerCase()))
   );
 
+  // Bulk helpers
+  const filteredIds = filteredInstructors.map((i) => i.id);
+  const allChecked = filteredIds.length > 0 && filteredIds.every((id) => bulk.selectedIds.has(id));
+  const someChecked = filteredIds.some((id) => bulk.selectedIds.has(id)) && !allChecked;
+
+  const handleBulkExport = () => {
+    const selected = instructors.filter((i) => bulk.selectedIds.has(i.id));
+    if (!selected.length) return;
+    const headers = ['id', 'name', 'email', 'phone'];
+    const csvRows = selected.map((i) => [i.id, i.name, i.email ?? '', i.phone ?? ''].join(','));
+    const csv = [headers.join(','), ...csvRows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `instructors-export-${Date.now()}.csv`; a.click();
+    URL.revokeObjectURL(url);
+    toast(`Exported ${selected.length} instructor${selected.length > 1 ? 's' : ''}`);
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkLoading(true);
+    const ids = Array.from(bulk.selectedIds);
+    try {
+      const res = await fetch('/api/v1/instructors/bulk', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ ids }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result?.ok) throw new Error(result?.message || 'Bulk delete failed');
+      toast(`Deleted ${result.data?.deleted ?? ids.length} instructor(s)`);
+      bulk.clear();
+      setBulkDeleteOpen(false);
+      setBulkDeleteConfirm('');
+      fetchInstructors();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Bulk delete failed', 'error');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   return (
     <AppShell title="Faculty" subtitle="Manage university instructors and staff">
        <div className="flex flex-col gap-6 p-1 md:p-6 lg:p-8 animate-panel-pop">
@@ -156,38 +205,60 @@ export default function InstructorsPage() {
                  <table className="w-full text-left border-collapse">
                     <thead>
                        <tr className="bg-[var(--bg-raised)]/50 text-[var(--text-secondary)] border-b border-[var(--border)]">
+                           <th className="pl-5 pr-2 py-4 w-10">
+                             <input
+                               type="checkbox"
+                               checked={allChecked}
+                               ref={(el) => { if (el) el.indeterminate = someChecked; }}
+                               onChange={() => bulk.toggleAll(filteredIds)}
+                               className="h-4 w-4 rounded border-[var(--border)] accent-[var(--gold)] cursor-pointer"
+                               aria-label="Select all instructors"
+                             />
+                           </th>
                           <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Instructor</th>
                           <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Contact Info</th>
                           <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px] text-right">Actions</th>
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--border-soft)]">
-                      {filteredInstructors.map(i => (
-                        <tr key={i.id} className="group/row hover:bg-[var(--surface-2)]/30 transition-all">
-                          <td className="px-6 py-4">
-                             <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                                <Avatar name={i.name} size="sm" />
-                                <span className="text-white font-bold text-sm tracking-tight">{i.name}</span>
-                             </div>
-                          </td>
-                          <td className="px-6 py-4">
-                             <div className="flex flex-col">
-                                <span className="text-[var(--text-secondary)] text-sm">{i.email || 'No email'}</span>
-                                <span className="text-[var(--text-muted)] text-[11px]">{i.phone || 'No phone'}</span>
-                             </div>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                             <div className="flex items-center justify-end gap-1 opacity-100 lg:opacity-0 lg:group-hover/row:opacity-100 transition-all">
-                               <Button variant="ghost" size="sm" onClick={() => openEdit(i)} className="h-8 w-8 p-0 rounded-lg">
-                                 <span className="material-symbols-outlined text-[18px]">edit_square</span>
-                               </Button>
-                               <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedInstructor(i); setIsDeleteOpen(true); }} className="h-8 w-8 p-0 rounded-lg">
-                                 <span className="material-symbols-outlined text-[18px]">delete</span>
-                               </Button>
-                             </div>
-                          </td>
-                        </tr>
-                      ))}
+                      {filteredInstructors.map(i => {
+                         const rowChecked = bulk.selectedIds.has(i.id);
+                         return (
+                         <tr key={i.id} className={cn("group/row transition-all", rowChecked ? "bg-[var(--gold)]/5" : "hover:bg-[var(--surface-2)]/30")}>
+                           <td className="pl-5 pr-2 py-4">
+                             <input
+                               type="checkbox"
+                               checked={rowChecked}
+                               onChange={() => bulk.toggle(i.id)}
+                               className="h-4 w-4 rounded border-[var(--border)] accent-[var(--gold)] cursor-pointer"
+                               aria-label={`Select ${i.name}`}
+                             />
+                           </td>
+                           <td className="px-6 py-4">
+                              <div className="flex w-full sm:w-auto flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                                 <Avatar name={i.name} size="sm" />
+                                 <span className="text-white font-bold text-sm tracking-tight">{i.name}</span>
+                              </div>
+                           </td>
+                           <td className="px-6 py-4">
+                              <div className="flex flex-col">
+                                 <span className="text-[var(--text-secondary)] text-sm">{i.email || 'No email'}</span>
+                                 <span className="text-[var(--text-muted)] text-[11px]">{i.phone || 'No phone'}</span>
+                              </div>
+                           </td>
+                           <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-1 opacity-100 lg:opacity-0 lg:group-hover/row:opacity-100 transition-all">
+                                <Button variant="ghost" size="sm" onClick={() => openEdit(i)} className="h-8 w-8 p-0 rounded-lg">
+                                  <span className="material-symbols-outlined text-[18px]">edit_square</span>
+                                </Button>
+                                <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedInstructor(i); setIsDeleteOpen(true); }} className="h-8 w-8 p-0 rounded-lg">
+                                  <span className="material-symbols-outlined text-[18px]">delete</span>
+                                </Button>
+                              </div>
+                           </td>
+                         </tr>
+                        );
+                       })}
                     </tbody>
                  </table>
                </div>
@@ -205,6 +276,17 @@ export default function InstructorsPage() {
              )}
           </div>
        </div>
+
+       {/* Bulk action bar */}
+       <BulkActionBar
+         count={bulk.count}
+         loading={bulkLoading}
+         onClear={bulk.clear}
+         onAction={(action) => {
+           if (action === 'delete') setBulkDeleteOpen(true);
+           if (action === 'export') handleBulkExport();
+         }}
+       />
 
        {/* Form Modal */}
        <Modal 
@@ -255,7 +337,7 @@ export default function InstructorsPage() {
          </div>
        </Modal>
 
-       {/* Delete Modal */}
+       {/* Single delete Modal */}
        <Modal 
          open={isDeleteOpen} 
          onClose={() => setIsDeleteOpen(false)} 
@@ -277,6 +359,30 @@ export default function InstructorsPage() {
                Are you sure you want to remove <span className="text-white font-bold">{selectedInstructor?.name}</span>? 
                Any courses assigned to them will be marked as unassigned. This action cannot be undone.
              </p>
+           </div>
+         </div>
+       </Modal>
+
+       {/* Bulk delete confirmation */}
+       <Modal
+         open={bulkDeleteOpen}
+         onClose={() => { setBulkDeleteOpen(false); setBulkDeleteConfirm(''); }}
+         title={`Remove ${bulk.count} Instructor${bulk.count > 1 ? 's' : ''}`}
+         subtitle="This permanently removes the selected instructors."
+         actions={
+           <>
+             <Button variant="ghost" onClick={() => { setBulkDeleteOpen(false); setBulkDeleteConfirm(''); }} disabled={bulkLoading}>Cancel</Button>
+             <Button variant="danger" onClick={() => void handleBulkDelete()} disabled={bulkLoading || bulkDeleteConfirm !== 'DELETE'}>
+               {bulkLoading ? 'Removing...' : `Remove ${bulk.count} Instructor${bulk.count > 1 ? 's' : ''}`}
+             </Button>
+           </>
+         }
+       >
+         <div className="space-y-4">
+           <p className="text-sm text-[var(--text-secondary)]">You are about to permanently remove <span className="font-semibold text-white">{bulk.count} instructor{bulk.count > 1 ? 's' : ''}</span>. This cannot be undone.</p>
+           <div>
+             <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">Type <span className="text-white font-mono">DELETE</span> to confirm</label>
+             <Input value={bulkDeleteConfirm} onChange={(e) => setBulkDeleteConfirm(e.target.value)} placeholder="DELETE" className="font-mono" />
            </div>
          </div>
        </Modal>

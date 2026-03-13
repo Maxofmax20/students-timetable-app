@@ -11,9 +11,13 @@ interface DataTableProps {
   dense?: boolean;
   timeMode: TimeMode;
   onRowAction: (action: RowAction, row: Row) => void;
+  // Optional bulk-selection props
+  selectedIds?: Set<string>;
+  onToggle?: (id: string) => void;
+  onToggleAll?: (ids: string[]) => void;
 }
 
-export function DataTable({ rows, dense = false, timeMode, onRowAction }: DataTableProps) {
+export function DataTable({ rows, dense = false, timeMode, onRowAction, selectedIds, onToggle, onToggleAll }: DataTableProps) {
   const [sortCol, setSortCol] = useState<keyof Row | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
 
@@ -40,15 +44,36 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction }: DataTa
      return <span className={`material-symbols-outlined text-sm text-[var(--gold)] transition-transform ${sortAsc ? 'rotate-180' : ''}`}>arrow_downward</span>;
   };
 
+  const allIds = sortedRows.map((r) => r.id);
+  const allChecked = onToggleAll ? selectedIds ? allIds.every((id) => selectedIds.has(id)) && allIds.length > 0 : false : false;
+  const someChecked = onToggleAll ? selectedIds ? allIds.some((id) => selectedIds.has(id)) && !allChecked : false : false;
+  const hasCheckboxes = Boolean(onToggle && onToggleAll && selectedIds);
+
   return (
     <div className="w-full">
       <div className="md:hidden space-y-3 p-3">
-        {sortedRows.map((row) => (
-          <div key={row.id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-4 shadow-[var(--shadow-sm)]">
+        {sortedRows.map((row) => {
+          const checked = hasCheckboxes && selectedIds!.has(row.id);
+          return (
+          <div key={row.id} className={cn("rounded-2xl border p-4 shadow-[var(--shadow-sm)] transition-colors", checked ? "border-[var(--gold)]/50 bg-[var(--gold)]/5" : "border-[var(--border)] bg-[var(--bg-raised)]")}
+            onClick={hasCheckboxes ? () => onToggle!(row.id) : undefined}
+          >
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="text-sm font-bold text-white truncate">{row.course}</h3>
-                <p className="mt-1 text-[11px] text-[var(--text-secondary)]">{row.group} • {row.instructor}</p>
+              <div className="flex items-start gap-3 min-w-0">
+                {hasCheckboxes && (
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => onToggle!(row.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-[var(--border)] accent-[var(--gold)] cursor-pointer"
+                    aria-label={`Select ${row.course}`}
+                  />
+                )}
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-white truncate">{row.course}</h3>
+                  <p className="mt-1 text-[11px] text-[var(--text-secondary)]">{row.group} • {row.instructor}</p>
+                </div>
               </div>
               <div className={cn(
                 "shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border",
@@ -96,13 +121,25 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction }: DataTa
               </Button>
             </div>
           </div>
-        ))}
+        )})}
       </div>
 
       <div className="hidden md:block overflow-x-auto scrollbar-hide">
         <table className="w-full border-collapse text-left min-w-[800px]">
           <thead>
             <tr className="bg-[var(--bg-raised)]/50 text-[var(--text-secondary)] border-b border-[var(--border)]">
+              {hasCheckboxes && (
+                <th className="pl-5 pr-2 py-4 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allChecked}
+                    ref={(el) => { if (el) el.indeterminate = someChecked; }}
+                    onChange={() => onToggleAll!(allIds)}
+                    className="h-4 w-4 rounded border-[var(--border)] accent-[var(--gold)] cursor-pointer"
+                    aria-label="Select all"
+                  />
+                </th>
+              )}
               {[
                 { key: 'course', label: 'Course' },
                 { key: 'group', label: 'Group' },
@@ -127,8 +164,21 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction }: DataTa
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border-soft)]">
-            {sortedRows.map((row) => (
-              <tr key={row.id} className="group/row hover:bg-[var(--surface-2)]/30 transition-all">
+            {sortedRows.map((row) => {
+              const rowChecked = hasCheckboxes && selectedIds!.has(row.id);
+              return (
+              <tr key={row.id} className={cn("group/row transition-all", rowChecked ? "bg-[var(--gold)]/5" : "hover:bg-[var(--surface-2)]/30")}>
+                {hasCheckboxes && (
+                  <td className={cn("pl-5 pr-2", dense ? "py-2" : "py-4")}>
+                    <input
+                      type="checkbox"
+                      checked={rowChecked}
+                      onChange={() => onToggle!(row.id)}
+                      className="h-4 w-4 rounded border-[var(--border)] accent-[var(--gold)] cursor-pointer"
+                      aria-label={`Select ${row.course}`}
+                    />
+                  </td>
+                )}
                 <td className={cn("px-6 font-semibold text-white", dense ? "py-2 text-xs" : "py-4 text-sm")}>
                   {row.course}
                 </td>
@@ -177,7 +227,7 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction }: DataTa
                   </div>
                 </td>
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
       </div>

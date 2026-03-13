@@ -10,12 +10,15 @@ import { SearchInput } from '@/components/ui/SearchInput';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
+import { BulkActionBar } from '@/components/workspace/BulkActionBar';
+import { useBulkSelection } from '@/hooks/useBulkSelection';
 import type { RoomApiItem } from '@/types';
 import { cn } from '@/lib/utils';
 
 export default function RoomsPage() {
   const { status } = useSession({ required: true, onUnauthenticated() { window.location.href = '/auth'; } });
   const { toast } = useToast();
+  const bulk = useBulkSelection();
   
   const [rooms, setRooms] = useState<RoomApiItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +30,9 @@ export default function RoomsPage() {
   const [selectedRoom, setSelectedRoom] = useState<RoomApiItem | null>(null);
   const [formData, setFormData] = useState({ code: '', name: '', capacity: '', building: '' });
   const [actionLoading, setActionLoading] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState('');
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const fetchRooms = async () => {
     try {
@@ -122,6 +128,49 @@ export default function RoomsPage() {
     (r.building && r.building.toLowerCase().includes(search.toLowerCase()))
   );
 
+  // Bulk helpers
+  const filteredIds = filteredRooms.map((r) => r.id);
+  const allChecked = filteredIds.length > 0 && filteredIds.every((id) => bulk.selectedIds.has(id));
+  const someChecked = filteredIds.some((id) => bulk.selectedIds.has(id)) && !allChecked;
+
+  const handleBulkExport = () => {
+    const selected = rooms.filter((r) => bulk.selectedIds.has(r.id));
+    if (!selected.length) return;
+    const headers = ['id', 'code', 'name', 'capacity', 'building'];
+    const csvRows = selected.map((r) => [r.id, r.code, r.name, r.capacity ?? '', r.building ?? ''].join(','));
+    const csv = [headers.join(','), ...csvRows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `rooms-export-${Date.now()}.csv`; a.click();
+    URL.revokeObjectURL(url);
+    toast(`Exported ${selected.length} room${selected.length > 1 ? 's' : ''}`);
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkLoading(true);
+    const ids = Array.from(bulk.selectedIds);
+    try {
+      const res = await fetch('/api/v1/rooms/bulk', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ ids }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result?.ok) throw new Error(result?.message || 'Bulk delete failed');
+      toast(`Deleted ${result.data?.deleted ?? ids.length} room(s)`);
+      bulk.clear();
+      setBulkDeleteOpen(false);
+      setBulkDeleteConfirm('');
+      fetchRooms();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Bulk delete failed', 'error');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   return (
     <AppShell title="Campus Facilities" subtitle="Manage rooms, labs, and lecture halls">
        <div className="flex flex-col gap-6 p-1 md:p-6 lg:p-8 animate-panel-pop">
@@ -167,45 +216,67 @@ export default function RoomsPage() {
                <div className="overflow-x-auto">
                  <table className="w-full text-left border-collapse">
                     <thead>
-                       <tr className="bg-[var(--bg-raised)]/50 text-[var(--text-secondary)] border-b border-[var(--border)]">
-                          <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Code</th>
-                          <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Information</th>
-                          <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Capacity</th>
-                          <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px] text-right">Actions</th>
-                       </tr>
-                    </thead>
+                        <tr className="bg-[var(--bg-raised)]/50 text-[var(--text-secondary)] border-b border-[var(--border)]">
+                           <th className="pl-5 pr-2 py-4 w-10">
+                             <input
+                               type="checkbox"
+                               checked={allChecked}
+                               ref={(el) => { if (el) el.indeterminate = someChecked; }}
+                               onChange={() => bulk.toggleAll(filteredIds)}
+                               className="h-4 w-4 rounded border-[var(--border)] accent-[var(--gold)] cursor-pointer"
+                               aria-label="Select all rooms"
+                             />
+                           </th>
+                           <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Code</th>
+                           <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Information</th>
+                           <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Capacity</th>
+                           <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px] text-right">Actions</th>
+                        </tr>
+                     </thead>
                     <tbody className="divide-y divide-[var(--border-soft)]">
-                      {filteredRooms.map(r => (
-                        <tr key={r.id} className="group/row hover:bg-[var(--surface-2)]/30 transition-all">
-                          <td className="px-6 py-4">
-                             <div className="inline-flex items-center gap-2 bg-[var(--surface-3)] px-3 py-1.5 rounded-lg border border-[var(--border)] shadow-sm">
-                                <span className="material-symbols-outlined text-[var(--gold)] text-lg">door_open</span>
-                                <span className="text-white font-bold font-mono text-sm">{r.code}</span>
-                             </div>
-                          </td>
-                          <td className="px-6 py-4">
-                             <div className="flex flex-col">
-                                <span className="text-white font-semibold text-sm">{r.name}</span>
-                                <span className="text-[var(--text-muted)] text-[11px] uppercase tracking-wider">{r.building || 'No building defined'}</span>
-                             </div>
-                          </td>
-                          <td className="px-6 py-4">
-                             <span className="text-[var(--text-secondary)] text-sm font-medium">
+                        {filteredRooms.map(r => {
+                          const rowChecked = bulk.selectedIds.has(r.id);
+                          return (
+                         <tr key={r.id} className={cn("group/row transition-all", rowChecked ? "bg-[var(--gold)]/5" : "hover:bg-[var(--surface-2)]/30")}>
+                           <td className="pl-5 pr-2 py-4">
+                             <input
+                               type="checkbox"
+                               checked={rowChecked}
+                               onChange={() => bulk.toggle(r.id)}
+                               className="h-4 w-4 rounded border-[var(--border)] accent-[var(--gold)] cursor-pointer"
+                               aria-label={`Select ${r.name}`}
+                             />
+                           </td>
+                           <td className="px-6 py-4">
+                              <div className="inline-flex items-center gap-2 bg-[var(--surface-3)] px-3 py-1.5 rounded-lg border border-[var(--border)] shadow-sm">
+                                 <span className="material-symbols-outlined text-[var(--gold)] text-lg">door_open</span>
+                                 <span className="text-white font-bold font-mono text-sm">{r.code}</span>
+                              </div>
+                           </td>
+                           <td className="px-6 py-4">
+                              <div className="flex flex-col">
+                                 <span className="text-white font-semibold text-sm">{r.name}</span>
+                                 <span className="text-[var(--text-muted)] text-[11px] uppercase tracking-wider">{r.building || 'No building defined'}</span>
+                              </div>
+                           </td>
+                           <td className="px-6 py-4">
+                              <span className="text-[var(--text-secondary)] text-sm font-medium">
                                {r.capacity ? `${r.capacity} seats` : 'Not specified'}
                              </span>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                             <div className="flex items-center justify-end gap-1 opacity-100 lg:opacity-0 lg:group-hover/row:opacity-100 transition-all">
-                               <Button variant="ghost" size="sm" onClick={() => openEdit(r)} className="h-8 w-8 p-0 rounded-lg">
-                                 <span className="material-symbols-outlined text-[18px]">edit_square</span>
-                               </Button>
-                               <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedRoom(r); setIsDeleteOpen(true); }} className="h-8 w-8 p-0 rounded-lg">
-                                 <span className="material-symbols-outlined text-[18px]">delete</span>
-                               </Button>
-                             </div>
-                          </td>
-                        </tr>
-                      ))}
+                           </td>
+                           <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-1 opacity-100 lg:opacity-0 lg:group-hover/row:opacity-100 transition-all">
+                                <Button variant="ghost" size="sm" onClick={() => openEdit(r)} className="h-8 w-8 p-0 rounded-lg">
+                                  <span className="material-symbols-outlined text-[18px]">edit_square</span>
+                                </Button>
+                                <Button variant="ghost-danger" size="sm" onClick={() => { setSelectedRoom(r); setIsDeleteOpen(true); }} className="h-8 w-8 p-0 rounded-lg">
+                                  <span className="material-symbols-outlined text-[18px]">delete</span>
+                                </Button>
+                              </div>
+                           </td>
+                         </tr>
+                        );
+                        })}
                     </tbody>
                  </table>
                </div>
@@ -223,6 +294,17 @@ export default function RoomsPage() {
              )}
           </div>
        </div>
+
+       {/* Bulk action bar */}
+       <BulkActionBar
+         count={bulk.count}
+         loading={bulkLoading}
+         onClear={bulk.clear}
+         onAction={(action) => {
+           if (action === 'delete') setBulkDeleteOpen(true);
+           if (action === 'export') handleBulkExport();
+         }}
+       />
 
        {/* Form Modal */}
        <Modal 
@@ -284,7 +366,7 @@ export default function RoomsPage() {
          </div>
        </Modal>
 
-       {/* Delete Modal */}
+       {/* Single delete Modal */}
        <Modal 
          open={isDeleteOpen} 
          onClose={() => setIsDeleteOpen(false)} 
@@ -306,6 +388,30 @@ export default function RoomsPage() {
                Are you sure you want to remove <span className="text-white font-bold">{selectedRoom?.name}</span>? 
                Any courses scheduled in this room will become unassigned. This action cannot be undone.
              </p>
+           </div>
+         </div>
+       </Modal>
+
+       {/* Bulk delete confirmation */}
+       <Modal
+         open={bulkDeleteOpen}
+         onClose={() => { setBulkDeleteOpen(false); setBulkDeleteConfirm(''); }}
+         title={`Delete ${bulk.count} Room${bulk.count > 1 ? 's' : ''}`}
+         subtitle="This permanently removes the selected rooms."
+         actions={
+           <>
+             <Button variant="ghost" onClick={() => { setBulkDeleteOpen(false); setBulkDeleteConfirm(''); }} disabled={bulkLoading}>Cancel</Button>
+             <Button variant="danger" onClick={() => void handleBulkDelete()} disabled={bulkLoading || bulkDeleteConfirm !== 'DELETE'}>
+               {bulkLoading ? 'Deleting...' : `Delete ${bulk.count} Room${bulk.count > 1 ? 's' : ''}`}
+             </Button>
+           </>
+         }
+       >
+         <div className="space-y-4">
+           <p className="text-sm text-[var(--text-secondary)]">You are about to permanently delete <span className="font-semibold text-white">{bulk.count} room{bulk.count > 1 ? 's' : ''}</span>. This cannot be undone.</p>
+           <div>
+             <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">Type <span className="text-white font-mono">DELETE</span> to confirm</label>
+             <Input value={bulkDeleteConfirm} onChange={(e) => setBulkDeleteConfirm(e.target.value)} placeholder="DELETE" className="font-mono" />
            </div>
          </div>
        </Modal>

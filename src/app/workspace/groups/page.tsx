@@ -10,12 +10,15 @@ import { SearchInput } from '@/components/ui/SearchInput';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
+import { BulkActionBar } from '@/components/workspace/BulkActionBar';
+import { useBulkSelection } from '@/hooks/useBulkSelection';
 import type { GroupApiItem } from '@/types';
 import { cn } from '@/lib/utils';
 
 export default function GroupsPage() {
   const { status } = useSession({ required: true, onUnauthenticated() { window.location.href = '/auth'; } });
   const { toast } = useToast();
+  const bulk = useBulkSelection();
   
   const [groups, setGroups] = useState<GroupApiItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +30,9 @@ export default function GroupsPage() {
   const [selectedGroup, setSelectedGroup] = useState<GroupApiItem | null>(null);
   const [formData, setFormData] = useState({ code: '', name: '' });
   const [actionLoading, setActionLoading] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState('');
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const fetchGroups = async () => {
     try {
@@ -109,6 +115,49 @@ export default function GroupsPage() {
     g.code.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Bulk helpers
+  const filteredIds = filteredGroups.map((g) => g.id);
+  const allChecked = filteredIds.length > 0 && filteredIds.every((id) => bulk.selectedIds.has(id));
+  const someChecked = filteredIds.some((id) => bulk.selectedIds.has(id)) && !allChecked;
+
+  const handleBulkExport = () => {
+    const selected = groups.filter((g) => bulk.selectedIds.has(g.id));
+    if (!selected.length) return;
+    const headers = ['id', 'code', 'name'];
+    const csvRows = selected.map((g) => [g.id, g.code, g.name].join(','));
+    const csv = [headers.join(','), ...csvRows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `groups-export-${Date.now()}.csv`; a.click();
+    URL.revokeObjectURL(url);
+    toast(`Exported ${selected.length} group${selected.length > 1 ? 's' : ''}`);
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkLoading(true);
+    const ids = Array.from(bulk.selectedIds);
+    try {
+      const res = await fetch('/api/v1/groups/bulk', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ ids }),
+      });
+      const result = await res.json();
+      if (!res.ok || !result?.ok) throw new Error(result?.message || 'Bulk delete failed');
+      toast(`Deleted ${result.data?.deleted ?? ids.length} group(s)`);
+      bulk.clear();
+      setBulkDeleteOpen(false);
+      setBulkDeleteConfirm('');
+      fetchGroups();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Bulk delete failed', 'error');
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
   return (
     <AppShell title="Student Groups" subtitle="Manage cohorts and academic groups">
        <div className="flex flex-col gap-6 p-1 md:p-6 lg:p-8 animate-panel-pop">
@@ -155,14 +204,35 @@ export default function GroupsPage() {
                  <table className="w-full text-left border-collapse">
                     <thead>
                        <tr className="bg-[var(--bg-raised)]/50 text-[var(--text-secondary)] border-b border-[var(--border)]">
+                           <th className="pl-5 pr-2 py-4 w-10">
+                             <input
+                               type="checkbox"
+                               checked={allChecked}
+                               ref={(el) => { if (el) el.indeterminate = someChecked; }}
+                               onChange={() => bulk.toggleAll(filteredIds)}
+                               className="h-4 w-4 rounded border-[var(--border)] accent-[var(--gold)] cursor-pointer"
+                               aria-label="Select all groups"
+                             />
+                           </th>
                           <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Code</th>
                           <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px]">Name</th>
                           <th className="px-6 py-4 font-bold uppercase tracking-[0.15em] text-[10px] text-right">Actions</th>
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--border-soft)]">
-                      {filteredGroups.map(g => (
-                        <tr key={g.id} className="group/row hover:bg-[var(--surface-2)]/30 transition-all">
+                      {filteredGroups.map(g => {
+                        const rowChecked = bulk.selectedIds.has(g.id);
+                        return (
+                        <tr key={g.id} className={cn("group/row transition-all", rowChecked ? "bg-[var(--gold)]/5" : "hover:bg-[var(--surface-2)]/30")}>
+                          <td className="pl-5 pr-2 py-4">
+                            <input
+                              type="checkbox"
+                              checked={rowChecked}
+                              onChange={() => bulk.toggle(g.id)}
+                              className="h-4 w-4 rounded border-[var(--border)] accent-[var(--gold)] cursor-pointer"
+                              aria-label={`Select ${g.name}`}
+                            />
+                          </td>
                           <td className="px-6 py-4 text-[var(--gold)] font-bold font-mono text-sm">{g.code}</td>
                           <td className="px-6 py-4 text-white font-medium">{g.name}</td>
                           <td className="px-6 py-4 text-right">
@@ -176,7 +246,8 @@ export default function GroupsPage() {
                              </div>
                           </td>
                         </tr>
-                      ))}
+                       );
+                      })}
                     </tbody>
                  </table>
                </div>
@@ -194,6 +265,17 @@ export default function GroupsPage() {
              )}
           </div>
        </div>
+
+       {/* Bulk action bar */}
+       <BulkActionBar
+         count={bulk.count}
+         loading={bulkLoading}
+         onClear={bulk.clear}
+         onAction={(action) => {
+           if (action === 'delete') setBulkDeleteOpen(true);
+           if (action === 'export') handleBulkExport();
+         }}
+       />
 
        {/* Form Modal */}
        <Modal 
@@ -234,7 +316,7 @@ export default function GroupsPage() {
          </div>
        </Modal>
 
-       {/* Delete Modal */}
+       {/* Single delete Modal */}
        <Modal 
          open={isDeleteOpen} 
          onClose={() => setIsDeleteOpen(false)} 
@@ -256,6 +338,30 @@ export default function GroupsPage() {
                Are you sure you want to delete <span className="text-white font-bold">{selectedGroup?.name}</span>? 
                All courses assigned to this group will become unassigned. This action cannot be undone.
              </p>
+           </div>
+         </div>
+       </Modal>
+
+       {/* Bulk delete confirmation */}
+       <Modal
+         open={bulkDeleteOpen}
+         onClose={() => { setBulkDeleteOpen(false); setBulkDeleteConfirm(''); }}
+         title={`Delete ${bulk.count} Group${bulk.count > 1 ? 's' : ''}`}
+         subtitle="This permanently removes the selected groups."
+         actions={
+           <>
+             <Button variant="ghost" onClick={() => { setBulkDeleteOpen(false); setBulkDeleteConfirm(''); }} disabled={bulkLoading}>Cancel</Button>
+             <Button variant="danger" onClick={() => void handleBulkDelete()} disabled={bulkLoading || bulkDeleteConfirm !== 'DELETE'}>
+               {bulkLoading ? 'Deleting...' : `Delete ${bulk.count} Group${bulk.count > 1 ? 's' : ''}`}
+             </Button>
+           </>
+         }
+       >
+         <div className="space-y-4">
+           <p className="text-sm text-[var(--text-secondary)]">You are about to permanently delete <span className="font-semibold text-white">{bulk.count} group{bulk.count > 1 ? 's' : ''}</span>. This cannot be undone.</p>
+           <div>
+             <label className="block text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-2">Type <span className="text-white font-mono">DELETE</span> to confirm</label>
+             <Input value={bulkDeleteConfirm} onChange={(e) => setBulkDeleteConfirm(e.target.value)} placeholder="DELETE" className="font-mono" />
            </div>
          </div>
        </Modal>

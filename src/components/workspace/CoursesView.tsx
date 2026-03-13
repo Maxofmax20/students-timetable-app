@@ -16,9 +16,13 @@ export interface CoursesViewProps {
   onAction: (action: ActionLabel) => void;
   onRowAction: (action: RowAction, row: Row) => void;
   isLoading?: boolean;
+  // Bulk selection
+  selectedIds?: Set<string>;
+  onToggle?: (id: string) => void;
+  onToggleAll?: (ids: string[]) => void;
 }
 
-export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, isLoading }: CoursesViewProps) {
+export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, isLoading, selectedIds, onToggle, onToggleAll }: CoursesViewProps) {
   const [search, setSearch] = useState('');
 
   if (isLoading) {
@@ -85,7 +89,10 @@ export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, 
                rows={filteredRows} 
                dense={denseRows} 
                timeMode={timeMode} 
-               onRowAction={onRowAction} 
+               onRowAction={onRowAction}
+               selectedIds={selectedIds}
+               onToggle={onToggle}
+               onToggleAll={onToggleAll}
              />
            ) : (
              <EmptyState 
