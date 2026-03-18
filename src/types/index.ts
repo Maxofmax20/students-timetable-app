@@ -139,3 +139,55 @@ export type CourseWritePayload = {
   time?: string | null;
   sessions?: CourseSessionWritePayload[];
 };
+
+export type AcademicTermApiItem = {
+  id: string;
+  name: string;
+  season: 'SPRING' | 'SUMMER' | 'FALL' | 'WINTER';
+  academicYear: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  isActive: boolean;
+  _count?: {
+    exams?: number;
+    assignments?: number;
+  };
+};
+
+export type ExamApiItem = {
+  id: string;
+  title: string;
+  examType: 'QUIZ' | 'MIDTERM' | 'FINAL' | 'PRACTICAL' | 'ORAL' | 'OTHER';
+  examDate: string;
+  startMinute?: number | null;
+  endMinute?: number | null;
+  location?: string | null;
+  notes?: string | null;
+  courseId: string;
+  academicTermId: string;
+  course?: { id: string; code: string; title: string; color?: string | null } | null;
+  academicTerm?: { id: string; name: string; season: string; academicYear: string; isActive: boolean } | null;
+};
+
+export type AssignmentApiItem = {
+  id: string;
+  title: string;
+  description?: string | null;
+  dueAt?: string | null;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  status: 'TODO' | 'IN_PROGRESS' | 'DONE';
+  estimatedMinutes?: number | null;
+  courseId: string;
+  academicTermId: string;
+  course?: { id: string; code: string; title: string; color?: string | null } | null;
+  academicTerm?: { id: string; name: string; season: string; academicYear: string; isActive: boolean } | null;
+};
+
+export type UserPreferenceApiItem = {
+  id: string;
+  theme: 'SYSTEM' | 'LIGHT' | 'DARK';
+  timetableView: 'WEEK' | 'DAY' | 'AGENDA';
+  dashboardLayout: 'OVERVIEW' | 'FOCUS' | 'COMPACT';
+  weekStartsOn: 'SATURDAY' | 'SUNDAY' | 'MONDAY';
+  reduceMotion: boolean;
+};

@@ -41,6 +41,9 @@ export function Header({ title, subtitle, onMenuClick, actions }: HeaderProps) {
     if (pathname.includes('/dashboard')) items.push({ label: 'Dashboard', href: '/workspace/dashboard' });
     else if (pathname.includes('/courses')) items.push({ label: 'Courses', href: '/workspace/courses' });
     else if (pathname.includes('/timetable')) items.push({ label: 'Timetable', href: '/workspace/timetable' });
+    else if (pathname.includes('/exams')) items.push({ label: 'Exams', href: '/workspace/exams' });
+    else if (pathname.includes('/tasks')) items.push({ label: 'Tasks', href: '/workspace/tasks' });
+    else if (pathname.includes('/settings')) items.push({ label: 'Settings', href: '/workspace/settings' });
     else if (pathname.includes('/groups')) items.push({ label: 'Groups', href: '/workspace/groups' });
     else if (pathname.includes('/instructors')) items.push({ label: 'Instructors', href: '/workspace/instructors' });
     else if (pathname.includes('/rooms')) items.push({ label: 'Rooms', href: '/workspace/rooms' });

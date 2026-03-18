@@ -25,27 +25,24 @@ type NavSection = {
 
 const navigationSections: NavSection[] = [
   {
-    title: 'Overview',
+    title: 'Student hub',
     items: [
       { label: 'Dashboard', href: '/workspace/dashboard', icon: 'dashboard' },
-      { label: 'Timetable', href: '/workspace/timetable', icon: 'calendar_month' }
+      { label: 'Timetable', href: '/workspace/timetable', icon: 'calendar_month' },
+      { label: 'Courses', href: '/workspace/courses', icon: 'book_2' },
+      { label: 'Exams', href: '/workspace/exams', icon: 'local_library' },
+      { label: 'Tasks', href: '/workspace/tasks', icon: 'task_alt' },
+      { label: 'Settings', href: '/workspace/settings', icon: 'tune' }
     ]
   },
   {
-    title: 'Resources',
+    title: 'Academic data',
     items: [
-      { label: 'Courses', href: '/workspace/courses', icon: 'book_2' },
       { label: 'Groups', href: '/workspace/groups', icon: 'groups' },
       { label: 'Instructors', href: '/workspace/instructors', icon: 'school' },
-      { label: 'Rooms', href: '/workspace/rooms', icon: 'meeting_room' }
-    ]
-  },
-  {
-    title: 'Settings',
-    items: [
+      { label: 'Rooms', href: '/workspace/rooms', icon: 'meeting_room' },
       { label: 'Sharing', href: '/workspace/sharing', icon: 'group_add' },
-      { label: 'History', href: '/workspace/history', icon: 'history' },
-      { label: 'Account', href: '/account', icon: 'person' }
+      { label: 'History', href: '/workspace/history', icon: 'history' }
     ]
   }
 ];
