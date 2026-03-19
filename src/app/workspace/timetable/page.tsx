@@ -762,7 +762,7 @@ export default function WorkspaceTimetablePage() {
           showConflictLayer={showConflictLayer}
           isLoading={loading || status === 'loading'}
           onOpenCourse={(item) => {
-            window.location.href = `/workspace/courses?course=${encodeURIComponent(item.courseId)}`;
+            router.push(`/workspace/courses?course=${encodeURIComponent(item.courseId)}`);
           }}
         />
       </div>

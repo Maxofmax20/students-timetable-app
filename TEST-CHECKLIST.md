@@ -21,15 +21,15 @@
 - [x] Course CRUD still works
   - Verified: build green + code QA on `/workspace/courses` create/edit/duplicate/delete handlers.
   - Confirmed: row View/Edit/Duplicate/Delete flows all resolve intentionally.
-  - Fixed: `?create=1` is now cleaned from URL after opening create flow; invalid `?course=` is now cleaned with an explicit toast instead of silently failing.
+  - Fixed: `?create=1` is now cleaned from URL after opening create flow; invalid `?course=` is now cleaned with an explicit toast instead of silently failing; removing `?course=` now also clears local course-hub selection so URL and UI stay aligned.
 - [x] Exam CRUD works
   - Verified: build green + code QA on create/list/edit/delete flow.
   - Confirmed: linked-course deep links filter the page and feed the create/edit form context.
-  - Fixed: invalid `?course=` is now cleaned intentionally; form reset preserves linked-course context; changing the course filter now also updates quick-add course context when not editing.
+  - Fixed: invalid `?course=` is now cleaned intentionally; form reset preserves linked-course context; changing the course filter now also updates quick-add course context when not editing; removing `?course=` now clears local course filter state instead of letting it drift.
 - [x] Task CRUD works
   - Verified: build green + code QA on create/list/edit/status-update/delete flow.
   - Confirmed: linked-course deep links filter the board and feed the form context.
-  - Fixed: deleting the currently edited task now resets the form; invalid `?course=` is now cleaned intentionally; form reset preserves linked-course context; changing the course filter now also updates quick-add course context when not editing.
+  - Fixed: deleting the currently edited task now resets the form; invalid `?course=` is now cleaned intentionally; form reset preserves linked-course context; changing the course filter now also updates quick-add course context when not editing; removing `?course=` now clears local course filter state instead of letting it drift.
 - [x] Settings/preferences load and save
   - Verified: build green + code QA on preferences API wiring and client hydration.
   - Confirmed: theme + reduceMotion hydrate through `Providers`; week start and timetable view preferences affect timetable behavior.
@@ -60,4 +60,6 @@
 ## Execution notes (2026-03-19)
 - `npm run build` passes after the QA/cohesion fixes in this pass.
 - Shared `RowAction` support is aligned for `View / Edit / Duplicate / Delete`; `RowActionCenter` is updated but still intentionally not mounted anywhere in current `src/`.
-- Browser-based interactive visual QA was limited in this pass because the browser runtime was unavailable; code/build QA and navigation/state regression fixes were completed anyway.
+- Browser-based interactive visual QA was limited in this pass because the browser gateway/runtime was unavailable; code/build QA and navigation/state regression fixes were completed anyway.
+- Legacy `/workspace?tab=...` navigation is now redirected intentionally into the new path-based pages instead of silently dropping tab intent.
+- Timetable course-to-course-hub navigation now uses app routing instead of a hard reload.

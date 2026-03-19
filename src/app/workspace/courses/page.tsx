@@ -318,6 +318,7 @@ export default function WorkspaceCoursesPage() {
 
   useEffect(() => {
     if (!deepLinkedCourseId) {
+      setSelectedCourseId(null);
       setInvalidCourseHandled(false);
       return;
     }
@@ -327,6 +328,7 @@ export default function WorkspaceCoursesPage() {
       return;
     }
     if (!loading && !invalidCourseHandled) {
+      setSelectedCourseId(null);
       const params = new URLSearchParams(searchParams?.toString() || '');
       params.delete('course');
       router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });

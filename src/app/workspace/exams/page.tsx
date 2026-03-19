@@ -161,6 +161,7 @@ export default function ExamsPage() {
 
   useEffect(() => {
     if (!deepLinkedCourseId) {
+      setSelectedCourseFilter('ALL');
       setInvalidCourseHandled(false);
       return;
     }
@@ -171,6 +172,7 @@ export default function ExamsPage() {
       return;
     }
     if (!loading && !invalidCourseHandled) {
+      setSelectedCourseFilter('ALL');
       const params = new URLSearchParams(searchParams?.toString() || '');
       params.delete('course');
       router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
