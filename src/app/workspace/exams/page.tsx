@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
@@ -84,6 +86,11 @@ function sameDayCount(exams: ExamApiItem[], daysAhead: number) {
 }
 
 export default function ExamsPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const deepLinkedCourseId = searchParams?.get('course') || '';
+
   const { status } = useSession({
     required: true,
     onUnauthenticated() {
@@ -105,6 +112,7 @@ export default function ExamsPage() {
   const [selectedCourseFilter, setSelectedCourseFilter] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [form, setForm] = useState<ExamFormState>(emptyForm);
+  const [invalidCourseHandled, setInvalidCourseHandled] = useState(false);
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -150,6 +158,38 @@ export default function ExamsPage() {
 
     void load();
   }, [status, toast]);
+
+  useEffect(() => {
+    if (!deepLinkedCourseId) {
+      setInvalidCourseHandled(false);
+      return;
+    }
+    if (courses.some((course) => course.id === deepLinkedCourseId)) {
+      setSelectedCourseFilter(deepLinkedCourseId);
+      setForm((current) => ({ ...current, courseId: deepLinkedCourseId }));
+      setInvalidCourseHandled(false);
+      return;
+    }
+    if (!loading && !invalidCourseHandled) {
+      const params = new URLSearchParams(searchParams?.toString() || '');
+      params.delete('course');
+      router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
+      toast('The requested course filter was not found.', 'error');
+      setInvalidCourseHandled(true);
+    }
+  }, [courses, deepLinkedCourseId, invalidCourseHandled, loading, pathname, router, searchParams, toast]);
+
+  useEffect(() => {
+    if (loading) return;
+    const current = searchParams?.get('course') || '';
+    const next = selectedCourseFilter !== 'ALL' ? selectedCourseFilter : '';
+    if (current === next) return;
+
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    if (next) params.set('course', next);
+    else params.delete('course');
+    router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
+  }, [loading, pathname, router, searchParams, selectedCourseFilter]);
 
   const sortedExams = useMemo(
     () => exams.slice().sort((a, b) => +new Date(a.examDate) - +new Date(b.examDate) || (a.startMinute ?? 0) - (b.startMinute ?? 0)),
@@ -199,7 +239,8 @@ export default function ExamsPage() {
 
   const resetForm = () => {
     setEditingExamId(null);
-    setForm(buildDefaultForm(terms, courses));
+    const next = buildDefaultForm(terms, courses);
+    setForm({ ...next, courseId: selectedCourseFilter !== 'ALL' ? selectedCourseFilter : next.courseId });
   };
 
   const submitExam = async () => {
@@ -505,6 +546,11 @@ export default function ExamsPage() {
                         </div>
                         <div className="mt-1 text-sm text-[var(--text-secondary)]">
                           {exam.course?.title || 'Course'} • {new Date(exam.examDate).toLocaleString()}
+                        </div>
+                        <div className="mt-2">
+                          <Link href={`/workspace/courses?course=${encodeURIComponent(exam.courseId)}`} className="text-xs font-bold text-[var(--gold)]">
+                            Open linked course hub
+                          </Link>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text-secondary)]">
                           <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1">

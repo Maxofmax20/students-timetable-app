@@ -1,6 +1,6 @@
 export type ThemeChoice = "c" | "a" | "b";
 export type ActionLabel = "New" | "Save" | "Undo" | "Redo" | "Share" | "Export" | "Preview" | "Conflicts";
-export type RowAction = "Edit" | "Duplicate" | "Delete";
+export type RowAction = "View" | "Edit" | "Duplicate" | "Delete";
 export type MainTab = "Dashboard" | "Timetable" | "Courses" | "Settings";
 export type SettingsTab = "Theme" | "Display" | "Timetable" | "Permissions";
 export type TimeMode = "24h" | "12h";

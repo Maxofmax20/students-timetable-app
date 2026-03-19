@@ -95,6 +95,7 @@ export function RowActionCenter({
   active,
   onClose,
   onPick,
+  onView,
   onEdit,
   onDuplicate,
   onDelete,
@@ -105,6 +106,7 @@ export function RowActionCenter({
   active: RowAction;
   onClose: () => void;
   onPick: (action: RowAction) => void;
+  onView?: (row: Row) => void;
   onEdit: (row: Row) => void;
   onDuplicate: (row: Row) => void;
   onDelete: (row: Row) => void;
@@ -121,10 +123,10 @@ export function RowActionCenter({
       className="w-[400px]"
     >
       <Tabs value={active} onValueChange={(val) => onPick(val as RowAction)} variant="action">
-        {(["Edit", "Duplicate", "Delete"] as RowAction[]).map((item) => (
+        {(["View", "Edit", "Duplicate", "Delete"] as RowAction[]).map((item) => (
           <Tab key={item} value={item}>
             <span className="material-symbols-outlined">
-              {item === "Edit" ? "edit" : item === "Duplicate" ? "content_copy" : "delete"}
+              {item === "View" ? "menu_book" : item === "Edit" ? "edit" : item === "Duplicate" ? "content_copy" : "delete"}
             </span>
             <span>{item}</span>
           </Tab>
@@ -132,6 +134,20 @@ export function RowActionCenter({
       </Tabs>
 
       <div className="mt-4">
+        {active === "View" && (
+          <div className="grid grid-cols-1 gap-3">
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-4">
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--muted)]">Course hub preview</div>
+              <div className="mt-2 text-sm font-semibold text-white">{row.course}</div>
+              <div className="mt-2 text-xs text-[var(--muted)]">{row.day} • {row.time} • {row.room}</div>
+            </div>
+            <Button variant="primary" onClick={() => { if (onView) { onView(row); } else { onPlaceholder(`Open course hub for ${row.course}`); } onClose(); }}>
+              Open course hub
+            </Button>
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          </div>
+        )}
+
         {active === "Edit" && (
           <div className="grid grid-cols-1 gap-2">
             <Button variant="secondary" onClick={() => { onEdit(row); onClose(); }}>Edit title</Button>

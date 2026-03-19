@@ -166,6 +166,11 @@ export default function WorkspaceDashboardPage() {
                   <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1">{nextSession.room}</span>
                   <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1">{nextSession.instructor}</span>
                 </div>
+                <div className="mt-3">
+                  <Link href={`/workspace/courses?course=${encodeURIComponent(nextSession.courseId)}`}>
+                    <Button variant="secondary" size="sm">Open course hub</Button>
+                  </Link>
+                </div>
               </div>
             ) : (
               <EmptyCard message="No upcoming classes found yet." />
@@ -196,7 +201,7 @@ export default function WorkspaceDashboardPage() {
             {loading ? <LoadingList /> : upcomingExams.length ? (
               <div className="space-y-2">
                 {upcomingExams.map((item) => (
-                  <Link key={item.id} href="/workspace/exams" className="block rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-3 transition-all hover:border-[var(--text-muted)]">
+                  <Link key={item.id} href={`/workspace/exams?course=${encodeURIComponent(item.courseId)}`} className="block rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-3 transition-all hover:border-[var(--text-muted)]">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="font-bold text-white">{item.title}</div>
@@ -215,7 +220,7 @@ export default function WorkspaceDashboardPage() {
             {loading ? <LoadingList /> : pendingAssignments.length ? (
               <div className="space-y-2">
                 {pendingAssignments.map((item) => (
-                  <Link key={item.id} href="/workspace/tasks" className="block rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-3 transition-all hover:border-[var(--text-muted)]">
+                  <Link key={item.id} href={`/workspace/tasks?course=${encodeURIComponent(item.courseId)}`} className="block rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] p-3 transition-all hover:border-[var(--text-muted)]">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="font-bold text-white">{item.title}</div>

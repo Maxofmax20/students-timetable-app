@@ -68,7 +68,7 @@ export function CoursesView({ rows, denseRows, timeMode, onAction, onRowAction, 
         <div className="flex flex-wrap items-center justify-between gap-4 px-2">
            <div className="flex flex-col gap-1">
               <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight">Courses</h2>
-              <p className="text-[var(--text-secondary)] text-sm">Manage and organize all university courses.</p>
+              <p className="text-[var(--text-secondary)] text-sm">Build each course as a planning hub with sessions, assessments, and task context.</p>
            </div>
            
            <div className="flex w-full flex-col sm:w-auto sm:flex-row items-stretch sm:items-center gap-3">

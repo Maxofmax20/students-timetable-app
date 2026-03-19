@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +10,7 @@ import { Modal } from '@/components/ui/Modal';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { useToast } from '@/components/ui/Toast';
 import { CoursesView } from '@/components/workspace/CoursesView';
+import { CourseDetailPanel } from '@/components/workspace/CourseDetailPanel';
 import { BulkActionBar } from '@/components/workspace/BulkActionBar';
 import { useBulkSelection } from '@/components/workspace/useBulkSelection';
 import { CsvImportModal } from '@/components/workspace/CsvImportModal';
@@ -17,7 +18,7 @@ import { EditCourseModal, type EditCourseInitialData, type EditCourseSubmitData 
 import { formatMinute } from '@/lib/schedule';
 import { formatSessionType, inferLegacySessionType, SESSION_TYPE_OPTIONS, stripLegacySessionSuffix } from '@/lib/course-sessions';
 import { csvCell, downloadFile, toUiStatus } from '@/lib/utils';
-import type { CourseApiItem, GroupApiItem, InstructorApiItem, RoomApiItem, Row } from '@/types';
+import type { AssignmentApiItem, CourseApiItem, ExamApiItem, GroupApiItem, InstructorApiItem, RoomApiItem, Row } from '@/types';
 
 type FilterValue = 'ALL' | string;
 
@@ -203,7 +204,10 @@ function summarizeFilters(filters: CourseFilters, groups: GroupApiItem[], instru
 
 export default function WorkspaceCoursesPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const shouldOpenCreate = searchParams?.get('create') === '1';
+  const deepLinkedCourseId = searchParams?.get('course') || '';
   const { status } = useSession({
     required: true,
     onUnauthenticated() {
@@ -217,6 +221,9 @@ export default function WorkspaceCoursesPage() {
   const [groups, setGroups] = useState<GroupApiItem[]>([]);
   const [instructors, setInstructors] = useState<InstructorApiItem[]>([]);
   const [rooms, setRooms] = useState<RoomApiItem[]>([]);
+  const [exams, setExams] = useState<ExamApiItem[]>([]);
+  const [assignments, setAssignments] = useState<AssignmentApiItem[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [courseModalOpen, setCourseModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [courseModalMode, setCourseModalMode] = useState<'create' | 'full' | 'duplicate'>('create');
@@ -227,6 +234,7 @@ export default function WorkspaceCoursesPage() {
   const [bulkConfirmText, setBulkConfirmText] = useState('');
   const [saving, setSaving] = useState(false);
   const [createHandled, setCreateHandled] = useState(false);
+  const [invalidCourseHandled, setInvalidCourseHandled] = useState(false);
   const [filters, setFilters] = useState<CourseFilters>(DEFAULT_FILTERS);
   const [savedViews, setSavedViews] = useState<SavedCourseView[]>([]);
   const [viewDraftName, setViewDraftName] = useState('');
@@ -248,18 +256,22 @@ export default function WorkspaceCoursesPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [coursesResponse, groupsResponse, instructorsResponse, roomsResponse] = await Promise.all([
+      const [coursesResponse, groupsResponse, instructorsResponse, roomsResponse, examsResponse, assignmentsResponse] = await Promise.all([
         fetch('/api/v1/courses', { credentials: 'include' }),
         fetch('/api/v1/groups', { credentials: 'include' }),
         fetch('/api/v1/instructors', { credentials: 'include' }),
-        fetch('/api/v1/rooms', { credentials: 'include' })
+        fetch('/api/v1/rooms', { credentials: 'include' }),
+        fetch('/api/v1/exams', { credentials: 'include' }),
+        fetch('/api/v1/assignments', { credentials: 'include' })
       ]);
 
-      const [coursesPayload, groupsPayload, instructorsPayload, roomsPayload] = await Promise.all([
+      const [coursesPayload, groupsPayload, instructorsPayload, roomsPayload, examsPayload, assignmentsPayload] = await Promise.all([
         coursesResponse.json(),
         groupsResponse.json(),
         instructorsResponse.json(),
-        roomsResponse.json()
+        roomsResponse.json(),
+        examsResponse.json(),
+        assignmentsResponse.json()
       ]);
 
       if (!coursesResponse.ok || !coursesPayload?.ok) {
@@ -273,6 +285,8 @@ export default function WorkspaceCoursesPage() {
       setGroups(groupsResponse.ok && groupsPayload?.ok ? groupsPayload.data?.items || [] : []);
       setInstructors(instructorsResponse.ok && instructorsPayload?.ok ? instructorsPayload.data?.items || [] : []);
       setRooms(roomsResponse.ok && roomsPayload?.ok ? roomsPayload.data?.items || [] : []);
+      setExams(examsResponse.ok && examsPayload?.ok ? examsPayload.data?.items || [] : []);
+      setAssignments(assignmentsResponse.ok && assignmentsPayload?.ok ? assignmentsPayload.data?.items || [] : []);
       if (resolvedWorkspaceId) {
         await loadSavedViews(resolvedWorkspaceId);
       }
@@ -295,8 +309,38 @@ export default function WorkspaceCoursesPage() {
       setCourseModalMode('create');
       setCourseModalOpen(true);
       setCreateHandled(true);
+
+      const params = new URLSearchParams(searchParams?.toString() || '');
+      params.delete('create');
+      router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
     }
-  }, [createHandled, loading, shouldOpenCreate]);
+  }, [createHandled, loading, pathname, router, searchParams, shouldOpenCreate]);
+
+  useEffect(() => {
+    if (!deepLinkedCourseId) {
+      setInvalidCourseHandled(false);
+      return;
+    }
+    if (courses.some((course) => course.id === deepLinkedCourseId)) {
+      setSelectedCourseId(deepLinkedCourseId);
+      setInvalidCourseHandled(false);
+      return;
+    }
+    if (!loading && !invalidCourseHandled) {
+      const params = new URLSearchParams(searchParams?.toString() || '');
+      params.delete('course');
+      router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
+      toast('The requested course was not found in this workspace.', 'error');
+      setInvalidCourseHandled(true);
+    }
+  }, [courses, deepLinkedCourseId, invalidCourseHandled, loading, pathname, router, searchParams, toast]);
+
+  useEffect(() => {
+    if (!selectedCourseId) return;
+    if (!courses.some((course) => course.id === selectedCourseId)) {
+      setSelectedCourseId(null);
+    }
+  }, [courses, selectedCourseId]);
 
   const filteredCourses = useMemo(() => courses.filter((course) => matchesCourseFilters(course, filters)), [courses, filters]);
   const rows = useMemo(() => filteredCourses.map(courseToRow), [filteredCourses]);
@@ -306,6 +350,7 @@ export default function WorkspaceCoursesPage() {
     pruneTo(rows.map((row) => row.id));
   }, [rows, pruneTo]);
   const activeFilterSummary = useMemo(() => summarizeFilters(filters, groups, instructors, rooms), [filters, groups, instructors, rooms]);
+  const selectedCourse = useMemo(() => courses.find((course) => course.id === selectedCourseId) || null, [courses, selectedCourseId]);
 
   const statusOptions = useMemo(() => [
     { value: 'ALL', label: 'All statuses', description: 'Show active, draft, and conflict courses' },
@@ -410,6 +455,21 @@ export default function WorkspaceCoursesPage() {
     toast('Saved view removed');
   };
 
+  const clearCourseHub = () => {
+    setSelectedCourseId(null);
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    params.delete('course');
+    router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
+  };
+
+  const openCourseHub = (courseId: string) => {
+    setSelectedCourseId(courseId);
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    params.delete('create');
+    params.set('course', courseId);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
   const openCreate = () => {
     if (!access?.canWrite) {
       toast('Viewer mode: course creation is disabled.', 'error');
@@ -421,12 +481,14 @@ export default function WorkspaceCoursesPage() {
   };
 
   const openEdit = (course: CourseApiItem) => {
+    openCourseHub(course.id);
     setCourseModalData(courseToEditorData(course));
     setCourseModalMode('full');
     setCourseModalOpen(true);
   };
 
   const openDuplicate = (course: CourseApiItem) => {
+    openCourseHub(course.id);
     const duplicateData = courseToEditorData(course);
     setCourseModalData({
       ...duplicateData,
@@ -464,6 +526,8 @@ export default function WorkspaceCoursesPage() {
       }
 
       toast(originalId ? 'Course updated' : 'Course created');
+      const targetCourseId = result?.data?.id || originalId;
+      if (targetCourseId) openCourseHub(targetCourseId);
       await load();
     } catch (error) {
       toast(error instanceof Error ? error.message : 'Course save failed', 'error');
@@ -489,6 +553,12 @@ export default function WorkspaceCoursesPage() {
       }
 
       toast('Course deleted');
+      if (selectedCourseId === deleteTarget.id) {
+        setSelectedCourseId(null);
+        const params = new URLSearchParams(searchParams?.toString() || '');
+        params.delete('course');
+        router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
+      }
       setDeleteTarget(null);
       await load();
     } catch (error) {
@@ -502,13 +572,19 @@ export default function WorkspaceCoursesPage() {
     openCreate();
   };
 
-  const handleRowAction = (action: 'Edit' | 'Duplicate' | 'Delete', row: Row) => {
+  const handleRowAction = (action: 'View' | 'Edit' | 'Duplicate' | 'Delete', row: Row) => {
+    const course = courses.find((item) => item.id === row.id);
+    if (!course) return;
+
+    if (action === 'View') {
+      openCourseHub(course.id);
+      return;
+    }
+
     if (!access?.canWrite) {
       toast('Viewer mode: editing actions are disabled.', 'error');
       return;
     }
-    const course = courses.find((item) => item.id === row.id);
-    if (!course) return;
 
     if (action === 'Edit') {
       openEdit(course);
@@ -626,7 +702,7 @@ export default function WorkspaceCoursesPage() {
   };
 
   return (
-    <AppShell title="Courses" subtitle="Manage and organize all university courses.">
+    <AppShell title="Courses" subtitle="Use each course as a planning hub: sessions, linked exams, linked tasks, and quick actions.">
       <div className="space-y-6">
         <section className="rounded-[20px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-2 shadow-[var(--shadow-sm)] md:p-2.5">
           <div className="flex flex-col gap-2">
@@ -766,27 +842,38 @@ export default function WorkspaceCoursesPage() {
           />
         ) : null}
 
-        <CoursesView
-          rows={rows}
-          denseRows={false}
-          timeMode="24h"
-          onAction={handleAction}
-          onRowAction={handleRowAction}
-          isLoading={status === 'loading' || loading}
-          canCreate={Boolean(access?.canWrite)}
-          selectedIds={selection.selected}
-          onToggleRow={selection.toggleOne}
-          onToggleAllVisible={selection.toggleVisible}
-          allVisibleSelected={selection.allVisibleSelected}
-          extraActions={
-            access?.canImport ? (
-              <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2 w-full sm:w-auto justify-center">
-                <span className="material-symbols-outlined text-[20px]">upload_file</span>
-                Import CSV
-              </Button>
-            ) : null
-          }
-        />
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <CoursesView
+            rows={rows}
+            denseRows={false}
+            timeMode="24h"
+            onAction={handleAction}
+            onRowAction={handleRowAction}
+            isLoading={status === 'loading' || loading}
+            canCreate={Boolean(access?.canWrite)}
+            selectedIds={selection.selected}
+            onToggleRow={selection.toggleOne}
+            onToggleAllVisible={selection.toggleVisible}
+            allVisibleSelected={selection.allVisibleSelected}
+            extraActions={
+              access?.canImport ? (
+                <Button onClick={() => setIsImportOpen(true)} variant="secondary" className="gap-2 w-full sm:w-auto justify-center">
+                  <span className="material-symbols-outlined text-[20px]">upload_file</span>
+                  Import CSV
+                </Button>
+              ) : null
+            }
+          />
+
+          <CourseDetailPanel
+            course={selectedCourse}
+            exams={exams}
+            assignments={assignments}
+            onEdit={selectedCourse && access?.canWrite ? () => openEdit(selectedCourse) : undefined}
+            onDuplicate={selectedCourse && access?.canWrite ? () => openDuplicate(selectedCourse) : undefined}
+            onClose={selectedCourse ? clearCourseHub : undefined}
+          />
+        </div>
       </div>
 
       <CsvImportModal

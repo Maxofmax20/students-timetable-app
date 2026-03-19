@@ -91,16 +91,20 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction, selected
               </div>
             </div>
 
-            <div className="mt-4 flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => onRowAction("Edit", row)} className="flex-1 justify-center rounded-xl">
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button variant="ghost" size="sm" onClick={() => onRowAction("View", row)} className="justify-center rounded-xl">
+                <span className="material-symbols-outlined text-[18px]">menu_book</span>
+                View
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => onRowAction("Edit", row)} className="justify-center rounded-xl">
                 <span className="material-symbols-outlined text-[18px]">edit_square</span>
                 Edit
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => onRowAction("Duplicate", row)} className="flex-1 justify-center rounded-xl">
+              <Button variant="ghost" size="sm" onClick={() => onRowAction("Duplicate", row)} className="justify-center rounded-xl">
                 <span className="material-symbols-outlined text-[18px]">content_copy</span>
                 Duplicate
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => onRowAction("Delete", row)} className="flex-1 justify-center rounded-xl">
+              <Button variant="ghost-danger" size="sm" onClick={() => onRowAction("Delete", row)} className="justify-center rounded-xl">
                 <span className="material-symbols-outlined text-[18px]">delete</span>
                 Delete
               </Button>
@@ -181,13 +185,16 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction, selected
                 </td>
                 <td className={cn("px-6 text-right", dense ? "py-2" : "py-4")}>
                   <div className="flex items-center justify-end gap-1 opacity-0 group-hover/row:opacity-100 transition-all translate-x-1 group-hover/row:translate-x-0">
-                    <Button variant="ghost" size="sm" onClick={() => onRowAction("Edit", row)} className="h-8 w-8 p-0 rounded-lg">
+                    <Button variant="ghost" size="sm" onClick={() => onRowAction("View", row)} className="h-8 w-8 p-0 rounded-lg" title="View course hub">
+                      <span className="material-symbols-outlined text-[18px]">menu_book</span>
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => onRowAction("Edit", row)} className="h-8 w-8 p-0 rounded-lg" title="Edit course">
                       <span className="material-symbols-outlined text-[18px]">edit_square</span>
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => onRowAction("Duplicate", row)} className="h-8 w-8 p-0 rounded-lg">
+                    <Button variant="ghost" size="sm" onClick={() => onRowAction("Duplicate", row)} className="h-8 w-8 p-0 rounded-lg" title="Duplicate course">
                       <span className="material-symbols-outlined text-[18px]">content_copy</span>
                     </Button>
-                    <Button variant="ghost-danger" size="sm" onClick={() => onRowAction("Delete", row)} className="h-8 w-8 p-0 rounded-lg">
+                    <Button variant="ghost-danger" size="sm" onClick={() => onRowAction("Delete", row)} className="h-8 w-8 p-0 rounded-lg" title="Delete course">
                       <span className="material-symbols-outlined text-[18px]">delete</span>
                     </Button>
                   </div>

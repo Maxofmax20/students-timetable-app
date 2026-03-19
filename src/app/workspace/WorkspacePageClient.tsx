@@ -1585,6 +1585,18 @@ export default function WorkspacePage() {
 
   const openRowAction = (label: RowAction, row: Row) => {
     setSelectedRow(row);
+
+    if (label === "View") {
+      if (row.source !== "real") {
+        setMainTab("Courses");
+        showToast("Course hub opens for synced courses once real workspace data is loaded");
+        return;
+      }
+
+      router.push(`/workspace/courses?course=${encodeURIComponent(row.id)}`);
+      return;
+    }
+
     if (label === "Edit") {
       openFullEdit(row);
       return;

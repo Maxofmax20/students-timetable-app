@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
@@ -22,6 +24,10 @@ function priorityRank(priority: AssignmentApiItem['priority']) {
 export const dynamic = 'force-dynamic';
 
 export default function TasksPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const deepLinkedCourseId = searchParams?.get('course') || '';
   const { status } = useSession({ required: true, onUnauthenticated() { window.location.href = '/auth'; } });
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -34,6 +40,7 @@ export default function TasksPage() {
   const [selectedCourseFilter, setSelectedCourseFilter] = useState('ALL');
   const [form, setForm] = useState({ academicTermId: '', courseId: '', title: '', description: '', dueAt: '', priority: 'MEDIUM', status: 'TODO' });
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [invalidCourseHandled, setInvalidCourseHandled] = useState(false);
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -60,6 +67,38 @@ export default function TasksPage() {
     };
     void load();
   }, [status, toast]);
+
+  useEffect(() => {
+    if (!deepLinkedCourseId) {
+      setInvalidCourseHandled(false);
+      return;
+    }
+    if (courses.some((course) => course.id === deepLinkedCourseId)) {
+      setSelectedCourseFilter(deepLinkedCourseId);
+      setForm((current) => ({ ...current, courseId: deepLinkedCourseId }));
+      setInvalidCourseHandled(false);
+      return;
+    }
+    if (!loading && !invalidCourseHandled) {
+      const params = new URLSearchParams(searchParams?.toString() || '');
+      params.delete('course');
+      router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
+      toast('The requested course filter was not found.', 'error');
+      setInvalidCourseHandled(true);
+    }
+  }, [courses, deepLinkedCourseId, invalidCourseHandled, loading, pathname, router, searchParams, toast]);
+
+  useEffect(() => {
+    if (loading) return;
+    const current = searchParams?.get('course') || '';
+    const next = selectedCourseFilter !== 'ALL' ? selectedCourseFilter : '';
+    if (current === next) return;
+
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    if (next) params.set('course', next);
+    else params.delete('course');
+    router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
+  }, [loading, pathname, router, searchParams, selectedCourseFilter]);
 
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -102,7 +141,7 @@ export default function TasksPage() {
 
   const resetTaskForm = () => {
     setEditingTaskId(null);
-    setForm((current) => ({ ...current, title: '', description: '', dueAt: '', priority: 'MEDIUM', status: 'TODO' }));
+    setForm((current) => ({ ...current, title: '', description: '', dueAt: '', priority: 'MEDIUM', status: 'TODO', courseId: selectedCourseFilter !== 'ALL' ? selectedCourseFilter : current.courseId }));
   };
 
   const submitTask = async () => {
@@ -185,6 +224,7 @@ export default function TasksPage() {
       return;
     }
     setItems((current) => current.filter((item) => item.id !== id));
+    if (editingTaskId === id) resetTaskForm();
     toast('Task removed');
   };
 
@@ -263,6 +303,11 @@ function TaskColumn({ title, items, loading, onMove, onDelete, onEdit }: { title
               <div>
                 <div className="font-bold text-white">{item.title}</div>
                 <div className="mt-1 text-sm text-[var(--text-secondary)]">{item.course?.title || 'Course'}</div>
+                <div className="mt-1">
+                  <Link href={`/workspace/courses?course=${encodeURIComponent(item.courseId)}`} className="text-[11px] font-bold text-[var(--gold)]">
+                    Open linked course hub
+                  </Link>
+                </div>
               </div>
               <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-black text-white">{item.priority}</span>
             </div>

@@ -5,6 +5,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { getOrderedScheduleDays, layoutDayItems, type TimetableLayoutItem } from '@/lib/schedule';
+import { getCourseVisualTone } from '@/lib/course-visuals';
 import { cn } from '@/lib/utils';
 import type { Row, RowAction, WeekStartOption } from '@/types';
 
@@ -35,8 +36,10 @@ type TimetableViewProps = {
   timeMode?: string;
   weekStart?: WeekStartOption | string;
   focusDay?: string;
+  preferredViewMode?: ViewMode;
   onRowAction?: (action: RowAction, row: Row) => void;
   onExportCalendar?: () => void | Promise<void>;
+  onOpenCourse?: (item: TimetableItem) => void;
   isLoading?: boolean;
   showConflictLayer?: boolean;
 };
@@ -210,6 +213,7 @@ function SessionCard({
   const left = `calc(${placement.lane} * (${width} + ${gap}px))`;
   const preset = getCardPreset({ height, lanes: placement.lanes, density, isMobile });
   const typeMeta = TYPE_META[item.type] || { tone: 'border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))]', short: item.type.slice(0, 3) };
+  const courseTone = getCourseVisualTone(item.courseId || item.code);
   const showConflict = Boolean(showConflictLayer && item.conflictTypes?.length);
   const compactTime = compactTimeRange(item.startMinute, item.endMinute);
   const primaryMeta = [item.group !== '-' ? `G ${item.group}` : null, item.room !== '-' ? item.room : null].filter(Boolean).join(' • ');
@@ -239,6 +243,7 @@ function SessionCard({
       aria-label={`${item.code} ${item.type} ${item.timeLabel}`}
       title={`${item.code} • ${item.course} • ${item.type} • ${item.timeLabel}`}
     >
+      <div className={cn('absolute inset-y-0 left-0 w-1.5 rounded-l-[18px]', courseTone.line)} />
       <div className="flex h-full flex-col justify-between gap-1.5 overflow-hidden">
         <div className="flex items-start justify-between gap-1.5">
           <span className={cn(
@@ -256,8 +261,9 @@ function SessionCard({
 
         <div className="min-w-0 space-y-1 overflow-hidden">
           <div className={cn(
-            'truncate font-black text-white',
-            preset === 'micro' ? 'text-[11px]' : preset === 'compact' ? 'text-xs' : 'text-sm'
+            'inline-flex max-w-max items-center rounded-full border px-2 py-0.5 font-black uppercase tracking-[0.12em]',
+            courseTone.badge,
+            preset === 'micro' ? 'text-[9px]' : 'text-[10px]'
           )}>
             {item.code}
           </div>
@@ -299,16 +305,24 @@ function SessionCard({
 function SessionDetailsModal({
   item,
   open,
-  onClose
+  onClose,
+  onOpenCourse
 }: {
   item: TimetableItem | null;
   open: boolean;
   onClose: () => void;
+  onOpenCourse?: (item: TimetableItem) => void;
 }) {
   if (!item) return null;
+  const courseTone = getCourseVisualTone(item.courseId || item.code);
 
   return (
     <Modal open={open} onClose={onClose} size="sm" title={`${item.code} • ${item.type}`} subtitle={item.course}>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className={cn('rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em]', courseTone.badge)}>{item.code}</span>
+        <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">{item.type}</span>
+        {item.conflictTypes?.length ? <span className="rounded-full border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--danger)]">{item.conflictCount} clash{item.conflictCount === 1 ? '' : 'es'}</span> : null}
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
           <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">Time</div>
@@ -342,6 +356,15 @@ function SessionDetailsModal({
             </div>
           </div>
         ) : null}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {onOpenCourse ? (
+          <Button variant="secondary" onClick={() => onOpenCourse(item)} className="gap-2">
+            <span className="material-symbols-outlined text-[18px]">menu_book</span>
+            Open course hub
+          </Button>
+        ) : null}
+        <Button variant="ghost" onClick={onClose}>Close</Button>
       </div>
     </Modal>
   );
@@ -431,6 +454,8 @@ function ListSection({
             item.instructor !== '-' ? item.instructor : null
           ].filter(Boolean) as string[];
 
+          const courseTone = getCourseVisualTone(item.courseId || item.code);
+
           return (
             <button
               key={item.id}
@@ -445,7 +470,7 @@ function ListSection({
                     <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--gold)]">
                       {item.type}
                     </span>
-                    <span className={cn('rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-white', typeMeta.tone)}>
+                    <span className={cn('rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em]', courseTone.badge)}>
                       {item.code}
                     </span>
                     {showConflictLayer && item.conflictTypes?.length ? (
@@ -490,7 +515,9 @@ export function TimetableView({
   rows = [],
   weekStart = 'SATURDAY',
   focusDay,
+  preferredViewMode,
   onExportCalendar,
+  onOpenCourse,
   isLoading = false,
   showConflictLayer = true
 }: TimetableViewProps) {
@@ -528,6 +555,14 @@ export function TimetableView({
       window.localStorage.setItem(VIEW_MODE_KEY, nextMode);
     }
   };
+
+  useEffect(() => {
+    if (!viewModeReady || !preferredViewMode) return;
+    setViewMode(preferredViewMode);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(VIEW_MODE_KEY, preferredViewMode);
+    }
+  }, [preferredViewMode, viewModeReady]);
 
   useEffect(() => {
     const preferredDay = focusDay?.trim().substring(0, 3);
@@ -775,7 +810,7 @@ export function TimetableView({
         )}
       </div>
 
-      <SessionDetailsModal item={selectedItem} open={Boolean(selectedItem)} onClose={() => setSelectedItem(null)} />
+      <SessionDetailsModal item={selectedItem} open={Boolean(selectedItem)} onClose={() => setSelectedItem(null)} onOpenCourse={onOpenCourse} />
     </>
   );
 }

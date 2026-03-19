@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
@@ -8,10 +10,10 @@ import { Input } from '@/components/ui/Input';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { useToast } from '@/components/ui/Toast';
 import { TimetableView, type TimetableItem } from '@/components/workspace/TimetableView';
-import { buildScheduleConflictReport, buildScheduleItems, downloadScheduleCalendar, getScheduleConflictLabels } from '@/lib/schedule';
+import { buildScheduleConflictReport, buildScheduleItems, downloadScheduleCalendar, getScheduleConflictLabels, scheduleDayOrder } from '@/lib/schedule';
 import { groupHierarchyPath, sortGroupsForDisplay } from '@/lib/group-room-model';
 import { csvCell, downloadFile } from '@/lib/utils';
-import type { CourseApiItem, GroupApiItem } from '@/types';
+import type { CourseApiItem, GroupApiItem, UserPreferenceApiItem } from '@/types';
 
 const SESSION_TYPE_OPTIONS = ['Lecture', 'Section', 'Lab', 'Online', 'Hybrid'] as const;
 type SessionTypeLabel = (typeof SESSION_TYPE_OPTIONS)[number];
@@ -44,8 +46,35 @@ function matchesDelivery(item: TimetableItem, filter: DeliveryFilter) {
   return item.type === 'Lecture' || item.type === 'Section' || item.type === 'Lab';
 }
 
+function getCurrentScheduleDay() {
+  const dayMap: Record<number, (typeof scheduleDayOrder)[number]> = {
+    0: 'Sun',
+    1: 'Mon',
+    2: 'Tue',
+    3: 'Wed',
+    4: 'Thu',
+    5: 'Fri',
+    6: 'Sat'
+  };
+  return dayMap[new Date().getDay()] || 'Sat';
+}
+
+function findNextSession(items: TimetableItem[], currentDay: string, currentMinute: number) {
+  const nowDayIndex = scheduleDayOrder.indexOf(currentDay as (typeof scheduleDayOrder)[number]);
+  if (nowDayIndex === -1) return null;
+
+  for (let offset = 0; offset < scheduleDayOrder.length; offset += 1) {
+    const day = scheduleDayOrder[(nowDayIndex + offset) % scheduleDayOrder.length];
+    const dayItems = items.filter((item) => item.day === day).sort((a, b) => a.startMinute - b.startMinute);
+    const candidate = dayItems.find((item) => (offset === 0 ? item.endMinute > currentMinute : true));
+    if (candidate) return candidate;
+  }
+
+  return null;
+}
 
 export default function WorkspaceTimetablePage() {
+  const searchParams = useSearchParams();
   const { status } = useSession({
     required: true,
     onUnauthenticated() {
@@ -57,6 +86,7 @@ export default function WorkspaceTimetablePage() {
   const [loading, setLoading] = useState(true);
   const [courses, setCourses] = useState<CourseApiItem[]>([]);
   const [groups, setGroups] = useState<GroupApiItem[]>([]);
+  const [preferences, setPreferences] = useState<UserPreferenceApiItem | null>(null);
   const [selectedTypes, setSelectedTypes] = useState<SessionTypeLabel[]>([...SESSION_TYPE_OPTIONS]);
   const [selectedGroupId, setSelectedGroupId] = useState<string>('ALL');
   const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>('ALL');
@@ -69,17 +99,23 @@ export default function WorkspaceTimetablePage() {
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const [showSavedViewsPanel, setShowSavedViewsPanel] = useState(false);
   const [showReportsPanel, setShowReportsPanel] = useState(false);
+  const [focusDayOverride, setFocusDayOverride] = useState<string | null>(null);
 
   useEffect(() => {
     if (status !== 'authenticated') return;
     const load = async () => {
       setLoading(true);
       try {
-        const [coursesResponse, groupsResponse] = await Promise.all([
+        const [coursesResponse, groupsResponse, preferencesResponse] = await Promise.all([
           fetch('/api/v1/courses', { credentials: 'include' }),
-          fetch('/api/v1/groups', { credentials: 'include' })
+          fetch('/api/v1/groups', { credentials: 'include' }),
+          fetch('/api/v1/preferences', { credentials: 'include' })
         ]);
-        const [coursesPayload, groupsPayload] = await Promise.all([coursesResponse.json(), groupsResponse.json()]);
+        const [coursesPayload, groupsPayload, preferencesPayload] = await Promise.all([
+          coursesResponse.json(),
+          groupsResponse.json(),
+          preferencesResponse.json()
+        ]);
 
         if (!coursesResponse.ok || !coursesPayload?.ok) {
           throw new Error(coursesPayload?.message || 'Failed to load timetable data');
@@ -90,6 +126,7 @@ export default function WorkspaceTimetablePage() {
         setCourses(coursesPayload.data?.items || []);
         setAccess(coursesPayload.data?.access || null);
         setGroups(groupsResponse.ok && groupsPayload?.ok ? groupsPayload.data?.items || [] : []);
+        setPreferences(preferencesResponse.ok && preferencesPayload?.ok ? preferencesPayload.data?.item || null : null);
 
         if (resolvedWorkspaceId) {
           const savedViewsResponse = await fetch(`/api/v1/saved-views?workspaceId=${resolvedWorkspaceId}&surface=TIMETABLE`, { credentials: 'include' });
@@ -108,8 +145,18 @@ export default function WorkspaceTimetablePage() {
     void load();
   }, [status, toast]);
 
+  const searchDay = searchParams?.get('day')?.trim().slice(0, 3) || '';
+  useEffect(() => {
+    setFocusDayOverride(searchDay && scheduleDayOrder.includes(searchDay as (typeof scheduleDayOrder)[number]) ? searchDay : null);
+  }, [searchDay]);
+
   const scheduleItems = useMemo(() => buildScheduleItems(courses) as TimetableItem[], [courses]);
   const sortedGroups = useMemo(() => sortGroupsForDisplay(groups), [groups]);
+  const todayDay = useMemo(() => getCurrentScheduleDay(), []);
+  const currentMinute = useMemo(() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  }, []);
 
   const groupDescendants = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -169,6 +216,8 @@ export default function WorkspaceTimetablePage() {
     };
   }), [conflictReport.conflictMap, filteredItems]);
 
+  const effectiveFocusDay = focusDayOverride || (preferences?.timetableView === 'DAY' ? todayDay : undefined);
+
   const activeSummary = useMemo(() => {
     const labels: string[] = [];
     if (selectedTypes.length !== SESSION_TYPE_OPTIONS.length) labels.push(`${selectedTypes.length} session type${selectedTypes.length === 1 ? '' : 's'}`);
@@ -177,14 +226,27 @@ export default function WorkspaceTimetablePage() {
       if (group) labels.push(group.code);
     }
     if (deliveryFilter !== 'ALL') labels.push(deliveryFilter === 'PHYSICAL' ? 'Physical only' : `${deliveryFilter.charAt(0)}${deliveryFilter.slice(1).toLowerCase()} only`);
+    if (effectiveFocusDay) labels.push(`Focus ${effectiveFocusDay}`);
     return labels;
-  }, [deliveryFilter, selectedGroupId, selectedTypes.length, sortedGroups]);
+  }, [deliveryFilter, effectiveFocusDay, selectedGroupId, selectedTypes.length, sortedGroups]);
 
   const conflictStats = useMemo(() => {
     const sessionsWithConflicts = displayItems.filter((item) => item.conflictCount).length;
     const totalConflictBadges = displayItems.reduce((sum, item) => sum + (item.conflictCount || 0), 0);
     return { sessionsWithConflicts, totalConflictBadges };
   }, [displayItems]);
+
+  const visibleDayCounts = useMemo(() => scheduleDayOrder.map((day) => ({
+    day,
+    count: displayItems.filter((item) => item.day === day).length
+  })), [displayItems]);
+
+  const focusedSessions = useMemo(() => {
+    const day = effectiveFocusDay || todayDay;
+    return displayItems.filter((item) => item.day === day).sort((a, b) => a.startMinute - b.startMinute);
+  }, [displayItems, effectiveFocusDay, todayDay]);
+
+  const nextSession = useMemo(() => findNextSession(displayItems, todayDay, currentMinute), [currentMinute, displayItems, todayDay]);
 
   const applySavedView = (view: SavedTimetableView) => {
     const state = view.stateJson;
@@ -269,6 +331,8 @@ export default function WorkspaceTimetablePage() {
     setShowConflictLayer(true);
     setActiveSavedViewId(null);
   };
+
+  const clearDayFocus = () => setFocusDayOverride(null);
 
   const scopeLabel = activeSummary.length ? activeSummary.join(' • ') : 'All timetable sessions';
   const dateTag = new Date().toISOString().slice(0, 10);
@@ -358,13 +422,114 @@ export default function WorkspaceTimetablePage() {
   };
 
   return (
-    <AppShell title="Timetable" subtitle="Inspect the weekly schedule with smarter controls and clash visibility.">
-      <div className="space-y-6">
+    <AppShell
+      title="Timetable"
+      subtitle="Your signature scheduling surface — now tuned for daily planning, mobile scanning, and course-linked follow-through."
+      actions={
+        <div className="flex items-center gap-2">
+          <Link href="/workspace/courses"><Button variant="secondary" size="sm">Course hub</Button></Link>
+          <Link href="/workspace/courses?create=1"><Button variant="primary" size="sm">Add course</Button></Link>
+        </div>
+      }
+    >
+      <div className="space-y-6 pb-10">
         {!access?.canWrite ? (
           <div className="rounded-[20px] border border-[var(--warning)]/30 bg-[var(--warning-muted)] px-4 py-3 text-sm text-[var(--warning)]">
             You are in Viewer mode. Timetable stays fully browsable; shared data editing/import remains blocked in resource pages.
           </div>
         ) : null}
+
+        <section className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-5 shadow-[var(--shadow-lg)]">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Timetable cockpit</div>
+              <h2 className="mt-2 text-3xl font-black tracking-tight text-white">See the week, then zoom into the day that matters.</h2>
+              <p className="mt-2 max-w-3xl text-sm text-[var(--text-secondary)]">
+                This pass tightens the timetable around student workflow: day focus, course-linked drill-down, clearer course color identity, and settings-aware week/view behavior.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => setFocusDayOverride(todayDay)} className="gap-2">
+                <span className="material-symbols-outlined text-[18px]">today</span>
+                Focus today
+              </Button>
+              {effectiveFocusDay ? (
+                <Button variant="ghost" onClick={clearDayFocus} className="gap-2">
+                  <span className="material-symbols-outlined text-[18px]">calendar_view_week</span>
+                  Show full week
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <TimetableStatCard label="Visible sessions" value={String(displayItems.length)} icon="calendar_month" />
+            <TimetableStatCard label={effectiveFocusDay ? `${effectiveFocusDay} sessions` : 'Today sessions'} value={String(focusedSessions.length)} icon="event" />
+            <TimetableStatCard label="Sessions with clashes" value={String(conflictStats.sessionsWithConflicts)} icon="crisis_alert" />
+            <TimetableStatCard label="Next class" value={nextSession ? nextSession.code : 'Clear'} meta={nextSession ? `${nextSession.day} • ${nextSession.timeLabel}` : 'No upcoming session'} icon="schedule" />
+          </div>
+        </section>
+
+        <section className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-lg)]">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div>
+              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Day focus</div>
+              <h3 className="mt-2 text-xl font-black text-white">Jump between days without losing the bigger picture.</h3>
+            </div>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] px-4 py-3 text-sm text-[var(--text-secondary)]">
+              Week starts on <span className="font-bold text-white">{preferences?.weekStartsOn || 'SATURDAY'}</span> • Preferred view <span className="font-bold text-white">{preferences?.timetableView || 'WEEK'}</span>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {visibleDayCounts.map((bucket) => {
+              const active = bucket.day === effectiveFocusDay || (!effectiveFocusDay && bucket.day === todayDay);
+              return (
+                <button
+                  key={bucket.day}
+                  type="button"
+                  onClick={() => setFocusDayOverride(bucket.day)}
+                  className={`rounded-2xl border px-3 py-2 text-left transition-all ${active ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-white' : 'border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)]'}`}
+                >
+                  <div className="text-xs font-black uppercase tracking-[0.12em]">{bucket.day}</div>
+                  <div className="mt-1 text-[11px] font-semibold">{bucket.count} session{bucket.count === 1 ? '' : 's'}</div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 grid gap-3 xl:grid-cols-[1.2fr_0.8fr]">
+            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--bg-raised)] p-4">
+              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Focused agenda</div>
+              <h4 className="mt-2 text-lg font-black text-white">{effectiveFocusDay || todayDay} snapshot</h4>
+              <div className="mt-4 space-y-2">
+                {focusedSessions.length ? focusedSessions.map((item) => (
+                  <Link key={item.id} href={`/workspace/courses?course=${encodeURIComponent(item.courseId)}`} className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 transition-all hover:border-[var(--text-muted)]">
+                    <div className="min-w-0">
+                      <div className="font-bold text-white">{item.code} — {item.course}</div>
+                      <div className="mt-1 text-sm text-[var(--text-secondary)]">{item.timeLabel} • {item.type} • {item.room}</div>
+                    </div>
+                    {item.conflictCount ? <span className="rounded-full border border-[var(--danger)]/30 bg-[var(--danger)]/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--danger)]">{item.conflictCount} clash</span> : null}
+                  </Link>
+                )) : <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--text-secondary)]">No sessions in this day focus. Pick another day or reset filters.</div>}
+              </div>
+            </div>
+
+            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--bg-raised)] p-4">
+              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Active scope</div>
+              <h4 className="mt-2 text-lg font-black text-white">What this board is showing</h4>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {activeSummary.length ? activeSummary.map((label) => (
+                  <span key={label} className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">{label}</span>
+                )) : <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">All sessions visible</span>}
+              </div>
+              <div className="mt-4 space-y-3 text-sm text-[var(--text-secondary)]">
+                <p>Use day focus for faster mobile scanning and keep the weekly board available when you want the whole pattern.</p>
+                <p>Tap any session on the board to open its course hub directly from the timetable.</p>
+              </div>
+            </div>
+          </div>
+        </section>
 
         <section className="rounded-[20px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-2 shadow-[var(--shadow-sm)] md:p-2.5">
           <div className="flex flex-col gap-2">
@@ -422,16 +587,6 @@ export default function WorkspaceTimetablePage() {
                 />
               </div>
             </div>
-
-            {activeSummary.length ? (
-              <div className="flex flex-wrap gap-2">
-                {activeSummary.map((label) => (
-                  <span key={label} className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-secondary)]">
-                    {label}
-                  </span>
-                ))}
-              </div>
-            ) : null}
 
             {showFiltersPanel ? (
               <div className="grid gap-2.5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2.5 shadow-[var(--shadow-sm)] lg:grid-cols-[1.5fr_minmax(0,0.9fr)_minmax(0,0.8fr)_auto]">
@@ -565,8 +720,31 @@ export default function WorkspaceTimetablePage() {
           </div>
         </section>
 
-        <TimetableView items={displayItems} showConflictLayer={showConflictLayer} />
+        <TimetableView
+          items={displayItems}
+          weekStart={preferences?.weekStartsOn || 'SATURDAY'}
+          focusDay={effectiveFocusDay}
+          preferredViewMode={preferences?.timetableView === 'AGENDA' ? 'list' : 'grid'}
+          showConflictLayer={showConflictLayer}
+          isLoading={loading || status === 'loading'}
+          onOpenCourse={(item) => {
+            window.location.href = `/workspace/courses?course=${encodeURIComponent(item.courseId)}`;
+          }}
+        />
       </div>
     </AppShell>
+  );
+}
+
+function TimetableStatCard({ label, value, icon, meta }: { label: string; value: string; icon: string; meta?: string }) {
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)]">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-muted)]">{label}</span>
+        <span className="material-symbols-outlined text-[18px] text-[var(--text-secondary)]">{icon}</span>
+      </div>
+      <div className="mt-3 text-3xl font-black tracking-tight text-white">{value}</div>
+      {meta ? <div className="mt-1 text-xs text-[var(--text-secondary)]">{meta}</div> : null}
+    </div>
   );
 }
