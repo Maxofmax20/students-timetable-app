@@ -17,7 +17,7 @@
   - Verified: build green + code QA on `/workspace/timetable` and `TimetableView`.
   - Confirmed: focus-day deep links (`?day=`), saved views, filter panels, export actions, and clash layer remain wired.
   - Fixed: timetable page now passes loading state into `TimetableView`.
-  - Fixed: focused-day UI state now stays synchronized with the `?day=` URL param, and invalid `day` params are intentionally cleaned.
+  - Fixed: focused-day UI state now stays synchronized with the `?day=` URL param, invalid `day` params are intentionally cleaned, and Reset now clears day-focus state fully.
 - [x] Course CRUD still works
   - Verified: build green + code QA on `/workspace/courses` create/edit/duplicate/delete handlers.
   - Confirmed: row View/Edit/Duplicate/Delete flows all resolve intentionally.
@@ -33,6 +33,7 @@
 - [x] Settings/preferences load and save
   - Verified: build green + code QA on preferences API wiring and client hydration.
   - Confirmed: theme + reduceMotion hydrate through `Providers`; week start and timetable view preferences affect timetable behavior.
+  - Fixed: creating a new active term now clears prior active-term badges in local UI immediately instead of waiting for reload.
 - [~] Mobile navigation works
   - Verified: code-level sanity pass only.
   - Confirmed: timetable day focus, course hub side panel layout, and tasks/exams stacked layouts are mobile-oriented.
@@ -63,3 +64,4 @@
 - Browser-based interactive visual QA was limited in this pass because the browser gateway/runtime was unavailable; code/build QA and navigation/state regression fixes were completed anyway.
 - Legacy `/workspace?tab=...` navigation is now redirected intentionally into the new path-based pages instead of silently dropping tab intent.
 - Timetable course-to-course-hub navigation now uses app routing instead of a hard reload.
+- Active workspace pages now preserve callback URLs on auth fallback instead of dropping deep-link/query context when a session expires.

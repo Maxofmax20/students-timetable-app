@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { useToast } from '@/components/ui/Toast';
+import { redirectToAuthWithCallback } from '@/lib/auth-redirect';
 import type { AcademicTermApiItem, AssignmentApiItem, CourseApiItem } from '@/types';
 
 function priorityRank(priority: AssignmentApiItem['priority']) {
@@ -28,7 +29,7 @@ export default function TasksPage() {
   const router = useRouter();
   const pathname = usePathname();
   const deepLinkedCourseId = searchParams?.get('course') || '';
-  const { status } = useSession({ required: true, onUnauthenticated() { window.location.href = '/auth'; } });
+  const { status } = useSession({ required: true, onUnauthenticated() { redirectToAuthWithCallback(); } });
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [courses, setCourses] = useState<CourseApiItem[]>([]);

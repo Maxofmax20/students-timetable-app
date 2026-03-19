@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
+import { redirectToAuthWithCallback } from '@/lib/auth-redirect';
 import { buildScheduleItems, scheduleDayOrder, type ScheduleItem } from '@/lib/schedule';
 import type { AcademicTermApiItem, AssignmentApiItem, CourseApiItem, ExamApiItem } from '@/types';
 
@@ -57,7 +58,7 @@ export default function WorkspaceDashboardPage() {
   const { status } = useSession({
     required: true,
     onUnauthenticated() {
-      window.location.href = '/auth';
+      redirectToAuthWithCallback();
     }
   });
   const { toast } = useToast();

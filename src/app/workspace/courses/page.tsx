@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { useToast } from '@/components/ui/Toast';
+import { redirectToAuthWithCallback } from '@/lib/auth-redirect';
 import { CoursesView } from '@/components/workspace/CoursesView';
 import { CourseDetailPanel } from '@/components/workspace/CourseDetailPanel';
 import { BulkActionBar } from '@/components/workspace/BulkActionBar';
@@ -211,7 +212,7 @@ export default function WorkspaceCoursesPage() {
   const { status } = useSession({
     required: true,
     onUnauthenticated() {
-      window.location.href = '/auth';
+      redirectToAuthWithCallback();
     }
   });
   const { toast } = useToast();

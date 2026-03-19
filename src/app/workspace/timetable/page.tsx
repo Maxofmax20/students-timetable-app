@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/Input';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { useToast } from '@/components/ui/Toast';
 import { TimetableView, type TimetableItem } from '@/components/workspace/TimetableView';
+import { redirectToAuthWithCallback } from '@/lib/auth-redirect';
 import { buildScheduleConflictReport, buildScheduleItems, downloadScheduleCalendar, getScheduleConflictLabels, scheduleDayOrder } from '@/lib/schedule';
 import { groupHierarchyPath, sortGroupsForDisplay } from '@/lib/group-room-model';
 import { csvCell, downloadFile } from '@/lib/utils';
@@ -80,7 +81,7 @@ export default function WorkspaceTimetablePage() {
   const { status } = useSession({
     required: true,
     onUnauthenticated() {
-      window.location.href = '/auth';
+      redirectToAuthWithCallback();
     }
   });
   const { toast } = useToast();
@@ -364,6 +365,7 @@ export default function WorkspaceTimetablePage() {
     setDeliveryFilter('ALL');
     setShowConflictLayer(true);
     setActiveSavedViewId(null);
+    setFocusDayOverride(null);
   };
 
   const clearDayFocus = () => setFocusDayOverride(null);

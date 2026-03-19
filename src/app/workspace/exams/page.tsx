@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { useToast } from '@/components/ui/Toast';
+import { redirectToAuthWithCallback } from '@/lib/auth-redirect';
 import { cn } from '@/lib/utils';
 import type { AcademicTermApiItem, CourseApiItem, ExamApiItem } from '@/types';
 
@@ -94,7 +95,7 @@ export default function ExamsPage() {
   const { status } = useSession({
     required: true,
     onUnauthenticated() {
-      window.location.href = '/auth';
+      redirectToAuthWithCallback();
     }
   });
   const { toast } = useToast();

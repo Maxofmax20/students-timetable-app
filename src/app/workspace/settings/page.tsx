@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { Input } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
+import { redirectToAuthWithCallback } from '@/lib/auth-redirect';
 import type { AcademicTermApiItem, UserPreferenceApiItem } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ const defaultPrefs: UserPreferenceApiItem = {
 };
 
 export default function SettingsPage() {
-  const { status } = useSession({ required: true, onUnauthenticated() { window.location.href = '/auth'; } });
+  const { status } = useSession({ required: true, onUnauthenticated() { redirectToAuthWithCallback(); } });
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [prefs, setPrefs] = useState<UserPreferenceApiItem>(defaultPrefs);
@@ -85,7 +86,7 @@ export default function SettingsPage() {
       toast(payload?.message || 'Failed to create academic term', 'error');
       return;
     }
-    setTerms((current) => [payload.data, ...current.filter((term) => term.id !== payload.data.id)].sort((a, b) => Number(b.isActive) - Number(a.isActive)));
+    setTerms((current) => [payload.data, ...current.filter((term) => term.id !== payload.data.id).map((term) => payload.data.isActive ? { ...term, isActive: false } : term)].sort((a, b) => Number(b.isActive) - Number(a.isActive)));
     toast('Academic term created');
   };
 
