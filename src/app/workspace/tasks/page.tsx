@@ -100,6 +100,12 @@ export default function TasksPage() {
     router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
   }, [loading, pathname, router, searchParams, selectedCourseFilter]);
 
+  useEffect(() => {
+    if (editingTaskId) return;
+    if (selectedCourseFilter === 'ALL') return;
+    setForm((current) => current.courseId === selectedCourseFilter ? current : { ...current, courseId: selectedCourseFilter });
+  }, [editingTaskId, selectedCourseFilter]);
+
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return items

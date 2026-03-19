@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
@@ -75,6 +75,8 @@ function findNextSession(items: TimetableItem[], currentDay: string, currentMinu
 
 export default function WorkspaceTimetablePage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const { status } = useSession({
     required: true,
     onUnauthenticated() {
@@ -100,6 +102,7 @@ export default function WorkspaceTimetablePage() {
   const [showSavedViewsPanel, setShowSavedViewsPanel] = useState(false);
   const [showReportsPanel, setShowReportsPanel] = useState(false);
   const [focusDayOverride, setFocusDayOverride] = useState<string | null>(null);
+  const [invalidDayHandled, setInvalidDayHandled] = useState(false);
 
   useEffect(() => {
     if (status !== 'authenticated') return;
@@ -147,8 +150,39 @@ export default function WorkspaceTimetablePage() {
 
   const searchDay = searchParams?.get('day')?.trim().slice(0, 3) || '';
   useEffect(() => {
-    setFocusDayOverride(searchDay && scheduleDayOrder.includes(searchDay as (typeof scheduleDayOrder)[number]) ? searchDay : null);
-  }, [searchDay]);
+    if (!searchDay) {
+      setFocusDayOverride(null);
+      setInvalidDayHandled(false);
+      return;
+    }
+
+    if (scheduleDayOrder.includes(searchDay as (typeof scheduleDayOrder)[number])) {
+      setFocusDayOverride(searchDay);
+      setInvalidDayHandled(false);
+      return;
+    }
+
+    setFocusDayOverride(null);
+    if (!invalidDayHandled) {
+      const params = new URLSearchParams(searchParams?.toString() || '');
+      params.delete('day');
+      router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
+      toast('The requested timetable day was invalid and has been cleared.', 'error');
+      setInvalidDayHandled(true);
+    }
+  }, [invalidDayHandled, pathname, router, searchDay, searchParams, toast]);
+
+  useEffect(() => {
+    if (loading) return;
+    const current = searchParams?.get('day')?.trim().slice(0, 3) || '';
+    const next = focusDayOverride || '';
+    if (current === next) return;
+
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    if (next) params.set('day', next);
+    else params.delete('day');
+    router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
+  }, [focusDayOverride, loading, pathname, router, searchParams]);
 
   const scheduleItems = useMemo(() => buildScheduleItems(courses) as TimetableItem[], [courses]);
   const sortedGroups = useMemo(() => sortGroupsForDisplay(groups), [groups]);

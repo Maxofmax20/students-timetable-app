@@ -191,6 +191,12 @@ export default function ExamsPage() {
     router.replace(params.toString() ? `${pathname}?${params.toString()}` : pathname, { scroll: false });
   }, [loading, pathname, router, searchParams, selectedCourseFilter]);
 
+  useEffect(() => {
+    if (editingExamId) return;
+    if (selectedCourseFilter === 'ALL') return;
+    setForm((current) => current.courseId === selectedCourseFilter ? current : { ...current, courseId: selectedCourseFilter });
+  }, [editingExamId, selectedCourseFilter]);
+
   const sortedExams = useMemo(
     () => exams.slice().sort((a, b) => +new Date(a.examDate) - +new Date(b.examDate) || (a.startMinute ?? 0) - (b.startMinute ?? 0)),
     [exams]

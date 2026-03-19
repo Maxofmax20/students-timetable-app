@@ -17,6 +17,7 @@
   - Verified: build green + code QA on `/workspace/timetable` and `TimetableView`.
   - Confirmed: focus-day deep links (`?day=`), saved views, filter panels, export actions, and clash layer remain wired.
   - Fixed: timetable page now passes loading state into `TimetableView`.
+  - Fixed: focused-day UI state now stays synchronized with the `?day=` URL param, and invalid `day` params are intentionally cleaned.
 - [x] Course CRUD still works
   - Verified: build green + code QA on `/workspace/courses` create/edit/duplicate/delete handlers.
   - Confirmed: row View/Edit/Duplicate/Delete flows all resolve intentionally.
@@ -24,11 +25,11 @@
 - [x] Exam CRUD works
   - Verified: build green + code QA on create/list/edit/delete flow.
   - Confirmed: linked-course deep links filter the page and feed the create/edit form context.
-  - Fixed: invalid `?course=` is now cleaned intentionally; form reset preserves linked-course context.
+  - Fixed: invalid `?course=` is now cleaned intentionally; form reset preserves linked-course context; changing the course filter now also updates quick-add course context when not editing.
 - [x] Task CRUD works
   - Verified: build green + code QA on create/list/edit/status-update/delete flow.
   - Confirmed: linked-course deep links filter the board and feed the form context.
-  - Fixed: deleting the currently edited task now resets the form; invalid `?course=` is now cleaned intentionally; form reset preserves linked-course context.
+  - Fixed: deleting the currently edited task now resets the form; invalid `?course=` is now cleaned intentionally; form reset preserves linked-course context; changing the course filter now also updates quick-add course context when not editing.
 - [x] Settings/preferences load and save
   - Verified: build green + code QA on preferences API wiring and client hydration.
   - Confirmed: theme + reduceMotion hydrate through `Providers`; week start and timetable view preferences affect timetable behavior.
