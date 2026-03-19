@@ -1,55 +1,110 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { WorkspaceRole } from '@prisma/client';
-import { z } from 'zod';
-import { prisma } from '@/lib/prisma';
-import { ApiError, requireSession, requireWorkspaceRole } from '@/lib/workspace-v1';
-import { summarizeCourseForAudit, summarizeSessions, writeWorkspaceAudit } from '@/lib/workspace-audit';
+import { NextRequest, NextResponse } from "next/server";
+import { WorkspaceRole } from "@prisma/client";
+import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import {
+  ApiError,
+  getOrCreatePersonalWorkspace,
+  requireSession,
+  requireWorkspaceRole,
+} from "@/lib/workspace-v1";
 
-const schema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('delete'), ids: z.array(z.string().cuid()).min(1).max(500) }),
-  z.object({ action: z.literal('status'), ids: z.array(z.string().cuid()).min(1).max(500), status: z.enum(['ACTIVE', 'DRAFT']) })
-]);
+const bulkDeleteSchema = z.object({
+  workspaceId: z.string().cuid().optional(),
+  ids: z.array(z.string().cuid()).min(1).max(200),
+});
 
-export async function POST(request: NextRequest) {
+const bulkStatusSchema = z.object({
+  workspaceId: z.string().cuid().optional(),
+  ids: z.array(z.string().cuid()).min(1).max(200),
+  status: z.enum(["ACTIVE", "DRAFT"]),
+});
+
+async function resolveWorkspace(userId: string, workspaceId?: string) {
+  if (!workspaceId) return getOrCreatePersonalWorkspace(userId);
+  await requireWorkspaceRole(userId, workspaceId, [
+    WorkspaceRole.OWNER,
+    WorkspaceRole.TEACHER,
+  ]);
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } });
+  if (!workspace) throw new ApiError(404, "WORKSPACE_NOT_FOUND");
+  return workspace;
+}
+
+/** DELETE /api/v1/courses/bulk — bulk delete courses */
+export async function DELETE(request: NextRequest) {
   try {
     const session = await requireSession(request);
-    const body = schema.parse(await request.json());
-    const rows = await prisma.course.findMany({ where: { id: { in: body.ids } }, include: { sessions: true } });
-    if (!rows.length) throw new ApiError(404, 'COURSE_NOT_FOUND');
-    const workspaceId = rows[0].workspaceId;
-    if (rows.some((r) => r.workspaceId !== workspaceId)) throw new ApiError(400, 'CROSS_WORKSPACE_IDS_NOT_ALLOWED');
-    await requireWorkspaceRole(session.userId, workspaceId, [WorkspaceRole.OWNER, WorkspaceRole.TEACHER]);
+    const body = bulkDeleteSchema.parse(await request.json());
+    const workspace = await resolveWorkspace(session.userId, body.workspaceId);
 
-    const foundIds = new Set(rows.map((r) => r.id));
-    const missing = body.ids.filter((id) => !foundIds.has(id));
-    const successIds: string[] = [];
-    const failed: Array<{ id: string; reason: string }> = [];
+    await requireWorkspaceRole(session.userId, workspace.id, [
+      WorkspaceRole.OWNER,
+      WorkspaceRole.TEACHER,
+    ]);
 
-    for (const row of rows) {
-      try {
-        if (body.action === 'delete') {
-          await prisma.$transaction(async (tx) => {
-            await tx.course.delete({ where: { id: row.id } });
-            await writeWorkspaceAudit({ tx, workspaceId, actorUserId: session.userId, entityType: 'COURSE', entityId: row.id, actionType: 'DELETE', summary: `Bulk deleted course ${row.code}`, before: { course: summarizeCourseForAudit(row), sessions: summarizeSessions(row.sessions) } });
-          });
-        } else {
-          await prisma.$transaction(async (tx) => {
-            const next = await tx.course.update({ where: { id: row.id }, data: { status: body.status } });
-            await writeWorkspaceAudit({ tx, workspaceId, actorUserId: session.userId, entityType: 'COURSE', entityId: row.id, actionType: 'UPDATE', summary: `Bulk status ${next.code} -> ${body.status}`, before: { status: row.status }, after: { status: body.status } });
-          });
-        }
-        successIds.push(row.id);
-      } catch (error) {
-        failed.push({ id: row.id, reason: error instanceof Error ? error.message : 'FAILED' });
-      }
+    // Verify all IDs belong to this workspace before deleting
+    const owned = await prisma.course.findMany({
+      where: { id: { in: body.ids }, workspaceId: workspace.id },
+      select: { id: true },
+    });
+    const ownedIds = owned.map((c) => c.id);
+
+    if (ownedIds.length === 0) {
+      return NextResponse.json({ ok: false, message: "NO_COURSES_FOUND" }, { status: 404 });
     }
 
-    for (const id of missing) failed.push({ id, reason: 'NOT_FOUND' });
+    const { count } = await prisma.course.deleteMany({
+      where: { id: { in: ownedIds }, workspaceId: workspace.id },
+    });
 
-    return NextResponse.json({ ok: failed.length === 0, action: body.action, requested: body.ids.length, successCount: successIds.length, successIds, failed });
+    return NextResponse.json({ ok: true, data: { deleted: count } });
   } catch (error) {
-    if (error instanceof z.ZodError) return NextResponse.json({ ok: false, message: error.issues[0]?.message }, { status: 400 });
-    if (error instanceof ApiError) return NextResponse.json({ ok: false, message: error.message }, { status: error.status });
-    return NextResponse.json({ ok: false, message: 'COURSE_BULK_FAILED' }, { status: 500 });
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ ok: false, message: error.issues[0]?.message }, { status: 400 });
+    }
+    if (error instanceof ApiError) {
+      return NextResponse.json({ ok: false, message: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ ok: false, message: "BULK_DELETE_FAILED" }, { status: 500 });
+  }
+}
+
+/** PATCH /api/v1/courses/bulk — bulk status update */
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await requireSession(request);
+    const body = bulkStatusSchema.parse(await request.json());
+    const workspace = await resolveWorkspace(session.userId, body.workspaceId);
+
+    await requireWorkspaceRole(session.userId, workspace.id, [
+      WorkspaceRole.OWNER,
+      WorkspaceRole.TEACHER,
+    ]);
+
+    const owned = await prisma.course.findMany({
+      where: { id: { in: body.ids }, workspaceId: workspace.id },
+      select: { id: true },
+    });
+    const ownedIds = owned.map((c) => c.id);
+
+    if (ownedIds.length === 0) {
+      return NextResponse.json({ ok: false, message: "NO_COURSES_FOUND" }, { status: 404 });
+    }
+
+    const { count } = await prisma.course.updateMany({
+      where: { id: { in: ownedIds }, workspaceId: workspace.id },
+      data: { status: body.status },
+    });
+
+    return NextResponse.json({ ok: true, data: { updated: count } });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ ok: false, message: error.issues[0]?.message }, { status: 400 });
+    }
+    if (error instanceof ApiError) {
+      return NextResponse.json({ ok: false, message: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ ok: false, message: "BULK_STATUS_FAILED" }, { status: 500 });
   }
 }
