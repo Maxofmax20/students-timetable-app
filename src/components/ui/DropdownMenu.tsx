@@ -18,7 +18,7 @@ export function DropdownMenu({ trigger, children, align = 'right' }: DropdownMen
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setMounted(true);
+    requestAnimationFrame(() => setMounted(true));
   }, []);
 
   useEffect(() => {

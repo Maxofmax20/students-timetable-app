@@ -55,7 +55,7 @@ export function AppSelect({
   const listId = useId();
 
   useEffect(() => {
-    setMounted(true);
+    requestAnimationFrame(() => setMounted(true));
     const updateMode = () => setIsMobile(window.innerWidth < 640);
     updateMode();
     window.addEventListener('resize', updateMode);
@@ -140,7 +140,7 @@ export function AppSelect({
   useEffect(() => {
     if (!open) return;
     const nextIndex = Math.max(0, filteredOptions.findIndex((option) => option.value === value));
-    setActiveIndex(nextIndex === -1 ? 0 : nextIndex);
+    requestAnimationFrame(() => setActiveIndex(nextIndex === -1 ? 0 : nextIndex));
     if (searchable) {
       window.setTimeout(() => searchRef.current?.focus(), 20);
     }

@@ -13,7 +13,32 @@ export class ApiError extends Error {
   }
 }
 
-export async function getAppSession(_request: NextRequest) {
+export async function getAppSession(request: NextRequest) {
+  // 1. Check for Bot Authentication (Internal)
+  const botToken = request.headers.get("x-bot-token");
+  const botUserId = request.headers.get("x-bot-user-id");
+  const internalSecret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+
+  console.log(`[getAppSession] Checking Bot Auth - Token present: ${!!botToken}, UserId: ${botUserId}`);
+
+  if (botToken && botUserId && botToken === internalSecret) {
+    // Trusted bot request, fetch user data from DB
+    const user = await prisma.user.findUnique({
+      where: { id: botUserId },
+      select: { id: true, email: true, displayName: true }
+    });
+
+    if (user) {
+      console.log(`[getAppSession] Bot auth success for user: ${user.email}`);
+      return {
+        userId: user.id,
+        email: user.email,
+        name: user.displayName,
+      };
+    }
+  }
+
+  // 2. Fallback to standard NextAuth session
   const nextAuthSession = await getServerSession(authOptions);
   if (nextAuthSession?.user?.id) {
     return {

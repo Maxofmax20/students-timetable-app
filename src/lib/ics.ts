@@ -56,7 +56,7 @@ function nextWeekdayAnchor(day: string, startMinute: number) {
   const now = new Date();
   const target = dayMap[day] ?? 0;
   const base = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
-  let delta = (target - base.getUTCDay() + 7) % 7;
+  const delta = (target - base.getUTCDay() + 7) % 7;
   const candidate = new Date(base);
   candidate.setUTCDate(candidate.getUTCDate() + delta);
   candidate.setUTCHours(Math.floor(startMinute / 60), startMinute % 60, 0, 0);

@@ -567,12 +567,12 @@ export function TimetableView({
   useEffect(() => {
     const preferredDay = focusDay?.trim().substring(0, 3);
     if (preferredDay && orderedDays.includes(preferredDay as (typeof orderedDays)[number])) {
-      setMobileDay(preferredDay);
+      requestAnimationFrame(() => setMobileDay(preferredDay));
       return;
     }
 
     const firstDayWithItems = orderedDays.find((day) => sourceItems.some((item) => item.day === day));
-    setMobileDay((current) => (current && orderedDays.includes(current as (typeof orderedDays)[number]) ? current : firstDayWithItems || orderedDays[0] || ''));
+    requestAnimationFrame(() => setMobileDay((current) => (current && orderedDays.includes(current as (typeof orderedDays)[number]) ? current : firstDayWithItems || orderedDays[0] || '')));
   }, [focusDay, orderedDays, sourceItems]);
 
   const boardMetrics = useMemo(() => {
