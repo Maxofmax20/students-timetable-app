@@ -45,7 +45,7 @@ export function Modal({ open, onClose, title, subtitle, children, actions, size 
           role="dialog"
           aria-modal="true"
           className={cn(
-            'relative flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-[28px] border border-[var(--border)] bg-[var(--bg-raised)] shadow-[var(--shadow-lg)] overscroll-contain sm:max-h-[min(88vh,920px)] sm:w-[min(100%,calc(100vw-3rem))] sm:rounded-[32px]',
+            'relative flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-[28px] border border-[var(--border)] bg-[var(--bg-raised)] shadow-[var(--shadow-lg)] overscroll-contain animate-bottom-sheet sm:animate-modal-enter sm:max-h-[min(88vh,920px)] sm:w-[min(100%,calc(100vw-3rem))] sm:rounded-[32px]',
             sizeClasses[size],
             className
           )}

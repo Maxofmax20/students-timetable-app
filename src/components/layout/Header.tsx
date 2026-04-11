@@ -32,8 +32,8 @@ export function Header({ title, subtitle, onMenuClick, actions }: HeaderProps) {
   const currentTab = searchParams?.get("tab");
 
   const buildBreadcrumbs = () => {
-    if (pathname === '/account' || pathname.startsWith('/account/')) {
-      return [{ label: 'Account', href: '/account' }];
+    if (pathname === '/workspace/settings') {
+      return [{ label: 'Settings', href: '/workspace/settings' }];
     }
 
     const items = [{ label: 'Workspace', href: '/workspace/dashboard' }];
@@ -115,11 +115,14 @@ export function Header({ title, subtitle, onMenuClick, actions }: HeaderProps) {
                 <p className="text-xs text-[var(--text-secondary)] truncate max-w-[180px]">{session.user.email}</p>
              </div>
              <div className="p-1">
-               <Link href="/account">
+               <Link href="/workspace/settings?tab=profile">
                  <DropdownItem icon="person" onClick={() => {}}>Profile Settings</DropdownItem>
                </Link>
-               <Link href="/account">
+               <Link href="/workspace/settings?tab=general">
                  <DropdownItem icon="settings_suggest" onClick={() => {}}>Preferences</DropdownItem>
+               </Link>
+               <Link href="/workspace/settings?tab=device">
+                 <DropdownItem icon="install_mobile" onClick={() => {}}>Install App</DropdownItem>
                </Link>
                <div className="h-px bg-[var(--border-soft)] my-1 mx-1"></div>
                <DropdownItem icon="logout" danger onClick={() => { void handleSignOut(); }}>Sign out</DropdownItem>

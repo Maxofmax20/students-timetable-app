@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { WorkspaceRole } from '@prisma/client';
+import { WorkspaceRole, SessionType } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { ApiError, requireSession, requireWorkspaceRole } from '@/lib/workspace-v1';
@@ -16,7 +16,39 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const entry = await prisma.workspaceAuditEntry.findFirst({ where: { id: body.entryId, workspaceId: id } });
     if (!entry || entry.actionType !== 'DELETE') throw new ApiError(400, 'RESTORE_NOT_SUPPORTED');
-    const before = (entry.beforeJson || {}) as Record<string, any>;
+
+    interface RestoreSession {
+      type?: string;
+      day: string;
+      startMinute: number;
+      endMinute: number;
+      groupId?: string | null;
+      instructorId?: string | null;
+      roomId?: string | null;
+    }
+
+    interface RestoreData {
+      course?: {
+        code: string;
+        title: string;
+        status?: string;
+        groupId?: string | null;
+        instructorId?: string | null;
+        roomId?: string | null;
+        creditHours?: number | null;
+      };
+      sessions?: RestoreSession[];
+      code?: string;
+      name?: string;
+      buildingCode?: string | null;
+      roomNumber?: string | null;
+      capacity?: number | null;
+      email?: string | null;
+      phone?: string | null;
+      color?: string | null;
+    }
+
+    const before = (entry.beforeJson || {}) as unknown as RestoreData;
 
     await prisma.$transaction(async (tx) => {
       if (entry.entityType === 'COURSE' && before.course) {
@@ -26,7 +58,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         const created = await tx.course.create({ data: { workspaceId: id, code: course.code, title: course.title, status: course.status || 'ACTIVE', groupId: course.groupId || null, instructorId: course.instructorId || null, roomId: course.roomId || null, creditHours: course.creditHours ?? null, color: '#3b82f6' } });
         const sessions = Array.isArray(before.sessions) ? before.sessions : [];
         if (sessions.length) {
-          await tx.sessionEntry.createMany({ data: sessions.map((s: any) => ({ workspaceId: id, courseId: created.id, type: s.type || 'LECTURE', day: s.day, startMinute: s.startMinute, endMinute: s.endMinute, groupId: s.groupId || null, instructorId: s.instructorId || null, roomId: s.roomId || null })) });
+          await tx.sessionEntry.createMany({ data: sessions.map((s) => ({ workspaceId: id, courseId: created.id, type: (s.type || 'LECTURE') as SessionType, day: s.day as any, startMinute: s.startMinute, endMinute: s.endMinute, groupId: s.groupId || null, instructorId: s.instructorId || null, roomId: s.roomId || null })) });
         }
       } else if (entry.entityType === 'ROOM' && before.code) {
         const exists = await tx.room.findFirst({ where: { workspaceId: id, code: before.code } });
@@ -38,7 +70,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         throw new ApiError(400, 'RESTORE_NOT_SUPPORTED');
       }
 
-      await writeWorkspaceAudit({ tx, workspaceId: id, actorUserId: session.userId, entityType: entry.entityType as any, entityId: entry.entityId, actionType: 'RESTORE_SUCCESS', summary: `Restored ${entry.entityType.toLowerCase()} from history`, metadata: { sourceEntryId: entry.id } });
+      await writeWorkspaceAudit({ tx, workspaceId: id, actorUserId: session.userId, entityType: entry.entityType as 'COURSE' | 'GROUP' | 'ROOM' | 'INSTRUCTOR' | 'IMPORT' | 'MEMBERSHIP', entityId: entry.entityId, actionType: 'RESTORE_SUCCESS', summary: `Restored ${entry.entityType.toLowerCase()} from history`, metadata: { sourceEntryId: entry.id } });
     });
 
     return NextResponse.json({ ok: true });

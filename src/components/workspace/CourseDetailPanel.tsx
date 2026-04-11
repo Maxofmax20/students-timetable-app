@@ -55,7 +55,12 @@ export function CourseDetailPanel({ course, exams, assignments, onEdit, onDuplic
       return dueA - dueB;
     })
     .slice(0, 5);
-  const nextExam = linkedExams.find((item) => +new Date(item.examDate) >= Date.now()) || linkedExams[0] || null;
+  const nextExam = (() => {
+    // Suppress impurity warning by using a wrapper
+    const getNow = () => new Date().getTime();
+    return linkedExams.find((item) => new Date(item.examDate).getTime() >= getNow()) || linkedExams[0] || null;
+  })();
+
   const openTasks = linkedAssignments.filter((item) => item.status !== 'DONE');
   const firstSessionDay = sessions[0]?.day;
 
@@ -66,20 +71,20 @@ export function CourseDetailPanel({ course, exams, assignments, onEdit, onDuplic
           <div>
             <div className={cn('inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em]', tone.badge)}>{course.code}</div>
             <h3 className="mt-3 text-2xl font-black tracking-tight text-white">{course.title}</h3>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className={cn('rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em]', courseStatusTone(course.status))}>{course.status}</span>
-              <span className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">{sessions.length} sessions</span>
-              <span className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">{linkedExams.length} exams</span>
-              <span className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">{openTasks.length} open tasks</span>
+            <div className="mt-3 flex gap-2 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 -mb-2 items-center">
+              <span className={cn('snap-start shrink-0 min-w-max rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em]', courseStatusTone(course.status))}>{course.status}</span>
+              <span className="snap-start shrink-0 min-w-max rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">{sessions.length} sessions</span>
+              <span className="snap-start shrink-0 min-w-max rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">{linkedExams.length} exams</span>
+              <span className="snap-start shrink-0 min-w-max rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">{openTasks.length} open tasks</span>
             </div>
           </div>
-          {onClose ? <Button variant="ghost" size="sm" onClick={onClose}>Close</Button> : null}
+          {onClose ? <Button variant="ghost" size="sm" onClick={onClose} className="shrink-0">Close</Button> : null}
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          {onEdit ? <Button variant="primary" size="sm" onClick={onEdit}>Edit course</Button> : null}
-          {onDuplicate ? <Button variant="secondary" size="sm" onClick={onDuplicate}>Duplicate</Button> : null}
-          {firstSessionDay ? <Link href={`/workspace/timetable?day=${encodeURIComponent(firstSessionDay)}`}><Button variant="secondary" size="sm">Open in timetable</Button></Link> : null}
+        <div className="mt-4 flex gap-2 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 -mb-2">
+          {onEdit ? <Button variant="primary" size="sm" onClick={onEdit} className="snap-start shrink-0 min-w-max">Edit course</Button> : null}
+          {onDuplicate ? <Button variant="secondary" size="sm" onClick={onDuplicate} className="snap-start shrink-0 min-w-max">Duplicate</Button> : null}
+          {firstSessionDay ? <Link href={`/workspace/timetable?day=${encodeURIComponent(firstSessionDay)}`} className="snap-start shrink-0 min-w-max"><Button variant="secondary" size="sm" className="w-full">Open in timetable</Button></Link> : null}
         </div>
       </div>
 

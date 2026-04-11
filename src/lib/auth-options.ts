@@ -87,9 +87,23 @@ providers.push(
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
-  useSecureCookies: true,
+  useSecureCookies: process.env.NODE_ENV === 'production',
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days persistence
+    updateAge: 24 * 60 * 60, // Update session every 24 hours
+  },
+  cookies: {
+    sessionToken: {
+      name: process.env.NODE_ENV === 'production' ? `__Secure-next-auth.session-token` : `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+        maxAge: 30 * 24 * 60 * 60 // Ensure cookie lasts 30 days
+      }
+    }
   },
   pages: {
     signIn: "/auth",

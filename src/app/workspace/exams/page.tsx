@@ -492,17 +492,17 @@ export default function ExamsPage() {
                   <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Timeline</div>
                   <h3 className="mt-2 text-xl font-black text-white">Exam schedule</h3>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex gap-2 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 -mb-2">
                   {(['UPCOMING', 'ALL', 'PAST'] as const).map((value) => (
                     <button
                       key={value}
                       type="button"
                       onClick={() => setScope(value)}
                       className={cn(
-                        'rounded-full border px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] transition-all',
+                        'snap-start shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] rounded-2xl border px-5 py-2.5 text-xs font-bold uppercase tracking-[0.12em] transition-all select-none min-w-max',
                         scope === value
-                          ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-[var(--gold)]'
-                          : 'border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)] hover:text-white'
+                          ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-[var(--gold)] shadow-[var(--shadow-sm)]'
+                          : 'border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)] hover:text-white'
                       )}
                     >
                       {value}

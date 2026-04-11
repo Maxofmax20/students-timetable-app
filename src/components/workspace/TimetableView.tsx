@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { getOrderedScheduleDays, layoutDayItems, type TimetableLayoutItem } from '@/lib/schedule';
@@ -224,10 +225,10 @@ function SessionCard({
   const showConflictBadge = showConflict && preset !== 'rich';
   const courseClass =
     preset === 'rich'
-      ? 'line-clamp-3 text-[12px] font-medium leading-4'
+      ? 'line-clamp-2 text-[12px] font-bold leading-[1.25] tracking-tight'
       : preset === 'comfortable'
-        ? 'line-clamp-2 text-[11px] font-medium leading-4'
-        : 'line-clamp-2 text-[10px] font-medium leading-[1.15]';
+        ? 'line-clamp-2 text-[11px] font-bold leading-[1.25] tracking-tight'
+        : 'line-clamp-2 text-[10px] font-bold leading-[1.15] tracking-tight';
 
   return (
     <button
@@ -447,7 +448,6 @@ function ListSection({
       </div>
       <div className="divide-y divide-[var(--border)]/70">
         {items.map((item) => {
-          const typeMeta = TYPE_META[item.type] || { tone: '', short: item.type };
           const metaChips = [
             item.group !== '-' ? `Group ${item.group}` : null,
             item.room !== '-' ? `Room ${item.room}` : null,
@@ -541,12 +541,14 @@ export function TimetableView({
   useEffect(() => {
     if (typeof window === 'undefined' || viewModeReady) return;
     const stored = window.localStorage.getItem(VIEW_MODE_KEY);
-    if (stored === 'grid' || stored === 'list') {
-      setViewMode(stored);
-    } else {
-      setViewMode(isMobile ? 'list' : 'grid');
-    }
-    setViewModeReady(true);
+    requestAnimationFrame(() => {
+      if (stored === 'grid' || stored === 'list') {
+        setViewMode(stored);
+      } else {
+        setViewMode(isMobile ? 'list' : 'grid');
+      }
+      setViewModeReady(true);
+    });
   }, [isMobile, viewModeReady]);
 
   const updateViewMode = (nextMode: ViewMode) => {
@@ -558,7 +560,9 @@ export function TimetableView({
 
   useEffect(() => {
     if (!viewModeReady || !preferredViewMode) return;
-    setViewMode(preferredViewMode);
+    requestAnimationFrame(() => {
+      setViewMode(preferredViewMode);
+    });
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(VIEW_MODE_KEY, preferredViewMode);
     }
@@ -602,17 +606,28 @@ export function TimetableView({
 
   if (isLoading) {
     return (
-      <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
+      <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)] overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-4 md:px-6">
-          <div>
-            <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Timetable intelligence</div>
-            <h3 className="mt-1 text-xl font-black tracking-tight text-white">Weekly board</h3>
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-32 rounded-full" />
+            <Skeleton className="h-6 w-48 rounded-lg" />
           </div>
-          <span className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-[var(--text-secondary)]">
-            Loading
-          </span>
+          <Skeleton className="h-8 w-24 rounded-full" />
         </div>
-        <div className="px-4 py-10 text-center text-sm text-[var(--text-secondary)] md:px-6">Loading timetable sessions…</div>
+        <div className="p-4 md:p-6">
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
+            {Array.from({ length: isMobile ? 1 : 7 }).map((_, i) => (
+              <div key={i} className="space-y-4">
+                <Skeleton className="h-10 w-full rounded-2xl md:h-12" />
+                <div className="space-y-3">
+                  <Skeleton className="h-32 w-full rounded-[24px]" />
+                  <Skeleton className="h-24 w-full rounded-[24px]" />
+                  <Skeleton className="h-40 w-full rounded-[24px]" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
@@ -706,7 +721,7 @@ export function TimetableView({
               >
                 <span className="material-symbols-outlined text-[18px]">chevron_left</span>
               </Button>
-              <div className="min-w-0 flex-1 overflow-x-auto">
+              <div className="min-w-0 flex-1 overflow-x-auto hide-scrollbar snap-x snap-mandatory">
                 <div className="flex min-w-max gap-2 pr-1">
                   {dayBuckets.map((bucket) => {
                     const active = bucket.day === activeMobileDay;
@@ -716,10 +731,10 @@ export function TimetableView({
                         type="button"
                         onClick={() => setMobileDay(bucket.day)}
                         className={cn(
-                          'rounded-2xl border px-3 py-2 text-left transition-all',
+                          'snap-start shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] rounded-2xl border px-5 py-2.5 text-left transition-all select-none',
                           active
-                            ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-white shadow-[var(--shadow-sm)]'
-                            : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]'
+                            ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-[var(--gold)] shadow-[var(--shadow-sm)]'
+                            : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-3)]/40 hover:text-white'
                         )}
                       >
                         <div className="text-xs font-black uppercase tracking-[0.12em]">{bucket.day}</div>

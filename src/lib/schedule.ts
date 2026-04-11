@@ -136,9 +136,7 @@ const overlapKinds: Array<{
   }
 ];
 
-function overlap(left: ScheduleItem, right: ScheduleItem) {
-  return left.startMinute < right.endMinute && right.startMinute < left.endMinute;
-}
+
 
 function compareConflict(a: ScheduleConflict, b: ScheduleConflict) {
   const dayDiff = scheduleDayOrder.indexOf(a.day as ScheduleDay) - scheduleDayOrder.indexOf(b.day as ScheduleDay);

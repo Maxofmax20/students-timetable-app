@@ -249,12 +249,12 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
               </Button>
             ))}
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex gap-2 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 -mb-2">
             {effectiveModel.quickLinks.map((link) => (
               <Link
                 key={`${link.label}-${link.href}`}
                 href={link.href}
-                className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[11px] font-semibold text-[var(--text-secondary)] transition-colors hover:border-[var(--text-muted)] hover:text-white"
+                className="snap-start shrink-0 min-w-max rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1.5 text-[11px] font-semibold text-[var(--text-secondary)] transition-colors hover:border-[var(--text-muted)] hover:text-white select-none"
               >
                 {link.label}
               </Link>
@@ -279,10 +279,10 @@ export function DashboardView({ model, rows, conflictsCount, groupsCount, instru
           <ListInsight title="Groups by root" items={effectiveModel.insights.groupsByRoot} />
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2 text-xs">
-          <Chip label="Physical" value={effectiveModel.insights.deliverySplit.physical} />
-          <Chip label="Online" value={effectiveModel.insights.deliverySplit.online} />
-          <Chip label="Hybrid" value={effectiveModel.insights.deliverySplit.hybrid} />
+        <div className="mt-4 flex gap-2 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 -mb-2 text-xs">
+          <div className="snap-start shrink-0 min-w-max"><Chip label="Physical" value={effectiveModel.insights.deliverySplit.physical} /></div>
+          <div className="snap-start shrink-0 min-w-max"><Chip label="Online" value={effectiveModel.insights.deliverySplit.online} /></div>
+          <div className="snap-start shrink-0 min-w-max"><Chip label="Hybrid" value={effectiveModel.insights.deliverySplit.hybrid} /></div>
         </div>
       </section>
     </div>

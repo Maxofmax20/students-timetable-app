@@ -62,6 +62,16 @@ function PreferenceHydrator() {
 }
 
 export function Providers({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch((err) => {
+          console.error('Service Worker registration failed:', err);
+        });
+      });
+    }
+  }, []);
+
   return (
     <SessionProvider>
       <ToastProvider>

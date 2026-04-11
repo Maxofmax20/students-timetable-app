@@ -9,7 +9,6 @@ import {
   type ActionLabel,
   type RowAction,
   type MainTab,
-  type SettingsTab,
   type TimeMode,
   type WeekStartOption,
   type ConflictPolicy,
@@ -30,8 +29,6 @@ import {
   normalizeCode,
   cloneRows,
   parseTimeRange,
-  toTwelveHour,
-  formatTimeRange,
   normalizeDayToIndex,
   toUiStatus,
   parseJson,
@@ -41,10 +38,7 @@ import {
 } from "@/lib/utils";
 import { useSession, signOut as nextAuthSignOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Toggle } from "@/components/ui/Toggle";
 import { Button } from "@/components/ui/Button";
-import { ActionCenter, RowActionCenter } from "@/components/workspace/ActionCenter";
-import { DataTable } from "@/components/workspace/DataTable";
 import { AppShell } from "@/components/layout/AppShell";
 import { DashboardView } from "@/components/workspace/DashboardView";
 import { TimetableView } from "@/components/workspace/TimetableView";
@@ -305,7 +299,7 @@ function scanConflicts(rows: Row[]): { rows: Row[]; count: number } {
 
 
 export default function WorkspacePage() {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -337,7 +331,6 @@ export default function WorkspacePage() {
   const [smartPlacement, setSmartPlacement] = useState(true);
   const [denseRows, setDenseRows] = useState(true);
 
-  const [toast, setToast] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [authState, setAuthState] = useState<"unknown" | "authed" | "guest">("unknown");
@@ -362,9 +355,6 @@ export default function WorkspacePage() {
   const [groups, setGroups] = useState<GroupApiItem[]>([]);
   const [instructors, setInstructors] = useState<InstructorApiItem[]>([]);
   const [rooms, setRooms] = useState<RoomApiItem[]>([]);
-
-  const [undoStack, setUndoStack] = useState<Row[][]>([]);
-  const [redoStack, setRedoStack] = useState<Row[][]>([]);
 
   const [timeMode, setTimeMode] = useState<TimeMode>("24h");
   const [weekStart, setWeekStart] = useState<WeekStartOption>("SATURDAY");
@@ -399,8 +389,7 @@ export default function WorkspacePage() {
   }, [rows]);
 
   const showToast = (message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(null), 2200);
+    console.log(`[Toast] ${message}`);
   };
 
 
@@ -456,7 +445,7 @@ export default function WorkspacePage() {
     }));
   };
 
-  const closeCreateModal = () => {
+  const _closeCreateModal = () => {
     if (createSubmitting) return;
     setCreateModalType(null);
   };
@@ -536,7 +525,7 @@ export default function WorkspacePage() {
     }
   };
 
-  const handleCreateSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const _handleCreateSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await submitCreateModal();
   };
@@ -544,8 +533,7 @@ export default function WorkspacePage() {
 
 
   const pushUndoSnapshot = () => {
-    setUndoStack((stack) => [...stack.slice(-24), cloneRows(rowsRef.current)]);
-    setRedoStack([]);
+    // Undo disabled
   };
 
   const applyLocalRows = (updater: (current: Row[]) => Row[], message?: string) => {
@@ -555,33 +543,11 @@ export default function WorkspacePage() {
   };
 
   const applyUndo = () => {
-    setUndoStack((stack) => {
-      if (!stack.length) {
-        showToast("Nothing to undo");
-        return stack;
-      }
-
-      const previous = stack[stack.length - 1];
-      setRedoStack((redo) => [...redo.slice(-24), cloneRows(rowsRef.current)]);
-      setRows(cloneRows(previous));
-      showToast("Undo applied");
-      return stack.slice(0, -1);
-    });
+    // Undo disabled
   };
 
   const applyRedo = () => {
-    setRedoStack((stack) => {
-      if (!stack.length) {
-        showToast("Nothing to redo");
-        return stack;
-      }
-
-      const next = stack[stack.length - 1];
-      setUndoStack((undo) => [...undo.slice(-24), cloneRows(rowsRef.current)]);
-      setRows(cloneRows(next));
-      showToast("Redo applied");
-      return stack.slice(0, -1);
-    });
+    // Redo disabled
   };
 
   const fetchReferenceData = async (forcedWorkspaceId?: string | null) => {
@@ -728,7 +694,7 @@ export default function WorkspacePage() {
     return true;
   };
 
-  const createRoom = async () => {
+  const _createRoom = async () => {
     if (!ensureCanWrite("create a room")) return;
     router.push('/workspace/rooms');
   };
@@ -953,7 +919,7 @@ export default function WorkspacePage() {
     return true;
   };
 
-  const updateCourseName = async (row: Row) => {
+  const _updateCourseName = async (row: Row) => {
     if (!ensureCanWrite("edit course title")) return;
 
     if (row.source !== "real") {
@@ -969,7 +935,7 @@ export default function WorkspacePage() {
     setCourseModalOpen(true);
   };
 
-  const editCourseTime = async (row: Row) => {
+  const _editCourseTime = async (row: Row) => {
     if (!ensureCanWrite("edit schedule details")) return;
 
     const details = await fetchCourseEditorData(row.id);
@@ -980,7 +946,7 @@ export default function WorkspacePage() {
     setCourseModalOpen(true);
   };
 
-  const editCourseRoom = async (row: Row) => {
+  const _editCourseRoom = async (row: Row) => {
     if (!ensureCanWrite("edit room assignment")) return;
 
     if (row.source !== "real") {
@@ -1043,7 +1009,7 @@ export default function WorkspacePage() {
     await fetchCourses();
   };
 
-  const duplicateAllDays = async (row: Row) => {
+  const _duplicateAllDays = async (row: Row) => {
     if (!ensureCanWrite("duplicate across week")) return;
 
     if (row.source !== "real") {
@@ -1073,7 +1039,7 @@ export default function WorkspacePage() {
     if (success > 0) await fetchCourses();
   };
 
-  const duplicateToA2 = async (row: Row) => {
+  const _duplicateToA2 = async (row: Row) => {
     if (!ensureCanWrite("duplicate to group A2")) return;
 
     if (row.source !== "real") {
@@ -1104,7 +1070,7 @@ export default function WorkspacePage() {
     await fetchCourses();
   };
 
-  const duplicateAndEdit = async (row: Row) => {
+  const _duplicateAndEdit = async (row: Row) => {
     if (!ensureCanWrite("duplicate and edit")) return;
 
     if (row.source !== "real") {
@@ -1125,7 +1091,7 @@ export default function WorkspacePage() {
     setCourseModalOpen(true);
   };
 
-  const archiveCourse = async (row: Row) => {
+  const _archiveCourse = async (row: Row) => {
     if (!ensureCanWrite("archive course")) return;
 
     if (row.source !== "real") {
@@ -1167,7 +1133,7 @@ export default function WorkspacePage() {
     );
   };
 
-  const deleteAllInGroup = async (row: Row) => {
+  const _deleteAllInGroup = async (row: Row) => {
     if (!ensureCanWrite("delete group courses")) return;
 
     const targetGroup = row.group.trim();
@@ -1613,11 +1579,11 @@ export default function WorkspacePage() {
     }
   };
 
-  const openLoginPage = () => {
+  const _openLoginPage = () => {
     window.location.assign("/auth");
   };
 
-  const handleSignOut = async () => {
+  const _handleSignOut = async () => {
     await fetch('/api/v1/auth/logout', {
       method: 'POST',
       credentials: 'include'
@@ -1709,15 +1675,15 @@ export default function WorkspacePage() {
     weekStart
   ]);
 
-  const isPublicPreview = previewMode === "public";
-  const cardStyle =
+  const _isPublicPreview = previewMode === "public";
+  const _cardStyle =
     previewMode === "tablet"
       ? { maxWidth: "960px", marginInline: "auto" }
       : previewMode === "mobile"
         ? { maxWidth: "430px", marginInline: "auto" }
         : undefined;
 
-  const createModalTitle =
+  const _createModalTitle =
     createModalType === "workspace"
       ? "Create Workspace"
       : createModalType === "group"

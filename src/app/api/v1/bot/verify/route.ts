@@ -6,16 +6,29 @@ import { authOptions } from "@/lib/auth-options";
 
 const TOKENS_FILE = path.join(process.cwd(), "bot_tokens.json");
 
-function getTokens() {
+interface BotToken {
+  botId: string;
+  status: string;
+  expiresAt: number;
+  user?: {
+    id: string;
+    email: string | null | undefined;
+    displayName: string | null | undefined;
+  };
+}
+
+function getTokens(): Record<string, BotToken> {
   try {
     if (fs.existsSync(TOKENS_FILE)) {
       return JSON.parse(fs.readFileSync(TOKENS_FILE, "utf-8"));
     }
-  } catch (e) {}
+  } catch {
+    // Ignore read errors
+  }
   return {};
 }
 
-function saveTokens(tokens: any) {
+function saveTokens(tokens: Record<string, BotToken>) {
   fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2));
 }
 
@@ -34,9 +47,10 @@ export async function GET(request: NextRequest) {
   if (!tokens[token]) return new NextResponse("Token invalid or expired", { status: 404 });
 
   // Update token with user info and status
-  tokens[token].status = "VERIFIED";
-  tokens[token].user = {
-    id: (session.user as any).id || session.user.email,
+  const botToken = tokens[token];
+  botToken.status = "VERIFIED";
+  botToken.user = {
+    id: session.user.id || session.user.email || 'unknown',
     email: session.user.email,
     displayName: session.user.name || null
   };
@@ -72,7 +86,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { token } = await request.json();
+    const { token } = await request.json() as { token: string };
     if (!token) return NextResponse.json({ ok: false, message: "Token required" }, { status: 400 });
 
     const tokens = getTokens();
@@ -86,7 +100,8 @@ export async function POST(request: NextRequest) {
       ok: true,
       user: data.user
     });
-  } catch (error: any) {
-    return NextResponse.json({ ok: false, message: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ ok: false, message }, { status: 500 });
   }
 }

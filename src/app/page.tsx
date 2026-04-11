@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Metadata } from "next";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 

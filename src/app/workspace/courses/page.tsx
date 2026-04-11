@@ -805,20 +805,20 @@ export default function WorkspaceCoursesPage() {
                     Save Current View
                   </Button>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex gap-2 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 -mb-2">
                   {savedViews.length ? (
                     savedViews.map((view) => {
                       const isActive = activeSavedViewId === view.id;
                       return (
-                        <div key={view.id} className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 ${isActive ? 'border-[var(--gold)] bg-[var(--gold-muted)]' : 'border-[var(--border)] bg-[var(--bg-raised)]'}`}>
-                          <button type="button" onClick={() => applySavedView(view)} className="rounded-full px-2 py-1 text-sm font-semibold text-white transition-colors hover:bg-[var(--surface)]">{view.name}</button>
-                          <button type="button" onClick={() => void renameSavedView(view)} aria-label={`Rename saved view ${view.name}`} className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-white"><span className="material-symbols-outlined text-[18px]">edit</span></button>
-                          <button type="button" onClick={() => void deleteSavedView(view.id)} aria-label={`Delete saved view ${view.name}`} className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--danger)]"><span className="material-symbols-outlined text-[18px]">close</span></button>
+                        <div key={view.id} className={`snap-start shrink-0 inline-flex items-center gap-1 rounded-2xl border px-3 py-1.5 min-w-max ${isActive ? 'border-[var(--gold)] bg-[var(--gold-muted)] shadow-[var(--shadow-sm)]' : 'border-[var(--border)] bg-[var(--bg-raised)] hover:bg-[var(--surface-2)] transition-colors'}`}>
+                          <button type="button" onClick={() => applySavedView(view)} className="outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] rounded-xl px-3 py-1.5 text-sm font-bold text-white transition-colors hover:bg-[var(--surface-3)]/50">{view.name}</button>
+                          <button type="button" onClick={() => void renameSavedView(view)} aria-label={`Rename saved view ${view.name}`} className="outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] inline-flex h-9 w-9 items-center justify-center rounded-xl text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-3)]/50 hover:text-white"><span className="material-symbols-outlined text-[18px]">edit</span></button>
+                          <button type="button" onClick={() => void deleteSavedView(view.id)} aria-label={`Delete saved view ${view.name}`} className="outline-none focus-visible:ring-2 focus-visible:ring-[var(--danger)] inline-flex h-9 w-9 items-center justify-center rounded-xl text-[var(--text-muted)] transition-colors hover:bg-[var(--danger-muted)]/50 hover:text-[var(--danger)]"><span className="material-symbols-outlined text-[18px]">close</span></button>
                         </div>
                       );
                     })
                   ) : (
-                    <div className="text-sm text-[var(--text-secondary)]">No saved views yet — create one after setting up a useful filter combination.</div>
+                    <div className="text-sm font-medium text-[var(--text-secondary)] px-2">No saved views yet — create one after setting up a useful filter combination.</div>
                   )}
                 </div>
               </div>

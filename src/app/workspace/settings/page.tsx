@@ -1,16 +1,29 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 import { AppShell } from '@/components/layout/AppShell';
 import { Button } from '@/components/ui/Button';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { Input } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
+import { Modal } from '@/components/ui/Modal';
+import { Tabs, Tab } from '@/components/ui/Tabs';
+import { Avatar } from '@/components/ui/Avatar';
+import { cn } from '@/lib/utils';
 import { redirectToAuthWithCallback } from '@/lib/auth-redirect';
 import type { AcademicTermApiItem, UserPreferenceApiItem } from '@/types';
 
 export const dynamic = 'force-dynamic';
+
+type AccountProfile = {
+  id: string;
+  email: string;
+  displayName: string;
+  hasPassword: boolean;
+  providers: string[];
+};
 
 const defaultPrefs: UserPreferenceApiItem = {
   id: '',
@@ -22,188 +35,514 @@ const defaultPrefs: UserPreferenceApiItem = {
 };
 
 export default function SettingsPage() {
-  const { status } = useSession({ required: true, onUnauthenticated() { redirectToAuthWithCallback(); } });
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { data: session, status } = useSession({ 
+    required: true, 
+    onUnauthenticated() { redirectToAuthWithCallback(); } 
+  });
   const { toast } = useToast();
+
+  // --- Shared States ---
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState(searchParams?.get('tab') || 'general');
+
+  // --- Preference States ---
   const [prefs, setPrefs] = useState<UserPreferenceApiItem>(defaultPrefs);
+  const [prefsSaving, setPrefsSaving] = useState(false);
+
+  // --- Academic Term States ---
   const [terms, setTerms] = useState<AcademicTermApiItem[]>([]);
   const [workspaceId, setWorkspaceId] = useState('');
   const [termForm, setTermForm] = useState({ name: 'Spring 2025-2026', season: 'SPRING', academicYear: '2025-2026', isActive: true });
 
+  // --- Profile States ---
+  const [profile, setProfile] = useState<AccountProfile | null>(null);
+  const [displayName, setDisplayName] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+
+  // --- Account Action States ---
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteSaving, setDeleteSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState('');
+
+  // --- PWA States ---
+  interface BeforeInstallPromptEvent extends Event {
+    prompt: () => Promise<void>;
+    userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+  }
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+
+  const providerLabels = useMemo(() => ({
+    credentials: 'Password',
+    google: 'Google',
+    github: 'GitHub'
+  }), []);
+
+  // --- Data Loading ---
   useEffect(() => {
     if (status !== 'authenticated') return;
-    const load = async () => {
+    
+    const loadAllData = async () => {
       setLoading(true);
       try {
-        const [prefsResponse, termsResponse] = await Promise.all([
+        const [prefsRes, termsRes, profileRes] = await Promise.all([
           fetch('/api/v1/preferences', { credentials: 'include' }),
-          fetch('/api/v1/academic-terms', { credentials: 'include' })
+          fetch('/api/v1/academic-terms', { credentials: 'include' }),
+          fetch('/api/account/profile', { credentials: 'include' })
         ]);
-        const [prefsPayload, termsPayload] = await Promise.all([prefsResponse.json(), termsResponse.json()]);
-        if (!prefsResponse.ok || !prefsPayload?.ok) throw new Error(prefsPayload?.message || 'Failed to load settings');
-        setPrefs(prefsPayload.data?.item || defaultPrefs);
-        setTerms(termsResponse.ok && termsPayload?.ok ? termsPayload.data?.items || [] : []);
-        setWorkspaceId(termsPayload.data?.workspaceId || prefsPayload.data?.workspaceId || '');
+
+        const [prefsData, termsData, profileData] = await Promise.all([
+          prefsRes.json() as Promise<{ ok: boolean; data: { item: UserPreferenceApiItem } }>,
+          termsRes.json() as Promise<{ ok: boolean; data: { items: AcademicTermApiItem[]; workspaceId: string } }>,
+          profileRes.json() as Promise<{ ok: boolean; data: AccountProfile }>
+        ]);
+
+        if (prefsRes.ok && prefsData?.ok) setPrefs(prefsData.data?.item || defaultPrefs);
+        if (termsRes.ok && termsData?.ok) {
+          setTerms(termsData.data?.items || []);
+          setWorkspaceId(termsData.data?.workspaceId || '');
+        }
+        if (profileRes.ok && profileData?.ok) {
+          setProfile(profileData.data);
+          setDisplayName(profileData.data.displayName || '');
+        }
       } catch (error) {
-        toast(error instanceof Error ? error.message : 'Failed to load settings', 'error');
+        console.error('Failed to load settings:', error);
       } finally {
         setLoading(false);
       }
     };
-    void load();
-  }, [status, toast]);
 
-  const save = async () => {
-    const response = await fetch('/api/v1/preferences', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(prefs)
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload?.ok) {
-      toast(payload?.message || 'Failed to save preferences', 'error');
-      return;
-    }
-    setPrefs(payload.data);
-    const resolvedTheme = payload.data.theme === 'SYSTEM'
-      ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
-      : payload.data.theme.toLowerCase();
-    document.documentElement.dataset.theme = resolvedTheme;
-    document.documentElement.dataset.reduceMotion = payload.data.reduceMotion ? 'true' : 'false';
-    toast('Preferences saved');
+    void loadAllData();
+  }, [status]);
+
+  // --- PWA Logic ---
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      setIsInstallable(true);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const installApp = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') setIsInstallable(false);
+    setDeferredPrompt(null);
   };
 
-  const createTerm = async () => {
-    const response = await fetch('/api/v1/academic-terms', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        ...termForm,
-        ...(workspaceId ? { workspaceId } : {})
-      })
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload?.ok) {
-      toast(payload?.message || 'Failed to create academic term', 'error');
-      return;
+  // --- Action Handlers ---
+  const savePreferences = async () => {
+    setPrefsSaving(true);
+    try {
+      const response = await fetch('/api/v1/preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(prefs)
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) throw new Error(payload?.message || 'Save failed');
+      
+      setPrefs(payload.data);
+      const resolvedTheme = payload.data.theme === 'SYSTEM'
+        ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+        : payload.data.theme.toLowerCase();
+      document.documentElement.dataset.theme = resolvedTheme;
+      document.documentElement.dataset.reduceMotion = payload.data.reduceMotion ? 'true' : 'false';
+      toast('Preferences saved');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'An error occurred';
+      toast(message, 'error');
+    } finally {
+      setPrefsSaving(false);
     }
-    setTerms((current) => [payload.data, ...current.filter((term) => term.id !== payload.data.id).map((term) => payload.data.isActive ? { ...term, isActive: false } : term)].sort((a, b) => Number(b.isActive) - Number(a.isActive)));
-    toast('Academic term created');
   };
 
-  const activateTerm = async (termId: string) => {
-    if (!workspaceId) {
-      toast('Workspace is still loading', 'error');
-      return;
+  const saveProfile = async () => {
+    const trimmed = displayName.trim();
+    if (trimmed.length < 2) return toast('Display name too short', 'error');
+
+    setProfileSaving(true);
+    try {
+      const res = await fetch('/api/account/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ displayName: trimmed })
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) throw new Error(data?.message || 'Profile update failed');
+      toast('Profile updated');
+      router.refresh();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'An error occurred';
+      toast(message, 'error');
+    } finally {
+      setProfileSaving(false);
     }
-    const response = await fetch(`/api/v1/academic-terms/${termId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ workspaceId, isActive: true })
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload?.ok) {
-      toast(payload?.message || 'Failed to activate term', 'error');
-      return;
-    }
-    setTerms((current) => current.map((term) => term.id === termId ? payload.data : { ...term, isActive: false }).sort((a, b) => Number(b.isActive) - Number(a.isActive)));
-    toast('Academic term activated');
   };
 
-  const deleteTerm = async (term: AcademicTermApiItem) => {
-    if (!workspaceId) {
-      toast('Workspace is still loading', 'error');
-      return;
+  const savePassword = async () => {
+    if (newPassword.length < 8) return toast('Password too short', 'error');
+    setPasswordSaving(true);
+    try {
+      const res = await fetch('/api/account/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) throw new Error(data?.message || 'Password update failed');
+      toast('Password updated');
+      setPasswordOpen(false);
+      setCurrentPassword('');
+      setNewPassword('');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'An error occurred';
+      toast(message, 'error');
+    } finally {
+      setPasswordSaving(false);
     }
-    const hasLinkedWork = Boolean((term._count?.exams || 0) + (term._count?.assignments || 0));
-    const confirmed = window.confirm(hasLinkedWork
-      ? `Delete ${term.name}? This term already has linked exams or assignments.`
-      : `Delete ${term.name}?`);
-    if (!confirmed) return;
+  };
 
-    const response = await fetch(`/api/v1/academic-terms/${term.id}?workspaceId=${encodeURIComponent(workspaceId)}`, {
-      method: 'DELETE',
-      credentials: 'include'
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload?.ok) {
-      toast(payload?.message || 'Failed to delete term', 'error');
-      return;
-    }
-    setTerms((current) => current.filter((item) => item.id !== term.id));
-    toast('Academic term removed');
+  const handleSignOut = async () => {
+    await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => null);
+    await signOut({ callbackUrl: '/auth' });
+  };
+
+  const exportAccount = async () => {
+    try {
+      const res = await fetch('/api/account/export', { credentials: 'include' });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `timetable-export-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      toast('Export downloaded');
+    } catch { toast('Export failed', 'error'); }
+  };
+
+  const deleteAccount = async () => {
+    if (confirmDelete !== 'DELETE') return toast('Type DELETE to confirm', 'error');
+    setDeleteSaving(true);
+    try {
+      const res = await fetch('/api/account/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ confirm: 'DELETE' })
+      });
+      if (!res.ok) throw new Error('Deletion failed');
+      window.location.href = '/auth';
+    } catch { toast('Account deletion failed', 'error'); } finally { setDeleteSaving(false); }
   };
 
   return (
-    <AppShell title="Settings" subtitle="Personalize theme, dashboard density, timetable defaults, and motion preferences.">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,560px)_1fr]">
-        <section className="rounded-[28px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-lg)] space-y-4">
-          <div>
-            <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Preferences</div>
-            <h2 className="mt-2 text-xl font-black text-white">Your workspace defaults</h2>
+    <AppShell title="Settings" subtitle="Unified workspace preferences and account management.">
+      <div className="max-w-5xl mx-auto w-full pb-20">
+        
+        {/* Navigation Tabs */}
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="w-full overflow-x-auto hide-scrollbar pb-1 -mb-1">
+            <Tabs value={activeTab} onValueChange={setActiveTab} variant="action" className="w-max min-w-full sm:w-auto">
+              <Tab value="general">General</Tab>
+              <Tab value="profile">Profile</Tab>
+              <Tab value="academic">Academic</Tab>
+              <Tab value="device">App</Tab>
+              <Tab value="account">Account</Tab>
+            </Tabs>
           </div>
-          <AppSelect label="Theme" value={prefs.theme} onChange={(value) => setPrefs((current) => ({ ...current, theme: value as UserPreferenceApiItem['theme'] }))} options={[{ value: 'SYSTEM', label: 'System' }, { value: 'LIGHT', label: 'Light' }, { value: 'DARK', label: 'Dark' }]} />
-          <AppSelect label="Timetable default view" value={prefs.timetableView} onChange={(value) => setPrefs((current) => ({ ...current, timetableView: value as UserPreferenceApiItem['timetableView'] }))} options={[{ value: 'WEEK', label: 'Week grid' }, { value: 'DAY', label: 'Day view' }, { value: 'AGENDA', label: 'Agenda' }]} />
-          <AppSelect label="Dashboard layout" value={prefs.dashboardLayout} onChange={(value) => setPrefs((current) => ({ ...current, dashboardLayout: value as UserPreferenceApiItem['dashboardLayout'] }))} options={[{ value: 'OVERVIEW', label: 'Overview' }, { value: 'FOCUS', label: 'Focus' }, { value: 'COMPACT', label: 'Compact' }]} />
-          <AppSelect label="Week starts on" value={prefs.weekStartsOn} onChange={(value) => setPrefs((current) => ({ ...current, weekStartsOn: value as UserPreferenceApiItem['weekStartsOn'] }))} options={[{ value: 'SATURDAY', label: 'Saturday' }, { value: 'SUNDAY', label: 'Sunday' }, { value: 'MONDAY', label: 'Monday' }]} />
-          <label className="flex-row items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-raised)] px-4 py-3 text-sm font-medium text-white">
-            Reduce motion
-            <input type="checkbox" checked={prefs.reduceMotion} onChange={(event) => setPrefs((current) => ({ ...current, reduceMotion: event.target.checked }))} className="h-4 w-4" />
-          </label>
-          <Button variant="primary" onClick={() => void save()} disabled={loading}>Save preferences</Button>
-        </section>
+          
+          <div className="flex items-center gap-3 px-2 sm:px-0 shrink-0">
+            <Avatar name={profile?.displayName || 'User'} size="sm" />
+            <div className="min-w-0">
+              <div className="text-xs font-black text-white truncate max-w-[120px]">{profile?.displayName}</div>
+              <div className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">Free Plan</div>
+            </div>
+          </div>
+        </div>
 
-        <div className="space-y-6">
-          <section className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-5 shadow-[var(--shadow-lg)]">
-            <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">Academic terms</div>
-            <h2 className="mt-2 text-2xl font-black text-white">Anchor the semester</h2>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <Input label="Term name" value={termForm.name} onChange={(event) => setTermForm((current) => ({ ...current, name: event.target.value }))} />
-              <Input label="Academic year" value={termForm.academicYear} onChange={(event) => setTermForm((current) => ({ ...current, academicYear: event.target.value }))} />
-            </div>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <AppSelect label="Season" value={termForm.season} onChange={(value) => setTermForm((current) => ({ ...current, season: value }))} options={[{ value: 'SPRING', label: 'Spring' }, { value: 'SUMMER', label: 'Summer' }, { value: 'FALL', label: 'Fall' }, { value: 'WINTER', label: 'Winter' }]} />
-              <label className="flex-row items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm font-medium text-white md:mt-[28px]">
-                Set active immediately
-                <input type="checkbox" checked={termForm.isActive} onChange={(event) => setTermForm((current) => ({ ...current, isActive: event.target.checked }))} className="h-4 w-4" />
-              </label>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button variant="primary" onClick={() => void createTerm()}>Create term</Button>
-            </div>
-            <div className="mt-4 space-y-2">
-              {terms.length ? terms.map((term) => (
-                <div key={term.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-bold text-white">{term.name}</div>
-                      <div className="mt-1 text-sm text-[var(--text-secondary)]">{term.season} • {term.academicYear}</div>
-                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[var(--text-muted)]">
-                        <span>{term._count?.exams || 0} exams</span>
-                        <span>•</span>
-                        <span>{term._count?.assignments || 0} tasks</span>
-                      </div>
+        {loading ? (
+          <div className="py-20 text-center space-y-4">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-[var(--gold)] border-t-transparent"></div>
+            <p className="text-sm text-[var(--text-secondary)] font-bold uppercase tracking-widest">Loading your settings...</p>
+          </div>
+        ) : (
+          <div className="animate-fade-in">
+            
+            {/* --- GENERAL TAB --- */}
+            {activeTab === 'general' && (
+              <div className="grid gap-6">
+                <section className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg md:text-xl font-bold text-[var(--gold)] flex items-center gap-2">
+                      <span className="material-symbols-outlined">palette</span>
+                      Visual Preferences
+                    </h3>
+                    <span className="polish-chip">Interface</span>
+                  </div>
+                  <div className="polish-section-shell p-4 md:p-7 flex flex-col gap-6">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <AppSelect label="Theme" value={prefs.theme} onChange={(val) => setPrefs(c => ({ ...c, theme: val as UserPreferenceApiItem['theme'] }))} options={[{ value: 'SYSTEM', label: 'System' }, { value: 'LIGHT', label: 'Light' }, { value: 'DARK', label: 'Dark' }]} />
+                      <AppSelect label="Week starts on" value={prefs.weekStartsOn} onChange={(val) => setPrefs(c => ({ ...c, weekStartsOn: val as UserPreferenceApiItem['weekStartsOn'] }))} options={[{ value: 'SATURDAY', label: 'Saturday' }, { value: 'SUNDAY', label: 'Sunday' }, { value: 'MONDAY', label: 'Monday' }]} />
                     </div>
-                    <div className="flex flex-col items-end gap-2">
-                      {term.isActive ? <span className="rounded-full border border-[var(--gold)]/20 bg-[var(--gold-muted)] px-3 py-1 text-[11px] font-black text-[var(--gold)]">Active</span> : <button onClick={() => void activateTerm(term.id)} className="rounded-full border border-[var(--border)] bg-[var(--bg-raised)] px-3 py-1 text-[11px] font-black text-white">Set active</button>}
-                      <button onClick={() => void deleteTerm(term)} className="rounded-full border border-[var(--danger)]/30 bg-[var(--danger-muted)] px-3 py-1 text-[11px] font-black text-[var(--danger)]">Delete</button>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <AppSelect label="Timetable default view" value={prefs.timetableView} onChange={(val) => setPrefs(c => ({ ...c, timetableView: val as UserPreferenceApiItem['timetableView'] }))} options={[{ value: 'WEEK', label: 'Week grid' }, { value: 'DAY', label: 'Day view' }, { value: 'AGENDA', label: 'Agenda' }]} />
+                      <AppSelect label="Dashboard density" value={prefs.dashboardLayout} onChange={(val) => setPrefs(c => ({ ...c, dashboardLayout: val as UserPreferenceApiItem['dashboardLayout'] }))} options={[{ value: 'OVERVIEW', label: 'Overview' }, { value: 'FOCUS', label: 'Focus' }, { value: 'COMPACT', label: 'Compact' }]} />
+                    </div>
+                    <label className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-5 py-4 text-sm font-bold text-white cursor-pointer hover:bg-[var(--surface-3)] transition-all">
+                      <span>Reduce animations & motion</span>
+                      <div className={cn("flex h-6 w-11 items-center rounded-full p-1 transition-colors duration-200", prefs.reduceMotion ? "bg-[var(--gold)]" : "bg-[var(--surface-3)]")}>
+                        <input type="checkbox" checked={prefs.reduceMotion} onChange={(e) => setPrefs(c => ({ ...c, reduceMotion: e.target.checked }))} className="hidden" />
+                        <div className={cn("h-4 w-4 rounded-full bg-white transition-transform duration-200", prefs.reduceMotion ? "translate-x-5" : "translate-x-0")} />
+                      </div>
+                    </label>
+                    <div className="pt-2 border-t border-[var(--border)] flex justify-end">
+                      <Button variant="primary" onClick={savePreferences} disabled={prefsSaving} className="w-full sm:w-auto h-12 px-8">
+                        {prefsSaving ? 'Saving...' : 'Save All Preferences'}
+                      </Button>
                     </div>
                   </div>
-                </div>
-              )) : <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--text-secondary)]">No academic terms yet. Create Spring 2025-2026 first, then start adding exams and tasks.</div>}
-            </div>
-          </section>
+                </section>
+              </div>
+            )}
 
-          <section className="rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,var(--bg-raised),var(--surface-2))] p-5 shadow-[var(--shadow-lg)]">
-            <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--gold)]">V2 direction</div>
-            <h2 className="mt-2 text-2xl font-black text-white">Student-first workspace defaults</h2>
-            <div className="mt-4 space-y-3 text-sm text-[var(--text-secondary)]">
-              <p>Settings now anchor the new V2 planning model: dashboard behavior, timetable defaults, visual preferences, and term setup live in one place.</p>
-              <p>Next passes can extend this with notification preferences, dashboard widgets, and print/export defaults without changing the data model again.</p>
-            </div>
-          </section>
-        </div>
+            {/* --- PROFILE TAB --- */}
+            {activeTab === 'profile' && (
+              <div className="grid gap-6">
+                <section className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg md:text-xl font-bold text-[var(--gold)] flex items-center gap-2">
+                      <span className="material-symbols-outlined">person</span>
+                      Public Profile
+                    </h3>
+                    <span className="polish-chip">Visible identity</span>
+                  </div>
+                  <div className="polish-section-shell p-4 md:p-7 flex flex-col gap-6">
+                    <div className="flex flex-col sm:flex-row gap-6 items-start">
+                      <div className="w-20 h-20 rounded-3xl bg-[var(--surface-3)] border-2 border-[var(--border)] flex items-center justify-center text-3xl font-black text-[var(--gold)] shadow-inner shrink-0">
+                        {profile?.displayName?.charAt(0) || profile?.email?.charAt(0)}
+                      </div>
+                      <div className="flex-1 w-full space-y-4">
+                        <Input label="Public Display Name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Your name" helperText="Shown in workspaces and shared links." />
+                        <Input label="Email Address" type="email" value={profile?.email} disabled helperText="Managed by your login provider." />
+                        <div className="pt-2 flex justify-end">
+                          <Button variant="primary" onClick={saveProfile} disabled={profileSaving} className="h-12 px-8 w-full sm:w-auto">
+                            {profileSaving ? 'Saving...' : 'Update Profile'}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="flex flex-col gap-3 mt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg md:text-xl font-bold text-[var(--gold)] flex items-center gap-2">
+                      <span className="material-symbols-outlined">security</span>
+                      Security
+                    </h3>
+                    <span className="polish-chip">Access controls</span>
+                  </div>
+                  <div className="polish-section-shell p-4 md:p-7 flex flex-col gap-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="font-bold text-white">{profile?.hasPassword ? 'Login Password' : 'No Password Set'}</div>
+                        <p className="text-xs text-[var(--text-secondary)] mt-1">
+                          {profile?.hasPassword ? 'Secure your account with a direct password.' : 'Add a password to sign in without external apps.'}
+                        </p>
+                      </div>
+                      <Button variant="secondary" onClick={() => setPasswordOpen(true)} className="w-full sm:w-auto">
+                        {profile?.hasPassword ? 'Change Password' : 'Set Password'}
+                      </Button>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {/* --- ACADEMIC TAB --- */}
+            {activeTab === 'academic' && (
+              <div className="grid gap-6">
+                <section className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg md:text-xl font-bold text-[var(--gold)] flex items-center gap-2">
+                      <span className="material-symbols-outlined">library_books</span>
+                      Active Academic Terms
+                    </h3>
+                    <span className="polish-chip">Workspace</span>
+                  </div>
+                  <div className="polish-section-shell p-4 md:p-7">
+                    <div className="grid gap-4 mb-8">
+                      {terms.map((term) => (
+                        <div key={term.id} className="flex items-center justify-between p-4 rounded-2xl bg-[var(--bg-raised)] border border-[var(--border)]">
+                          <div className="flex items-center gap-4">
+                            <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-black", term.isActive ? "bg-[var(--gold)] text-[var(--gold-fg)] shadow-[var(--shadow-glow)]" : "bg-[var(--surface-3)] text-[var(--text-muted)]")}>
+                              {term.season.charAt(0)}
+                            </div>
+                            <div>
+                              <div className="font-bold text-white">{term.name}</div>
+                              <div className="text-[10px] text-[var(--text-muted)] font-black uppercase tracking-widest mt-1">{term.academicYear} • {term.season}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {term.isActive ? (
+                              <span className="px-3 py-1 rounded-full bg-[var(--gold-muted)] text-[var(--gold)] text-[10px] font-black uppercase tracking-widest border border-[var(--gold)]/20">Active</span>
+                            ) : (
+                              <Button size="sm" variant="ghost" onClick={() => {}}>Set Active</Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="p-6 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-raised)]/50 text-center hover:bg-[var(--surface-2)] transition-colors cursor-pointer group">
+                      <p className="text-sm text-[var(--text-secondary)] mb-4">Need to start a new semester?</p>
+                      <Button variant="secondary" className="gap-2 group-hover:border-[var(--gold)]/50 group-hover:text-[var(--gold)] transition-colors">
+                        <span className="material-symbols-outlined text-[18px]">add_circle</span>
+                        Create Academic Term
+                      </Button>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {/* --- DEVICE TAB --- */}
+            {activeTab === 'device' && (
+              <div className="grid gap-6">
+                <section className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg md:text-xl font-bold text-[var(--gold)] flex items-center gap-2">
+                      <span className="material-symbols-outlined">install_mobile</span>
+                      Timetable App
+                    </h3>
+                    <span className="polish-chip">Mobile Experience</span>
+                  </div>
+                  <div className="polish-section-shell p-6 md:p-12 text-center flex flex-col items-center justify-center">
+                    <div className="mx-auto w-24 h-24 rounded-[2.5rem] bg-gradient-to-br from-[var(--gold)] to-[var(--gold-hover)] flex items-center justify-center shadow-[var(--shadow-glow)] mb-8">
+                      <span className="material-symbols-outlined text-5xl text-[var(--gold-fg)] font-black">install_mobile</span>
+                    </div>
+                    <div className="max-w-md mx-auto space-y-3">
+                      <h2 className="text-3xl font-black text-white tracking-tight">App Experience</h2>
+                      <p className="text-[var(--text-secondary)] leading-relaxed">
+                        Install the app for instant access from your home screen, better performance, and offline support.
+                      </p>
+                    </div>
+                    <div className="pt-8 flex justify-center w-full max-w-sm">
+                      {isInstallable ? (
+                        <Button variant="primary" className="h-14 w-full text-lg rounded-2xl" onClick={() => void installApp()}>
+                          Install Timetable App
+                        </Button>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center gap-3 w-full p-4 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-2)]">
+                          <span className="material-symbols-outlined text-3xl text-[var(--success)]">check_circle</span>
+                          <p className="text-sm font-bold text-[var(--text-secondary)] text-center">App is already installed or your browser doesn&apos;t support automatic installation.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {/* --- ACCOUNT TAB --- */}
+            {activeTab === 'account' && (
+              <div className="grid gap-6">
+                <section className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg md:text-xl font-bold text-[var(--gold)] flex items-center gap-2">
+                      <span className="material-symbols-outlined">folder_managed</span>
+                      Data & Exports
+                    </h3>
+                    <span className="polish-chip">Management</span>
+                  </div>
+                  <div className="polish-section-shell p-4 md:p-7 flex flex-col gap-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="font-bold text-white">Export All Data</div>
+                        <p className="text-xs text-[var(--text-secondary)] mt-1">Download a full JSON archive of your timetable, courses, and account.</p>
+                      </div>
+                      <Button variant="secondary" onClick={exportAccount} className="gap-2 w-full sm:w-auto">
+                        <span className="material-symbols-outlined text-[18px]">download</span>
+                        Download JSON
+                      </Button>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="flex flex-col gap-3 mt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg md:text-xl font-bold text-[var(--danger)] flex items-center gap-2">
+                      <span className="material-symbols-outlined">warning</span>
+                      Danger Zone
+                    </h3>
+                    <span className="polish-chip text-[var(--danger)] border-[var(--danger)]/30 bg-[var(--danger)]/10">Destructive</span>
+                  </div>
+                  <div className="polish-section-shell p-4 md:p-7 flex flex-col gap-6 border-[var(--danger)]/30">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border)] pb-6">
+                      <div>
+                        <div className="font-bold text-[var(--danger)]">Sign Out Everywhere</div>
+                        <p className="text-xs text-[var(--text-secondary)] mt-1">Force logout from all active sessions and browsers.</p>
+                      </div>
+                      <Button variant="secondary" onClick={handleSignOut} className="w-full sm:w-auto">Logout Everywhere</Button>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <div className="font-bold text-[var(--danger)]">Delete Account</div>
+                        <p className="text-xs text-[var(--text-secondary)] mt-1">Permanently remove your account and all associated data.</p>
+                      </div>
+                      <Button variant="danger" onClick={() => setDeleteOpen(true)} className="w-full sm:w-auto shadow-[var(--shadow-sm)]">Delete Forever</Button>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            )}
+
+          </div>
+        )}
       </div>
+
+      {/* --- MODALS --- */}
+      <Modal open={passwordOpen} onClose={() => setPasswordOpen(false)} title="Security Update" actions={
+        <>
+          <Button variant="ghost" onClick={() => setPasswordOpen(false)}>Cancel</Button>
+          <Button variant="primary" onClick={savePassword} isLoading={passwordSaving}>Save Password</Button>
+        </>
+      }>
+        <div className="space-y-4">
+          {profile?.hasPassword && <Input label="Current Password" type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} />}
+          <Input label="New Password" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} helperText="At least 8 characters." />
+        </div>
+      </Modal>
+
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Final Warning" actions={
+        <>
+          <Button variant="secondary" onClick={() => setDeleteOpen(false)}>Keep Account</Button>
+          <Button variant="danger" onClick={deleteAccount} isLoading={deleteSaving}>Delete My Data</Button>
+        </>
+      }>
+        <div className="space-y-4">
+          <div className="p-4 rounded-2xl bg-[var(--danger-muted)]/20 border border-[var(--danger)]/30 text-[var(--danger)] text-sm font-bold">
+            THIS ACTION CANNOT BE UNDONE. ALL YOUR DATA WILL BE WIPED.
+          </div>
+          <Input label='Type "DELETE" to confirm' value={confirmDelete} onChange={e => setConfirmDelete(e.target.value)} placeholder="DELETE" />
+        </div>
+      </Modal>
+
     </AppShell>
   );
 }

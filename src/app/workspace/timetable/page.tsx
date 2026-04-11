@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { AppShell } from '@/components/layout/AppShell';
@@ -9,7 +10,18 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { AppSelect } from '@/components/ui/AppSelect';
 import { useToast } from '@/components/ui/Toast';
-import { TimetableView, type TimetableItem } from '@/components/workspace/TimetableView';
+
+const TimetableView = dynamic(() => import('@/components/workspace/TimetableView').then(mod => mod.TimetableView), {
+  ssr: false,
+  loading: () => (
+    <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-8 text-center">
+      <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-[var(--gold)] border-t-transparent"></div>
+      <p className="mt-4 text-sm text-[var(--text-secondary)] font-bold uppercase tracking-widest">Optimizing workspace...</p>
+    </div>
+  )
+});
+
+import type { TimetableItem } from '@/components/workspace/TimetableView';
 import { redirectToAuthWithCallback } from '@/lib/auth-redirect';
 import { buildScheduleConflictReport, buildScheduleItems, downloadScheduleCalendar, getScheduleConflictLabels, scheduleDayOrder } from '@/lib/schedule';
 import { groupHierarchyPath, sortGroupsForDisplay } from '@/lib/group-room-model';
@@ -484,13 +496,13 @@ export default function WorkspaceTimetablePage() {
                 This pass tightens the timetable around student workflow: day focus, course-linked drill-down, clearer course color identity, and settings-aware week/view behavior.
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={() => setFocusDayOverride(todayDay)} className="gap-2">
+            <div className="flex gap-2 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 -mb-2">
+              <Button variant="secondary" onClick={() => setFocusDayOverride(todayDay)} className="gap-2 snap-start shrink-0 min-w-max">
                 <span className="material-symbols-outlined text-[18px]">today</span>
                 Focus today
               </Button>
               {effectiveFocusDay ? (
-                <Button variant="ghost" onClick={clearDayFocus} className="gap-2">
+                <Button variant="ghost" onClick={clearDayFocus} className="gap-2 snap-start shrink-0 min-w-max">
                   <span className="material-symbols-outlined text-[18px]">calendar_view_week</span>
                   Show full week
                 </Button>
@@ -517,7 +529,7 @@ export default function WorkspaceTimetablePage() {
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex gap-2 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 -mb-2">
             {visibleDayCounts.map((bucket) => {
               const active = bucket.day === effectiveFocusDay || (!effectiveFocusDay && bucket.day === todayDay);
               return (
@@ -525,7 +537,7 @@ export default function WorkspaceTimetablePage() {
                   key={bucket.day}
                   type="button"
                   onClick={() => setFocusDayOverride(bucket.day)}
-                  className={`rounded-2xl border px-3 py-2 text-left transition-all ${active ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-white' : 'border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)]'}`}
+                  className={`snap-start shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] rounded-2xl border px-5 py-2.5 text-left transition-all select-none min-w-max ${active ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-[var(--gold)] shadow-[var(--shadow-sm)]' : 'border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)] hover:text-white'}`}
                 >
                   <div className="text-xs font-black uppercase tracking-[0.12em]">{bucket.day}</div>
                   <div className="mt-1 text-[11px] font-semibold">{bucket.count} session{bucket.count === 1 ? '' : 's'}</div>
@@ -628,7 +640,7 @@ export default function WorkspaceTimetablePage() {
               <div className="grid gap-2.5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2.5 shadow-[var(--shadow-sm)] lg:grid-cols-[1.5fr_minmax(0,0.9fr)_minmax(0,0.8fr)_auto]">
                 <div>
                   <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--text-muted)]">Session type visibility</div>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2 flex gap-2 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 -mb-2">
                     {SESSION_TYPE_OPTIONS.map((type) => {
                       const active = selectedTypes.includes(type);
                       return (
@@ -636,7 +648,7 @@ export default function WorkspaceTimetablePage() {
                           key={type}
                           type="button"
                           onClick={() => setSelectedTypes((current) => active ? current.filter((item) => item !== type) : [...current, type])}
-                          className={`rounded-full border px-3 py-1.5 text-sm font-semibold transition-all ${active ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-[var(--gold)]' : 'border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)] hover:border-[var(--text-muted)] hover:text-white'}`}
+                          className={`snap-start shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] rounded-2xl border px-5 py-2.5 text-xs font-bold uppercase tracking-[0.12em] transition-all select-none min-w-max ${active ? 'border-[var(--gold)] bg-[var(--gold-muted)] text-[var(--gold)] shadow-[var(--shadow-sm)]' : 'border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)] hover:text-white'}`}
                         >
                           {type}
                         </button>
@@ -694,11 +706,11 @@ export default function WorkspaceTimetablePage() {
                   </Button>
                 </div>
 
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex gap-2 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 -mb-2">
                   {savedViews.length ? savedViews.map((view) => {
                     const isActive = activeSavedViewId === view.id;
                     return (
-                      <div key={view.id} className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 ${isActive ? 'border-[var(--gold)] bg-[var(--gold-muted)]' : 'border-[var(--border)] bg-[var(--surface)]'}`}>
+                      <div key={view.id} className={`snap-start shrink-0 min-w-max inline-flex items-center gap-1 rounded-2xl border px-2 py-1 ${isActive ? 'border-[var(--gold)] bg-[var(--gold-muted)]' : 'border-[var(--border)] bg-[var(--surface)]'}`}>
                         <button
                           type="button"
                           onClick={() => applySavedView(view)}
@@ -710,7 +722,7 @@ export default function WorkspaceTimetablePage() {
                           type="button"
                           onClick={() => void renameSavedView(view)}
                           aria-label={`Rename saved view ${view.name}`}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-white"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-white"
                         >
                           <span className="material-symbols-outlined text-[18px]">edit</span>
                         </button>
@@ -718,13 +730,13 @@ export default function WorkspaceTimetablePage() {
                           type="button"
                           onClick={() => void deleteSavedView(view.id)}
                           aria-label={`Delete saved view ${view.name}`}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--danger)]"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--danger)]"
                         >
                           <span className="material-symbols-outlined text-[18px]">close</span>
                         </button>
                       </div>
                     );
-                  }) : <div className="text-sm text-[var(--text-secondary)]">No saved views yet — save your current timetable filters.</div>}
+                  }) : <div className="text-sm font-medium text-[var(--text-secondary)] px-2">No saved views yet — save your current timetable filters.</div>}
                 </div>
               </div>
             ) : null}
@@ -733,20 +745,20 @@ export default function WorkspaceTimetablePage() {
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2.5">
                 <div className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--text-muted)]">Reports & export</div>
                 <p className="mt-1 text-xs text-[var(--text-secondary)]">All actions below use the currently visible timetable filters and saved-view state.</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button variant="secondary" onClick={exportFilteredIcs} className="gap-2">
+                <div className="mt-3 flex gap-2 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 -mb-2">
+                  <Button variant="secondary" onClick={exportFilteredIcs} className="gap-2 snap-start shrink-0 min-w-max">
                     <span className="material-symbols-outlined text-[18px]">calendar_month</span>
                     Export filtered timetable (.ics)
                   </Button>
-                  <Button variant="secondary" onClick={printFilteredView} className="gap-2">
+                  <Button variant="secondary" onClick={printFilteredView} className="gap-2 snap-start shrink-0 min-w-max">
                     <span className="material-symbols-outlined text-[18px]">print</span>
                     Print current filtered view
                   </Button>
-                  <Button variant="secondary" onClick={exportRoomUsageSummary} className="gap-2">
+                  <Button variant="secondary" onClick={exportRoomUsageSummary} className="gap-2 snap-start shrink-0 min-w-max">
                     <span className="material-symbols-outlined text-[18px]">meeting_room</span>
                     Export room usage summary (.csv)
                   </Button>
-                  <Button variant="secondary" onClick={exportInstructorAssignmentSummary} className="gap-2">
+                  <Button variant="secondary" onClick={exportInstructorAssignmentSummary} className="gap-2 snap-start shrink-0 min-w-max">
                     <span className="material-symbols-outlined text-[18px]">co_present</span>
                     Export instructor summary (.csv)
                   </Button>

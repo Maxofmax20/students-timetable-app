@@ -296,17 +296,17 @@ export default function InstructorsPage() {
                 </div>
               </div>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2.5">
-              <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+            <div className="mt-4 flex gap-2.5 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 -mb-2 items-center">
+              <span className="snap-start shrink-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-secondary)] min-w-max">
                 {instructors.length} faculty records
               </span>
-              <button type="button" onClick={() => setAssignmentFilter('assigned')} className={cn('rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] min-h-8', assignmentFilter === 'assigned' ? 'border-[var(--success)]/30 bg-[var(--success-muted)] text-[var(--success)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]')}>
+              <button type="button" onClick={() => setAssignmentFilter('assigned')} className={cn('snap-start shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] rounded-2xl border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] min-w-max select-none transition-all', assignmentFilter === 'assigned' ? 'border-[var(--success)]/30 bg-[var(--success-muted)] text-[var(--success)] shadow-[var(--shadow-sm)]' : 'border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)] hover:text-white')}>
                 {assignedCount} assigned
               </button>
-              <button type="button" onClick={() => setAssignmentFilter('unassigned')} className={cn('rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] min-h-8', assignmentFilter === 'unassigned' ? 'border-[var(--warning)]/30 bg-[var(--warning-muted)] text-[var(--warning)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]')}>
+              <button type="button" onClick={() => setAssignmentFilter('unassigned')} className={cn('snap-start shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] rounded-2xl border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] min-w-max select-none transition-all', assignmentFilter === 'unassigned' ? 'border-[var(--warning)]/30 bg-[var(--warning-muted)] text-[var(--warning)] shadow-[var(--shadow-sm)]' : 'border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)] hover:text-white')}>
                 {unassignedCount} unassigned
               </button>
-              <button type="button" onClick={() => setAssignmentFilter('all')} className={cn('rounded-full border px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] min-h-8', assignmentFilter === 'all' ? 'border-[var(--gold)]/30 bg-[var(--gold-muted)] text-[var(--gold)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)]')}>
+              <button type="button" onClick={() => setAssignmentFilter('all')} className={cn('snap-start shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] rounded-2xl border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] min-w-max select-none transition-all', assignmentFilter === 'all' ? 'border-[var(--gold)]/30 bg-[var(--gold-muted)] text-[var(--gold)] shadow-[var(--shadow-sm)]' : 'border-[var(--border)] bg-[var(--bg-raised)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)] hover:text-white')}>
                 all
               </button>
             </div>

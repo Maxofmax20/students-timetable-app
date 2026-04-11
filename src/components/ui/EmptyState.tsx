@@ -13,15 +13,18 @@ interface EmptyStateProps {
 export function EmptyState({ icon = 'inbox', title, description, action, className }: EmptyStateProps) {
   return (
     <div className={cn(
-      "flex flex-col items-center justify-center p-12 text-center rounded-[var(--radius-lg)] border border-dashed border-[var(--border)] bg-[var(--surface)]/50 w-full min-h-[400px] animate-fade-in",
+      "flex flex-col items-center justify-center p-8 md:p-16 text-center rounded-[32px] border border-dashed border-[var(--border)] bg-[linear-gradient(180deg,var(--surface),var(--surface-2))] w-full min-h-[400px] animate-fade-in relative overflow-hidden",
       className
     )}>
-      <div className="w-20 h-20 rounded-full bg-[var(--surface-2)] flex items-center justify-center mb-6 border border-[var(--border)] shadow-[var(--shadow-sm)]">
-        <span className="material-symbols-outlined text-[40px] text-[var(--gold)] opacity-80">{icon}</span>
+      {/* Decorative background blur */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-[var(--gold)]/5 rounded-full blur-[80px] pointer-events-none" />
+
+      <div className="relative w-24 h-24 rounded-[2.5rem] bg-[var(--surface-3)] flex items-center justify-center mb-8 border border-[var(--border)] shadow-[var(--shadow-md)]">
+        <span className="material-symbols-outlined text-[48px] text-[var(--gold)] opacity-90 drop-shadow-md">{icon}</span>
       </div>
-      <h3 className="text-2xl font-bold text-white mb-3 tracking-tight">{title}</h3>
-      <p className="text-[var(--text-secondary)] max-w-sm mb-8 leading-relaxed">{description}</p>
-      {action && <div className="animate-slide-up">{action}</div>}
+      <h3 className="relative text-2xl md:text-3xl font-black text-white mb-3 tracking-tight">{title}</h3>
+      <p className="relative text-[var(--text-secondary)] font-medium max-w-md mb-8 leading-relaxed">{description}</p>
+      {action && <div className="relative animate-slide-up z-10">{action}</div>}
     </div>
   );
 }

@@ -36,11 +36,12 @@ export async function POST(
     ]);
 
     return NextResponse.json({ ok: true, message: 'WORKSPACE_CLEARED' });
-  } catch (error: any) {
+  } catch (error) {
     console.error('[WorkspaceClear] Error:', error);
     if (error instanceof ApiError) {
       return NextResponse.json({ ok: false, message: error.message }, { status: error.status });
     }
-    return NextResponse.json({ ok: false, message: 'INTERNAL_SERVER_ERROR' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'INTERNAL_SERVER_ERROR';
+    return NextResponse.json({ ok: false, message }, { status: 500 });
   }
 }

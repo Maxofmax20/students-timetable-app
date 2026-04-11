@@ -53,13 +53,13 @@ export function SettingsView(props: SettingsViewProps) {
             <h2 className="text-2xl font-black tracking-tight text-white">Configuration</h2>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">Tune how the workspace behaves, looks, and saves data.</p>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
+          <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1 lg:flex-col lg:overflow-visible snap-x snap-mandatory">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as TabId)}
                 className={cn(
-                  'flex min-w-fit items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition-all lg:w-full',
+                  'snap-start shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] flex min-w-max items-center gap-3 rounded-2xl px-5 py-3 text-sm font-bold transition-all lg:w-full select-none',
                   activeTab === tab.id
                     ? 'border border-[var(--gold)]/30 bg-[var(--gold-muted)] text-[var(--gold)] shadow-[var(--shadow-sm)]'
                     : 'border border-transparent text-[var(--text-secondary)] hover:border-[var(--border)] hover:bg-[var(--surface-2)] hover:text-white'

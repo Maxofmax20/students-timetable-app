@@ -46,7 +46,7 @@ export function AppShell({ children, title, subtitle, actions }: AppShellProps) 
         {sidebarOpen && (
           <button
             aria-label="Close navigation"
-            className="fixed inset-0 z-40 bg-black/45 lg:hidden"
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden transition-all duration-300"
             onClick={() => setSidebarOpen(false)}
           />
         )}

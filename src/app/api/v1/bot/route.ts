@@ -6,13 +6,22 @@ import path from "path";
 // Simple file-based store for temporary bot tokens
 const TOKENS_FILE = path.join(process.cwd(), "bot_tokens.json");
 
-function saveToken(token: string, data: any) {
-  let tokens: any = {};
+interface BotToken {
+  botId: string;
+  status: string;
+  expiresAt: number;
+  userId?: string;
+}
+
+function saveToken(token: string, data: Omit<BotToken, 'expiresAt'>) {
+  let tokens: Record<string, BotToken> = {};
   try {
     if (fs.existsSync(TOKENS_FILE)) {
       tokens = JSON.parse(fs.readFileSync(TOKENS_FILE, "utf-8"));
     }
-  } catch (e) {}
+  } catch {
+    // Ignore read errors
+  }
   
   // Clean up expired tokens
   const now = Date.now();
@@ -26,7 +35,7 @@ function saveToken(token: string, data: any) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await request.json() as { botId: string };
     const token = randomUUID();
     const expiresAt = new Date(Date.now() + 300000).toISOString();
     
@@ -38,7 +47,8 @@ export async function POST(request: NextRequest) {
       expiresAt,
       connectUrl: `https://demostb.duckdns.org/api/v1/bot/verify?token=${token}`
     });
-  } catch (error: any) {
-    return NextResponse.json({ ok: false, message: error.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ ok: false, message }, { status: 500 });
   }
 }

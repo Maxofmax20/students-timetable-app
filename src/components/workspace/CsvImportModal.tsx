@@ -140,13 +140,13 @@ export function CsvImportModal({
       subtitle={subtitle}
       size="lg"
       actions={
-        <div className="flex flex-wrap justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>Close</Button>
-          <Button variant="secondary" onClick={handleTemplateDownload} className="gap-2">
+        <div className="flex gap-2 overflow-x-auto hide-scrollbar snap-x snap-mandatory pb-2 -mb-2 w-full justify-end sm:w-auto">
+          <Button variant="secondary" onClick={onClose} className="snap-start shrink-0 min-w-max">Close</Button>
+          <Button variant="secondary" onClick={handleTemplateDownload} className="gap-2 snap-start shrink-0 min-w-max">
             <span className="material-symbols-outlined text-[18px]">download</span>
             Template CSV
           </Button>
-          <Button variant="primary" onClick={() => void runRequest('preview')} disabled={loading || !canImport} className="gap-2">
+          <Button variant="primary" onClick={() => void runRequest('preview')} disabled={loading || !canImport} className="gap-2 snap-start shrink-0 min-w-max">
             <span className="material-symbols-outlined text-[18px]">preview</span>
             {loading ? 'Working…' : 'Preview Import'}
           </Button>
@@ -154,10 +154,10 @@ export function CsvImportModal({
             variant="primary"
             onClick={() => void runRequest('import')}
             disabled={loading || !canImport || !preview || preview.summary.readyCount === 0 || preview.mode === 'import'}
-            className="gap-2"
+            className="gap-2 snap-start shrink-0 min-w-max"
           >
-            <span className="material-symbols-outlined text-[18px]">upload</span>
-            Confirm Import
+            <span className="material-symbols-outlined text-[18px]">cloud_upload</span>
+            Run Import
           </Button>
         </div>
       }

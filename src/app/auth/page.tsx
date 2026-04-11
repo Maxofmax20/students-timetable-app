@@ -129,7 +129,12 @@ function AuthPageInner() {
       .catch(() => setProviders({}));
   }, []);
 
-  useEffect(() => { setError(''); setSuccess(''); }, [mode]);
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      setError('');
+      setSuccess('');
+    });
+  }, [mode]);
 
   /* ---------- Handlers ---------- */
   async function handleLogin(e: React.FormEvent) {

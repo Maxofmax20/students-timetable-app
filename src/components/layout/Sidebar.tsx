@@ -143,7 +143,7 @@ export function Sidebar({ isOpen, isCollapsed, onClose, onToggleCollapse, userNa
         </button>
 
         <Link
-          href="/account"
+          href="/workspace/settings?tab=profile"
           className="group flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border-soft)] bg-[var(--surface-2)]/50 p-2 transition-all hover:border-[var(--text-muted)] hover:bg-[var(--surface-2)]"
         >
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--bg)] text-[var(--gold)] transition-transform group-hover:scale-105">

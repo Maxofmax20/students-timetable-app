@@ -39,7 +39,13 @@ export default function WorkspaceHistoryPage() {
     setRole(payload.data.role || '');
   };
 
-  useEffect(() => { if (status === 'authenticated') void load().catch((e) => toast(e.message, 'error')); }, [status]);
+  useEffect(() => {
+    if (status === 'authenticated') {
+      requestAnimationFrame(() => {
+        void load().catch((e) => toast(e.message, 'error'));
+      });
+    }
+  }, [status, toast]); // added toast to dependencies but omit load since it's not memoized
 
   const restore = async (entryId: string) => {
     setRestoringId(entryId);
