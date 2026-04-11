@@ -3,8 +3,8 @@ import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
 
-// Simple file-based store for temporary bot tokens
-const TOKENS_FILE = path.join(process.cwd(), "bot_tokens.json");
+// Simple file-based store for temporary bot tokens - shared with bridge
+const TOKENS_FILE = "/home/ubuntu/DemosCode/bot_tokens.json";
 
 interface BotToken {
   botId: string;

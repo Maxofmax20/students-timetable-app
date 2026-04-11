@@ -4,7 +4,8 @@ import path from "path";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 
-const TOKENS_FILE = path.join(process.cwd(), "bot_tokens.json");
+// Shared with bridge
+const TOKENS_FILE = "/home/ubuntu/DemosCode/bot_tokens.json";
 
 interface BotToken {
   botId: string;
