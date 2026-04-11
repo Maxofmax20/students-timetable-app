@@ -18,20 +18,20 @@ const daySchema = z.object({
 
 const courseSchema = z.object({
   id: z.string().min(2).max(128),
-  name: z.string().min(1).max(140),
-  group: z.string().min(1).max(48),
-  instructor: z.string().max(120).optional().default(''),
-  location: z.string().min(1).max(120),
+  name: z.string().min(1).max(500),
+  group: z.string().min(1).max(200),
+  instructor: z.string().max(1000).optional().default(''),
+  location: z.string().min(1).max(500),
   dayId: z.enum(DAY_CODES),
   startTime: timeLabelSchema,
   endTime: timeLabelSchema,
   color: z.string().min(3).max(32),
-  notes: z.string().max(500).optional().default('')
+  notes: z.string().max(2000).optional().default('')
 });
 
 const snapshotSchema = z
   .object({
-    title: z.string().min(2).max(120),
+    title: z.string().min(2).max(500),
     owner: z.string().max(80).nullable().optional(),
     startTime: timeLabelSchema,
     endTime: timeLabelSchema,
@@ -187,8 +187,8 @@ function deriveSnapshotFromTimetable(timetable: {
       id: event.id,
       name: event.title,
       group: 'A1',
-      instructor: '',
-      location: 'TBD',
+      instructor: (event as any).instructor || '',
+      location: (event as any).location || 'TBD',
       dayId: (DAY_CODES as readonly string[]).includes(event.day) ? (event.day as (typeof DAY_CODES)[number]) : 'mon',
       startTime: toTimeLabel(event.startMinute),
       endTime: toTimeLabel(event.startMinute + event.durationMinutes),
@@ -211,7 +211,7 @@ async function getOrCreateUserTimetable(userId: string) {
     data: {
       ownerId: userId,
       title: 'جدولي الدراسي',
-      days: ['mon', 'tue', 'wed', 'thu', 'fri'],
+      days: ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'],
       startMinute: 8 * 60,
       endMinute: 22 * 60,
       snapMinutes: 15,
@@ -304,7 +304,10 @@ export async function POST(request: NextRequest) {
               color: course.color || '#2b6cee',
               version: 1,
               createdById: session.userId,
-              updatedById: session.userId
+              updatedById: session.userId,
+              type: course.instructor?.includes(' | ') ? 'Lecture' : (course.name.toLowerCase().includes('lab') ? 'Lab' : (course.name.toLowerCase().includes('section') ? 'Section' : 'Lecture')),
+              instructor: course.instructor || null,
+              location: course.location || null
             };
           })
         });

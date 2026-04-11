@@ -42,6 +42,9 @@ async function getTimetableData(userId: string) {
         durationMinutes: s.endMinute - s.startMinute,
         color: s.course.color || "#4f46e5",
         version: 1,
+        type: s.type,
+        instructor: s.instructor?.name || null,
+        location: s.room?.name || s.room?.code || null,
         updatedAt: s.updatedAt.toISOString()
       }))
     };
@@ -58,7 +61,16 @@ async function getTimetableData(userId: string) {
     }
   });
 
-  if (legacy) return legacy;
+  if (legacy) {
+    return {
+      ...legacy,
+      events: legacy.events.map(e => {
+        const raw = (e.type || 'Lecture').toLowerCase();
+        const mapped = raw.charAt(0).toUpperCase() + raw.slice(1);
+        return { ...e, type: mapped };
+      })
+    };
+  }
 
   // 3. Create default if nothing found
   return prisma.timetable.create({

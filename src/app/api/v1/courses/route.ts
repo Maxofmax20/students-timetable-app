@@ -199,6 +199,61 @@ export async function GET(request: NextRequest) {
       include: courseInclude
     });
 
+    // --- Legacy Fallback Logic ---
+    // If no modern courses exist, try to find and map legacy TimetableEvent records
+    if (items.length === 0) {
+      const legacyTimetable = await prisma.timetable.findFirst({
+        where: { ownerId: session.userId },
+        include: { events: true }
+      });
+
+      if (legacyTimetable && legacyTimetable.events.length > 0) {
+        console.log(`[Courses GET] No modern courses found, falling back to legacy events for ${session.userId}`);
+        const mappedItems = legacyTimetable.events.map(event => {
+          const rawType = (event.type || 'LECTURE').toLowerCase();
+          const mappedType = rawType.charAt(0).toUpperCase() + rawType.slice(1);
+          
+          return {
+            id: `legacy-${event.id}`,
+            workspaceId: workspace.id,
+            code: event.title.slice(0, 8).toUpperCase(),
+            title: event.title,
+            groupId: null,
+            instructorId: null,
+            roomId: null,
+            instructor: event.instructor ? { id: `inst-${event.id}`, name: event.instructor } : null,
+            room: event.location ? { id: `room-${event.id}`, code: event.location, name: event.location } : null,
+            color: event.color || '#3b82f6',
+            creditHours: null,
+            status: 'ACTIVE',
+            createdAt: event.createdAt,
+            updatedAt: event.updatedAt,
+            group: null,
+            sessions: [{
+              id: `session-${event.id}`,
+              workspaceId: workspace.id,
+              courseId: `legacy-${event.id}`,
+              type: mappedType,
+              day: event.day.charAt(0).toUpperCase() + event.day.slice(1).toLowerCase(),
+              startMinute: event.startMinute,
+              endMinute: event.startMinute + event.durationMinutes,
+              groupId: null,
+              instructorId: null,
+              roomId: null,
+              instructor: event.instructor ? { id: `inst-${event.id}`, name: event.instructor } : null,
+              room: event.location ? { id: `room-${event.id}`, code: event.location, name: event.location } : null,
+              onlinePlatform: null,
+              onlineLink: null,
+              note: null,
+              updatedAt: event.updatedAt,
+              group: null
+            }]
+          };
+        });
+        return NextResponse.json({ ok: true, data: { workspaceId: workspace.id, access, items: mappedItems } });
+      }
+    }
+
     return NextResponse.json({ ok: true, data: { workspaceId: workspace.id, access, items } });
   } catch (error) {
     if (error instanceof ApiError) {

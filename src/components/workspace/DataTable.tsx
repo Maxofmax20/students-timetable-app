@@ -58,7 +58,7 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction, selected
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="text-sm font-bold text-white truncate" title={row.course}>{row.course}</h3>
-                <p className="mt-1 text-[11px] text-[var(--text-secondary)]">{row.group} • {row.instructor}</p>
+                <p className="mt-1 text-[11px] text-[var(--text-secondary)]">{row.group} • {row.instructor} • {row.type}</p>
               </div>
               <div className={cn(
                 "shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border",
@@ -122,6 +122,7 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction, selected
               </th>
               {[
                 { key: 'course', label: 'Course' },
+                { key: 'type', label: 'Type' },
                 { key: 'group', label: 'Group' },
                 { key: 'instructor', label: 'Instructor' },
                 { key: 'room', label: 'Room' },
@@ -151,6 +152,16 @@ export function DataTable({ rows, dense = false, timeMode, onRowAction, selected
                 </td>
                 <td className={cn("px-6 font-semibold text-white", dense ? "py-2 text-xs" : "py-4 text-sm")}>
                   <span className="block max-w-[260px] truncate" title={row.course}>{row.course}</span>
+                </td>
+                <td className={cn("px-6 text-[var(--text-secondary)]", dense ? "py-2 text-xs" : "py-4 text-sm")}>
+                  <span className={cn(
+                    "px-2 py-0.5 rounded text-[10px] font-bold border",
+                    row.type === 'Section' && "bg-[var(--info-muted)] text-[var(--info)] border-[var(--info)]/20",
+                    row.type === 'Lab' && "bg-[var(--success-muted)] text-[var(--success)] border-[var(--success)]/20",
+                    (row.type === 'Lecture' || !row.type) && "bg-[var(--gold-muted)] text-[var(--gold)] border-[var(--gold)]/20"
+                  )}>
+                    {row.type || 'Lecture'}
+                  </span>
                 </td>
                 <td className={cn("px-6 text-[var(--text-secondary)]", dense ? "py-2 text-xs" : "py-4 text-sm")}>
                   <span className="block max-w-[110px] truncate" title={row.group}>{row.group}</span>

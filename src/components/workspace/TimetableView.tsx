@@ -105,14 +105,15 @@ function rowToTimetableItem(row: Row): TimetableItem | null {
   const parsed = parseRowTime(row.time);
   if (!parsed || parsed.endMinute <= parsed.startMinute) return null;
 
-  const [course, type] = row.course.split(' — ');
+  // Modern rows already have type/instructor separated. Legacy rows use " — " in title.
+  const [courseName, legacyType] = row.course.split(' — ');
 
   return {
     id: row.id,
     courseId: row.id,
     code: row.code || row.id,
-    course: course || row.course,
-    type: type || 'Lecture',
+    course: courseName || row.course,
+    type: row.type || legacyType || 'Lecture',
     status: row.status,
     group: row.group,
     groupId: row.groupId ?? null,

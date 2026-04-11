@@ -147,6 +147,7 @@ function courseToRow(item: CourseApiItem, fallback?: Row): Row {
     source: "real",
     course: courseLabel,
     courseName: baseTitle,
+    type: session?.type || fallback?.type || "Lecture",
     group: sessionGroup?.code || item.group?.code || fallback?.group || "-",
     instructor: sessionInstructor?.name || item.instructor?.name || fallback?.instructor || "-",
     room: sessionRoom?.code || item.room?.code || fallback?.room || "-",

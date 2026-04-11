@@ -16,6 +16,7 @@ export type Row = {
   source: "real" | "mock";
   course: string;
   courseName?: string; // Standardize name
+  type?: string; // e.g. Lecture, Section, Lab
   group: string;
   instructor: string;
   room: string;

@@ -119,12 +119,15 @@ model TimetableMember {
 model TimetableEvent {
   id              String    @id @default(cuid())
   timetableId     String
-  title           String
+  title           String    @db.Text
   day             String
   startMinute     Int
   durationMinutes Int
   color           String    @default("#4f46e5")
   version         Int       @default(1)
+  type            String    @default("LECTURE")
+  instructor      String?   @db.Text
+  location        String?   @db.Text
   createdById     String?
   updatedById     String?
   createdAt       DateTime  @default(now())
@@ -332,7 +335,7 @@ model AcademicGroup {
 model Instructor {
   id          String         @id @default(cuid())
   workspaceId String
-  name        String
+  name        String         @db.Text
   email       String?
   phone       String?
   color       String?        @default("#0ea5e9")
